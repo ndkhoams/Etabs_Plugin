@@ -18,6 +18,10 @@ namespace Etabs_Ultimate_Tools
         private const int CapTensWind = 3, CapCompWind = 4;
         private const int CapTensEq = 5, CapCompEq = 6;
 
+        // Bề rộng cố định các cột bảng SCT (giữ bảng hẹp, nhường chỗ cho preview).
+        private const int CapNameW = 86;
+        private const int CapValW = 58;
+
         private void BuildPileTab(TabPage tab)
         {
             var root = new TableLayoutPanel
@@ -36,7 +40,7 @@ namespace Etabs_Ultimate_Tools
             {
                 Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
             };
-            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 700));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 470));
             main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             root.Controls.Add(main, 0, 2);
 
@@ -69,12 +73,29 @@ namespace Etabs_Ultimate_Tools
 
             left.Controls.Add(new Label
             {
-                Text = "Khả năng chịu tải theo loại cọc & từng tổ hợp (nhập SCT kéo/nén, kN):",
+                Text = "SCT chịu kéo/nén theo loại cọc & từng tổ hợp (kN):",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 1);
 
+            // Khu vực nhập SCT = header gộp 2 dòng + grid (cùng bề rộng cột cố định).
+            var capsPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Left, ColumnCount = 1, RowCount = 2,
+                Width = CapNameW + 6 * CapValW + 4, Margin = new Padding(0, 8, 0, 0)
+            };
+            capsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+            capsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            left.Controls.Add(capsPanel, 0, 2);
+
+            capsPanel.Controls.Add(BuildCapsHeader(), 0, 0);
+
             dgvPileCaps = CreateEditableGrid();
-            left.Controls.Add(dgvPileCaps, 0, 2);
+            dgvPileCaps.ColumnHeadersVisible = false;
+            dgvPileCaps.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
+            dgvPileCaps.AllowUserToResizeColumns = false;
+            dgvPileCaps.AllowUserToResizeRows = false;
+            dgvPileCaps.Margin = new Padding(0);
+            capsPanel.Controls.Add(dgvPileCaps, 0, 1);
             AddPileCapsColumns();
 
             var btnRow = new FlowLayoutPanel
@@ -88,7 +109,7 @@ namespace Etabs_Ultimate_Tools
             btnPilePreview.Click += (s, e) => PreviewPileReactions();
             btnRow.Controls.Add(btnPilePreview);
 
-            btnPileExport = new Button { Text = "Xuất Excel (3 sheet)", Width = 190, Height = 38, Enabled = false, Margin = new Padding(0, 0, 0, 0) };
+            btnPileExport = new Button { Text = "Xuất Excel", Width = 150, Height = 38, Enabled = false, Margin = new Padding(0, 0, 0, 0) };
             btnPileExport.Click += (s, e) => ExportPileReactions();
             btnRow.Controls.Add(btnPileExport);
 
@@ -108,7 +129,7 @@ namespace Etabs_Ultimate_Tools
 
             right.Controls.Add(new Label
             {
-                Text = "Preview (gộp cả 3 trường hợp tải):",
+                Text = "Preview (gộp tất cả trường hợp tải):",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 0);
 
@@ -118,6 +139,42 @@ namespace Etabs_Ultimate_Tools
 
             lblPileInfo.Text = "Nhập SCT kéo/nén cho từng loại cọc theo mỗi tổ hợp, chọn 3 tổ hợp rồi bấm Xem trước.";
         }
+
+        // Header gộp 2 dòng: dòng trên = trường hợp tải, dòng dưới = Kéo/Nén.
+        private Control BuildCapsHeader()
+        {
+            var h = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 2, Margin = new Padding(0)
+            };
+            h.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, CapNameW));
+            for (int i = 0; i < 6; i++) h.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, CapValW));
+            h.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+            h.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+
+            var name = MakeHeadCell("Loại cọc");
+            h.Controls.Add(name, 0, 0);
+            h.SetRowSpan(name, 2);
+
+            var g1 = MakeHeadCell("Tải đứng"); h.Controls.Add(g1, 1, 0); h.SetColumnSpan(g1, 2);
+            var g2 = MakeHeadCell("Tải gió"); h.Controls.Add(g2, 3, 0); h.SetColumnSpan(g2, 2);
+            var g3 = MakeHeadCell("Tải động đất"); h.Controls.Add(g3, 5, 0); h.SetColumnSpan(g3, 2);
+
+            h.Controls.Add(MakeHeadCell("Kéo"), 1, 1);
+            h.Controls.Add(MakeHeadCell("Nén"), 2, 1);
+            h.Controls.Add(MakeHeadCell("Kéo"), 3, 1);
+            h.Controls.Add(MakeHeadCell("Nén"), 4, 1);
+            h.Controls.Add(MakeHeadCell("Kéo"), 5, 1);
+            h.Controls.Add(MakeHeadCell("Nén"), 6, 1);
+            return h;
+        }
+
+        private static Label MakeHeadCell(string text) => new Label
+        {
+            Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleCenter,
+            BorderStyle = BorderStyle.FixedSingle, BackColor = SystemColors.ControlLight,
+            Margin = new Padding(0), Font = new Font(SystemFonts.DefaultFont, FontStyle.Bold)
+        };
 
         private static Label MakePileLabel(string text) => new Label
         {
@@ -137,7 +194,6 @@ namespace Etabs_Ultimate_Tools
                 AutoGenerateColumns = false,
                 AllowUserToAddRows = false,
                 BackgroundColor = SystemColors.ControlLightLight,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.CellSelect,
@@ -149,21 +205,17 @@ namespace Etabs_Ultimate_Tools
         private void AddPileCapsColumns()
         {
             dgvPileCaps.Columns.Clear();
-            dgvPileCaps.Columns.Add(MakeCapCol("Loại cọc", 110, true));
-            dgvPileCaps.Columns.Add(MakeCapCol("Kéo-Đứng (kN)", 95, false));
-            dgvPileCaps.Columns.Add(MakeCapCol("Nén-Đứng (kN)", 95, false));
-            dgvPileCaps.Columns.Add(MakeCapCol("Kéo-Gió (kN)", 95, false));
-            dgvPileCaps.Columns.Add(MakeCapCol("Nén-Gió (kN)", 95, false));
-            dgvPileCaps.Columns.Add(MakeCapCol("Kéo-ĐĐ (kN)", 95, false));
-            dgvPileCaps.Columns.Add(MakeCapCol("Nén-ĐĐ (kN)", 95, false));
+            dgvPileCaps.Columns.Add(MakeCapCol(CapNameW, true));
+            for (int i = 0; i < 6; i++)
+                dgvPileCaps.Columns.Add(MakeCapCol(CapValW, false));
         }
 
-        private static DataGridViewTextBoxColumn MakeCapCol(string header, int weight, bool readOnly)
+        private static DataGridViewTextBoxColumn MakeCapCol(int width, bool readOnly)
         {
             return new DataGridViewTextBoxColumn
             {
-                HeaderText = header, ReadOnly = readOnly, FillWeight = weight,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                Width = width, ReadOnly = readOnly,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.None,
                 SortMode = DataGridViewColumnSortMode.NotSortable
             };
         }
@@ -172,7 +224,7 @@ namespace Etabs_Ultimate_Tools
         {
             dgvPilePreview.Columns.Clear();
             dgvPilePreview.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            AddColumn(dgvPilePreview, "LoadType", "Trường hợp", 140, null, true);
+            AddColumn(dgvPilePreview, "LoadType", "Trường hợp", 160, null, true);
             AddColumn(dgvPilePreview, "PileType", "Loại cọc", 80, null, true);
             AddColumn(dgvPilePreview, "PileId", "Số hiệu cọc", 90, null, true);
             AddColumn(dgvPilePreview, "Combo", "Tổ hợp", 120, null, true);
@@ -250,21 +302,13 @@ namespace Etabs_Ultimate_Tools
         private List<PileReactionCase> BuildPileCases()
         {
             var cases = new List<PileReactionCase>();
-            AddPileCase(cases, "TỔ HỢP TẢI ĐỨNG", "TAI DUNG", cboPileVert.Text.Trim(),
-                ReadPileCaps(CapTensVert, CapCompVert));
-            AddPileCase(cases, "TỔ HỢP TẢI GIÓ", "TAI GIO", cboPileWind.Text.Trim(),
-                ReadPileCaps(CapTensWind, CapCompWind));
-            AddPileCase(cases, "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT", cboPileEq.Text.Trim(),
-                ReadPileCaps(CapTensEq, CapCompEq));
+            cases.AddRange(PileReactionChecker.ComputeCases(_sap, cboPileVert.Text.Trim(),
+                "TỔ HỢP TẢI ĐỨNG", "TAI DUNG", ReadPileCaps(CapTensVert, CapCompVert)));
+            cases.AddRange(PileReactionChecker.ComputeCases(_sap, cboPileWind.Text.Trim(),
+                "TỔ HỢP TẢI GIÓ", "TAI GIO", ReadPileCaps(CapTensWind, CapCompWind)));
+            cases.AddRange(PileReactionChecker.ComputeCases(_sap, cboPileEq.Text.Trim(),
+                "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT", ReadPileCaps(CapTensEq, CapCompEq)));
             return cases;
-        }
-
-        private void AddPileCase(List<PileReactionCase> cases, string title, string sheet,
-            string combo, Dictionary<string, PileSpringType> caps)
-        {
-            if (string.IsNullOrWhiteSpace(combo)) return;
-            var rows = PileReactionChecker.Compute(_sap, combo, caps);
-            cases.Add(new PileReactionCase { Title = title, SheetName = sheet, Combo = combo, Rows = rows });
         }
 
         private void PreviewPileReactions()
