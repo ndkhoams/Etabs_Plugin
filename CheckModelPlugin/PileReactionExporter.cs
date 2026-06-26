@@ -35,8 +35,7 @@ namespace Etabs_Ultimate_Tools
             EtabsHelper.ApplyA4PageSetup(ws);
 
             // Tiêu đề chính
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊỌU TẢI CỦA CỌC".Replace("ĐỊỌ", "ỊỌ");
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊỌU TẢI CỦA CỌC";
+            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC";
             ws.Range("A1:G1").Merge();
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
