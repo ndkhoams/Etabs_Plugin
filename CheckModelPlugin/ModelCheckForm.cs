@@ -37,6 +37,17 @@ namespace CheckModelPlugin
         private DataGridView dgvSeis;
         private List<SeismicDriftRow> _seismicDriftRows = new List<SeismicDriftRow>();
 
+        private ComboBox cboAxialConcrete, cboAxialCombo;
+        private Button btnAxialRun, btnAxialExport;
+        private DataGridView dgvAxial;
+        private Label lblAxialInfo;
+        private List<AxialCheckRow> _axialRows = new List<AxialCheckRow>();
+
+        private const double AxialAlphaCc = 1.0;
+        private const double AxialGammaC = 1.2;
+        private const double AxialColumnLimit = 0.65;
+        private const double AxialWallLimit = 0.40;
+
         private const double WindDriftLimitDen = 500.0;
 
         public ModelCheckForm(cSapModel sap)
@@ -62,15 +73,18 @@ namespace CheckModelPlugin
             var tabWind = new TabPage("Chuyển vị đỉnh");
             var tabWindDrift = new TabPage("CV lệch tầng do gió");
             var tabSeis = new TabPage("CV lệch tầng do động đất");
+            var tabAxial = new TabPage("Check lực dọc");
             tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabWind);
             tabs.TabPages.Add(tabWindDrift);
             tabs.TabPages.Add(tabSeis);
+            tabs.TabPages.Add(tabAxial);
 
             BuildPDeltaTab(tabPDelta);
             BuildWindTab(tabWind);
             BuildWindDriftTab(tabWindDrift);
             BuildSeismicDriftTab(tabSeis);
+            BuildAxialTab(tabAxial);
         }
 
         // ---------- Scaffold dùng chung cho mọi tab (bảo đảm căn hàng đồng nhất) ----------
@@ -199,6 +213,39 @@ namespace CheckModelPlugin
             btnSeisExport = MakeButton("Xuất Excel"); btnSeisExport.Enabled = false; btnSeisExport.Click += (s, e) => ExportSeismic(); bar.Controls.Add(btnSeisExport);
 
             AddSeismicDriftGridColumns();
+        }
+
+        private void BuildAxialTab(TabPage tab)
+        {
+            dgvAxial = BuildScaffold(tab,
+                "KIỂM TRA HỆ SỐ LỰC DỌC QUY ĐỔI",
+                "(Cột & vách Pier — theo cấp bền bê tông)",
+                "ʋd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc, fck = 0.8·fck,cube",
+                "Chọn trực tiếp cột hoặc area vách (Pier) trong ETABS rồi bấm Kiểm tra. Ac·fcd và ʋd được tính tự động; vách (tỷ lệ cạnh > 4) dùng giới hạn 0.40, còn lại 0.65. Cần Run Analysis trước khi kiểm tra.",
+                out var bar);
+
+            bar.Controls.Add(MakeFieldLabel("Cấp bê tông:", 88));
+            cboAxialConcrete = MakeCombo(110);
+            cboAxialConcrete.Items.AddRange(new object[] { "B15", "B20", "B22.5", "B25", "B30", "B35", "B40", "B45", "B50", "B55", "B60", "B70", "B80" });
+            cboAxialConcrete.SelectedItem = "B30";
+            if (cboAxialConcrete.SelectedIndex < 0 && cboAxialConcrete.Items.Count > 0) cboAxialConcrete.SelectedIndex = 0;
+            bar.Controls.Add(cboAxialConcrete);
+
+            bar.Controls.Add(MakeFieldLabel("Combo:", 56));
+            cboAxialCombo = MakeCombo(220); bar.Controls.Add(cboAxialCombo);
+
+            btnAxialRun = MakeButton("Kiểm tra"); btnAxialRun.Click += (s, e) => RunAxialCheck(); bar.Controls.Add(btnAxialRun);
+            btnAxialExport = MakeButton("Xuất Excel"); btnAxialExport.Enabled = false; btnAxialExport.Click += (s, e) => ExportAxial(); bar.Controls.Add(btnAxialExport);
+
+            lblAxialInfo = new Label
+            {
+                AutoSize = false, Width = 280, Height = CtrlHeight,
+                TextAlign = ContentAlignment.MiddleLeft, ForeColor = Color.DimGray,
+                Margin = new Padding(8, 4, 0, 0)
+            };
+            bar.Controls.Add(lblAxialInfo);
+
+            AddAxialGridColumns();
         }
 
         // ---------- Factory tạo control căn chỉnh đồng nhất ----------
@@ -334,12 +381,30 @@ namespace CheckModelPlugin
             AddColumn(dgvSeis, "Check", "Kiểm tra", 150, null, true);
         }
 
+        private void AddAxialGridColumns()
+        {
+            dgvAxial.Columns.Clear();
+            AddColumn(dgvAxial, "STT", "STT", 45);
+            AddColumn(dgvAxial, "Story", "Tầng", 80);
+            AddColumn(dgvAxial, "ElementType", "Loại", 80);
+            AddColumn(dgvAxial, "Element", "LABEL", 110);
+            AddColumn(dgvAxial, "Combo", "Combo", 150);
+            AddColumn(dgvAxial, "Ned", "Ned (kN)", 90, "0");
+            AddColumn(dgvAxial, "T3", "t3 (m)", 70, "0.000");
+            AddColumn(dgvAxial, "T2", "t2 (m)", 70, "0.000");
+            AddColumn(dgvAxial, "Ac", "Ac (m²)", 80, "0.000");
+            AddColumn(dgvAxial, "AcFcd", "Ac·fcd (kN)", 100, "0");
+            AddColumn(dgvAxial, "NuD", "ʋd", 70, "0.000");
+            AddColumn(dgvAxial, "VdLimit", "ʋd limit", 70, "0.00");
+            AddColumn(dgvAxial, "Result", "Kết luận", 150, null, true);
+        }
+
         // ---------- Tải danh sách tổ hợp ----------
 
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo })
+            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
@@ -349,6 +414,8 @@ namespace CheckModelPlugin
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboSeisCombo, "EQ-SRSS", "Vtot", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
+
+            if (cboAxialCombo.Items.Count > 0 && cboAxialCombo.SelectedIndex < 0) cboAxialCombo.SelectedIndex = 0;
         }
 
         private static void SelectByKeyword(ComboBox cbo, params string[] keys)
@@ -480,6 +547,55 @@ namespace CheckModelPlugin
                 case 2: return 0.010;
                 default: return 0.005;
             }
+        }
+
+        private void RunAxialCheck()
+        {
+            string combo = cboAxialCombo.Text.Trim();
+            if (string.IsNullOrWhiteSpace(combo))
+            {
+                MessageBox.Show("Chưa chọn combo kiểm tra.", "Check lực dọc", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            double fckCube = ParseConcreteGrade(cboAxialConcrete.Text);
+            if (fckCube <= 0)
+            {
+                MessageBox.Show("Cấp bền bê tông không hợp lệ.", "Check lực dọc", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            try
+            {
+                _sap.SetPresentUnits(eUnits.kN_m_C);
+                var calc = new AxialCheckCalculator(_sap, fckCube, AxialAlphaCc, AxialGammaC, AxialColumnLimit, AxialWallLimit);
+                _axialRows = calc.Build(combo);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Check lực dọc", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            dgvAxial.DataSource = null;
+            dgvAxial.DataSource = _axialRows;
+
+            int ok = _axialRows.Count(r => string.Equals(r.Result, "Thỏa mãn", StringComparison.OrdinalIgnoreCase));
+            int ng = _axialRows.Count - ok;
+            lblAxialInfo.Text = "Tổng: " + _axialRows.Count + "  |  Thỏa: " + ok + "  |  Không: " + ng;
+
+            btnAxialExport.Enabled = _axialRows.Count > 0;
+        }
+
+        private static double ParseConcreteGrade(string text)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return 0;
+            var m = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(?:[\.,]\d+)?)");
+            if (!m.Success) return 0;
+            string num = m.Groups[1].Value.Replace(',', '.');
+            double v;
+            return double.TryParse(num, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out v) ? v : 0;
         }
 
         private List<WindGridRow> BuildWindDisplayRows(List<TopDisplacementRow> rows)
@@ -678,6 +794,16 @@ namespace CheckModelPlugin
                 return;
             }
             RunExport(file => PDeltaExcelExporter.Export(file, null, _qFactor, null, null, _seismicDriftRows), "ChuyenViLechTang_DongDat.xlsx");
+        }
+
+        private void ExportAxial()
+        {
+            if (_axialRows == null || _axialRows.Count == 0)
+            {
+                MessageBox.Show("Chưa có dữ liệu lực dọc để xuất. Hãy bấm Kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            RunExport(file => AxialCheckExporter.Export(_axialRows, file, AxialAlphaCc, AxialGammaC, AxialColumnLimit, AxialWallLimit), "KiemTra_LucDoc.xlsx");
         }
     }
 }
