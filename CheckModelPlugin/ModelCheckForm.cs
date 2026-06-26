@@ -99,7 +99,7 @@ namespace CheckModelPlugin
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));   // title
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));   // subtitle
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));   // condition
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));   // groupbox (thanh nhập + nút)
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));   // groupbox (thanh nhập + nút)
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));   // diễn giải (xuống dòng riêng)
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // lưới kết quả
             tab.Controls.Add(root);
@@ -110,7 +110,7 @@ namespace CheckModelPlugin
 
             var box = new GroupBox
             {
-                Dock = DockStyle.Fill, Text = "Tổ hợp kiểm tra", Padding = new Padding(10, 4, 16, 10)
+                Dock = DockStyle.Fill, Text = "Tổ hợp kiểm tra", Padding = new Padding(10, 8, 16, 8)
             };
             root.Controls.Add(box, 0, 3);
 
@@ -278,23 +278,23 @@ namespace CheckModelPlugin
         private static Label MakeFieldLabel(string text, int width) => new Label
         {
             Text = text, AutoSize = false, Width = width, Height = CtrlHeight,
-            TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 10, 0)
+            TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 6, 10, 0)
         };
 
         private static ComboBox MakeCombo(int width) => new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList, Width = width,
-            Margin = new Padding(0, 5, 18, 0)
+            Margin = new Padding(0, 6, 18, 0)
         };
 
         private static TextBox MakeTextBox(string value, int width) => new TextBox
         {
-            Text = value, Width = width, Margin = new Padding(0, 6, 18, 0)
+            Text = value, Width = width, Margin = new Padding(0, 7, 18, 0)
         };
 
         private static Button MakeButton(string text) => new Button
         {
-            Text = text, Width = 112, Height = CtrlHeight, Margin = new Padding(0, 4, 10, 0)
+            Text = text, Width = 112, Height = CtrlHeight, Margin = new Padding(0, 6, 10, 0)
         };
 
         private DataGridView CreateGrid()
