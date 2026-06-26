@@ -80,13 +80,14 @@ namespace CheckModelPlugin
         {
             var root = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(12)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(12)
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));   // title
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));   // subtitle
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));   // condition
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));   // groupbox (thanh nhập + nút)
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));   // diễn giải (xuống dòng riêng)
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // lưới kết quả
             tab.Controls.Add(root);
 
             root.Controls.Add(MakeTitle(title), 0, 0);
@@ -99,21 +100,18 @@ namespace CheckModelPlugin
             };
             root.Controls.Add(box, 0, 3);
 
-            var inner = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-            inner.RowStyles.Add(new RowStyle(SizeType.Absolute, BarRowHeight));
-            inner.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            box.Controls.Add(inner);
-
             bar = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false, Margin = new Padding(0)
             };
-            inner.Controls.Add(bar, 0, 0);
-            inner.Controls.Add(MakeNote(note), 0, 1);
+            box.Controls.Add(bar);
+
+            // Diễn giải nằm thành một hàng riêng ngay dưới hàng nút, full width, tự động xuống dòng.
+            root.Controls.Add(MakeNote(note), 0, 4);
 
             var grid = CreateGrid();
-            root.Controls.Add(grid, 0, 4);
+            root.Controls.Add(grid, 0, 5);
             return grid;
         }
 
@@ -183,7 +181,7 @@ namespace CheckModelPlugin
             dgvSeis = BuildScaffold(tab,
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
                 "(Theo TCVN 9386-1:2025)",
-                "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  q × drift × ν ≤ limit",
+                "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  drift ≤ limit/(ν·q)",
                 "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. Tổ hợp drift là động đất thuần theo quy tắc phương 1.0EX + 0.3EY (KHÔNG dùng tổ hợp trọng lực G+Q+E — tổ hợp đó chỉ dùng cho nội lực & P-Delta). dr = q × de là chuyển vị lệch tầng thiết kế. ν: hệ số chiết giảm (0.4 – 0.5). limit: 0.005 (giòn) / 0.0075 (dẻo) / 0.010 (không cản trở).",
                 out var bar);
 
@@ -227,8 +225,9 @@ namespace CheckModelPlugin
 
         private static Label MakeNote(string text) => new Label
         {
-            Text = text, Dock = DockStyle.Fill, Font = new Font("Arial", 8.5F),
-            ForeColor = Color.DimGray, TextAlign = ContentAlignment.TopLeft
+            Text = text, Dock = DockStyle.Fill, AutoSize = false, Font = new Font("Arial", 8.5F),
+            ForeColor = Color.DimGray, TextAlign = ContentAlignment.TopLeft,
+            Padding = new Padding(2, 2, 2, 0)
         };
 
         private static Label MakeFieldLabel(string text, int width) => new Label
@@ -332,11 +331,11 @@ namespace CheckModelPlugin
             AddColumn(dgvSeis, "Story", "Tầng", 90);
             AddColumn(dgvSeis, "Elevation", "Cao độ (m)", 95, "+0.000;-0.000;0.000");
             AddColumn(dgvSeis, "Height", "h tầng (m)", 85, "N3");
-            AddColumn(dgvSeis, "DriftX", "drift X (de/h)", 110, "0.000000");
-            AddColumn(dgvSeis, "DriftY", "drift Y (de/h)", 110, "0.000000");
-            AddColumn(dgvSeis, "ReducedMax", "q × drift × ν", 110, "0.000000");
-            AddColumn(dgvSeis, "Limit", "Giới hạn", 95, "0.000000");
-            AddColumn(dgvSeis, "Check", "Kiểm tra", 170, null, true);
+            AddColumn(dgvSeis, "DriftX", "drift X (de/h)", 105, "0.000000");
+            AddColumn(dgvSeis, "DriftY", "drift Y (de/h)", 105, "0.000000");
+            AddColumn(dgvSeis, "DriftMax", "drift max", 100, "0.000000");
+            AddColumn(dgvSeis, "AllowLimit", "Giới hạn limit/(ν·q)", 135, "0.000000");
+            AddColumn(dgvSeis, "Check", "Kiểm tra", 150, null, true);
         }
 
         // ---------- Tải danh sách tổ hợp ----------
@@ -584,7 +583,8 @@ namespace CheckModelPlugin
 
                 double driftX = x != null ? x.Drift : 0.0;
                 double driftY = y != null ? y.Drift : 0.0;
-                double reducedMax = q * Math.Max(driftX, driftY) * nu;
+                double driftMax = Math.Max(driftX, driftY);
+                double allow = (q * nu) > 0 ? limit / (q * nu) : 0.0;
 
                 result.Add(new SeisGridRow
                 {
@@ -593,9 +593,9 @@ namespace CheckModelPlugin
                     Height = refRow.Height,
                     DriftX = driftX,
                     DriftY = driftY,
-                    ReducedMax = reducedMax,
-                    Limit = limit,
-                    Check = limit > 0 && reducedMax <= limit ? "OK" : "NG"
+                    DriftMax = driftMax,
+                    AllowLimit = allow,
+                    Check = allow > 0 && driftMax <= allow ? "OK" : "NG"
                 });
             }
             return result;
@@ -632,8 +632,8 @@ namespace CheckModelPlugin
             public double Height { get; set; }
             public double DriftX { get; set; }
             public double DriftY { get; set; }
-            public double ReducedMax { get; set; }
-            public double Limit { get; set; }
+            public double DriftMax { get; set; }
+            public double AllowLimit { get; set; }
             public string Check { get; set; }
         }
 
