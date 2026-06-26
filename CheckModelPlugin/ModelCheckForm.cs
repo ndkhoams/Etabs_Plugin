@@ -135,17 +135,15 @@ namespace Etabs_Ultimate_Tools
         {
             var root = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12)
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(root);
 
             root.Controls.Add(MakeTitle("XUẤT NỘI LỰC CỘT / VÁCH"), 0, 0);
             root.Controls.Add(MakeSubtitle("(Xuất nội lực theo định dạng CSI Colum và Prokon)"), 0, 1);
-            root.Controls.Add(MakeCondition("Quy đổi dấu theo mẫu nhập CSI Column — đơn vị kN, m"), 0, 2);
 
             var main = new TableLayoutPanel
             {
@@ -153,7 +151,7 @@ namespace Etabs_Ultimate_Tools
             };
             main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 380));
             main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            root.Controls.Add(main, 0, 3);
+            root.Controls.Add(main, 0, 2);
 
             // ----- Cột trái: chọn tổ hợp + tùy chọn xuất -----
             var left = new TableLayoutPanel
@@ -163,13 +161,13 @@ namespace Etabs_Ultimate_Tools
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             main.Controls.Add(left, 0, 0);
 
             left.Controls.Add(new Label
             {
-                Text = "Chọn tổ hợp tải (Load Combination) — giữ Shift để chọn hàng loạt:",
+                Text = "Chọn tổ hợp tải (Load Combination):",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 0);
 
@@ -201,28 +199,27 @@ namespace Etabs_Ultimate_Tools
             btnColPreview.Click += (s, e) => PreviewColumnForces();
             selBar.Controls.Add(btnColPreview);
 
-            // Hàng định dạng xuất + nút Xuất nằm ngang hàng
-            var fmtRow = new TableLayoutPanel
+            // Hàng định dạng xuất + nút Xuất nằm ngang hàng (dùng FlowLayoutPanel để tránh lỗi hiển thị)
+            var fmtRow = new FlowLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
+                Margin = new Padding(0, 6, 0, 0)
             };
-            fmtRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            fmtRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
             left.Controls.Add(fmtRow, 0, 3);
 
-            var grpFmt = new GroupBox { Text = "Định dạng xuất", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4) };
-            fmtRow.Controls.Add(grpFmt, 0, 0);
+            var grpFmt = new GroupBox { Text = "Định dạng xuất", Width = 224, Height = 50, Padding = new Padding(8, 2, 8, 2), Margin = new Padding(0, 0, 12, 0) };
+            fmtRow.Controls.Add(grpFmt);
 
             var fmtBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
             grpFmt.Controls.Add(fmtBar);
-            rdoColText = new RadioButton { Text = "Text (.txt)", AutoSize = true, Checked = true, Margin = new Padding(4, 6, 16, 0) };
-            rdoColExcel = new RadioButton { Text = "Excel (.xlsx)", AutoSize = true, Margin = new Padding(4, 6, 0, 0) };
+            rdoColText = new RadioButton { Text = "Text (.txt)", AutoSize = true, Checked = true, Margin = new Padding(4, 4, 12, 0) };
+            rdoColExcel = new RadioButton { Text = "Excel (.xlsx)", AutoSize = true, Margin = new Padding(4, 4, 0, 0) };
             fmtBar.Controls.Add(rdoColText);
             fmtBar.Controls.Add(rdoColExcel);
 
-            btnColExportFile = new Button { Text = "Xuất", Dock = DockStyle.Fill, Enabled = false, Margin = new Padding(0, 8, 0, 8) };
+            btnColExportFile = new Button { Text = "Xuất", Width = 120, Height = 42, Enabled = false, Margin = new Padding(0, 3, 0, 0) };
             btnColExportFile.Click += (s, e) => ExportColumnForces();
-            fmtRow.Controls.Add(btnColExportFile, 1, 0);
+            fmtRow.Controls.Add(btnColExportFile);
 
             lblColInfo = new Label
             {
@@ -378,7 +375,7 @@ namespace Etabs_Ultimate_Tools
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));   // subtitle
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));   // condition
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));   // groupbox (thanh nhập + nút)
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));   // diễn giải (xuống dòng riêng)
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));   // diễn giải (xuống dòng riêng)
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // lưới kết quả
             tab.Controls.Add(root);
 
@@ -472,7 +469,7 @@ namespace Etabs_Ultimate_Tools
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
                 "(Theo TCVN 9386-1:2025)",
                 "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  drift ≤ limit/(ν·q) (mục 4.4.3.2)",
-                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2). CHÚ THÍCH: Các giá trị khác nhau của ν phụ thuộc vào các nguy cơ động đất và vào cấp hậu quả của công trình, khuyến nghị như sau: ν = 0,4 cho các cấp hậu quả C3-a và C3-b, và ν = 0,5 cho các cấp hậu quả C1 và C2.",
+                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2).\nCHÚ THÍCH: Các giá trị khác nhau của ν phụ thuộc vào các nguy cơ động đất và vào cấp hậu quả của công trình, khuyến nghị như sau: ν = 0,4 cho các cấp hậu quả C3-a và C3-b, và ν = 0,5 cho các cấp hậu quả C1 và C2.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp động đất:", 110));
