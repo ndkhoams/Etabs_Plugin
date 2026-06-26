@@ -51,6 +51,14 @@ namespace Etabs_Ultimate_Tools
         private List<ForceRow> _colRows = new List<ForceRow>();
         private int _lastColIndex = -1;
 
+        // Property Modifiers
+        private TextBox txtModBeamArea, txtModBeamAs2, txtModBeamAs3, txtModBeamJ, txtModBeamI22, txtModBeamI33, txtModBeamMass, txtModBeamWeight;
+        private TextBox txtModColArea, txtModColAs2, txtModColAs3, txtModColJ, txtModColI22, txtModColI33, txtModColMass, txtModColWeight;
+        private TextBox txtModSlabF11, txtModSlabF22, txtModSlabF12, txtModSlabM11, txtModSlabM22, txtModSlabM12, txtModSlabV13, txtModSlabV23, txtModSlabMass, txtModSlabWeight;
+        private TextBox txtModWallF11, txtModWallF22, txtModWallF12, txtModWallM11, txtModWallM22, txtModWallM12, txtModWallV13, txtModWallV23, txtModWallMass, txtModWallWeight;
+        private Button btnModApply, btnModRollback;
+        private Label lblModInfo;
+
         private const double AxialAlphaCc = 1.0;
         private const double AxialGammaC = 1.2;
         private const double AxialColumnLimit = 0.65;
@@ -68,9 +76,9 @@ namespace Etabs_Ultimate_Tools
         private void InitializeComponent()
         {
             Text = "Etabs Ultimate Tools";
-            Width = 1360;
+            Width = 1480;
             Height = 780;
-            MinimumSize = new Size(1240, 700);
+            MinimumSize = new Size(1360, 700);
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Arial", 9F);
 
@@ -92,12 +100,14 @@ namespace Etabs_Ultimate_Tools
             var tabSeis = new TabPage("CV lệch tầng do động đất");
             var tabAxial = new TabPage("Check lực dọc");
             var tabColExport = new TabPage("Xuất nội lực cột");
+            var tabModifier = new TabPage("Property Modifiers");
             tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabWind);
             tabs.TabPages.Add(tabWindDrift);
             tabs.TabPages.Add(tabSeis);
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
+            tabs.TabPages.Add(tabModifier);
 
             BuildPDeltaTab(tabPDelta);
             BuildWindTab(tabWind);
@@ -105,6 +115,7 @@ namespace Etabs_Ultimate_Tools
             BuildSeismicDriftTab(tabSeis);
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
+            BuildModifierTab(tabModifier);
         }
 
         // ---------- Vẽ tab nổi bật (owner-draw) ----------
@@ -179,7 +190,6 @@ namespace Etabs_Ultimate_Tools
             clbColCombos.MouseDown += ClbColCombos_MouseDown;
             left.Controls.Add(clbColCombos, 0, 1);
 
-            // Hàng nút chọn: Chọn tất cả / Bỏ chọn / Xem trước
             var selBar = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
@@ -199,7 +209,6 @@ namespace Etabs_Ultimate_Tools
             btnColPreview.Click += (s, e) => PreviewColumnForces();
             selBar.Controls.Add(btnColPreview);
 
-            // Hàng định dạng xuất + nút Xuất nằm ngang hàng (dùng FlowLayoutPanel để tránh lỗi hiển thị)
             var fmtRow = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
@@ -227,7 +236,6 @@ namespace Etabs_Ultimate_Tools
             };
             left.Controls.Add(lblColInfo, 0, 4);
 
-            // ----- Cột phải: xem trước nội lực -----
             var right = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
@@ -257,13 +265,12 @@ namespace Etabs_Ultimate_Tools
 
             if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift && _lastColIndex >= 0 && _lastColIndex != index)
             {
-                // Trạng thái đích dựa trên item vừa bấm (CheckOnClick sẽ tự đảo trạng thái của chính item đó).
                 bool target = !clbColCombos.GetItemChecked(index);
                 int start = Math.Min(_lastColIndex, index);
                 int end = Math.Max(_lastColIndex, index);
                 for (int i = start; i <= end; i++)
                 {
-                    if (i == index) continue; // item này do CheckOnClick xử lý
+                    if (i == index) continue;
                     clbColCombos.SetItemChecked(i, target);
                 }
             }
@@ -362,7 +369,274 @@ namespace Etabs_Ultimate_Tools
             }
         }
 
-        // ---------- Scaffold dùng chung cho mọi tab (bảo đảm căn hàng đồng nhất) ----------
+        // ---------- Tab Property Modifiers ----------
+
+        private void BuildModifierTab(TabPage tab)
+        {
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(12)
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
+            tab.Controls.Add(root);
+
+            root.Controls.Add(MakeTitle("PROPERTY MODIFIERS"), 0, 0);
+            root.Controls.Add(MakeSubtitle("(Gán hệ số tiết diện cho cấu kiện đang chọn trong ETABS)"), 0, 1);
+            root.Controls.Add(MakeCondition("Chọn cấu kiện trong ETABS trước — công cụ tự nhận diện Dầm/Cột (frame) và Sàn/Vách (area)"), 0, 2);
+
+            var groups = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
+            };
+            for (int i = 0; i < 4; i++) groups.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
+            root.Controls.Add(groups, 0, 3);
+
+            var gBeam = MakeModGroup("Dầm (Beam) — Frame");
+            txtModBeamArea = AddModRow(gBeam, "Area", "1.00");
+            txtModBeamAs2 = AddModRow(gBeam, "As2", "1.00");
+            txtModBeamAs3 = AddModRow(gBeam, "As3", "1.00");
+            txtModBeamJ = AddModRow(gBeam, "J", "0.10");
+            txtModBeamI22 = AddModRow(gBeam, "I22", "0.50");
+            txtModBeamI33 = AddModRow(gBeam, "I33", "0.50");
+            txtModBeamMass = AddModRow(gBeam, "Mass", "1.00");
+            txtModBeamWeight = AddModRow(gBeam, "Weight", "1.00");
+            groups.Controls.Add(gBeam, 0, 0);
+
+            var gCol = MakeModGroup("Cột (Column) — Frame");
+            txtModColArea = AddModRow(gCol, "Area", "1.00");
+            txtModColAs2 = AddModRow(gCol, "As2", "1.00");
+            txtModColAs3 = AddModRow(gCol, "As3", "1.00");
+            txtModColJ = AddModRow(gCol, "J", "0.50");
+            txtModColI22 = AddModRow(gCol, "I22", "0.50");
+            txtModColI33 = AddModRow(gCol, "I33", "0.50");
+            txtModColMass = AddModRow(gCol, "Mass", "1.00");
+            txtModColWeight = AddModRow(gCol, "Weight", "1.00");
+            groups.Controls.Add(gCol, 1, 0);
+
+            var gSlab = MakeModGroup("Sàn (Slab) — Area");
+            txtModSlabF11 = AddModRow(gSlab, "F11", "1.00");
+            txtModSlabF22 = AddModRow(gSlab, "F22", "1.00");
+            txtModSlabF12 = AddModRow(gSlab, "F12", "1.00");
+            txtModSlabM11 = AddModRow(gSlab, "M11", "0.50");
+            txtModSlabM22 = AddModRow(gSlab, "M22", "0.50");
+            txtModSlabM12 = AddModRow(gSlab, "M12", "0.50");
+            txtModSlabV13 = AddModRow(gSlab, "V13", "1.00");
+            txtModSlabV23 = AddModRow(gSlab, "V23", "1.00");
+            txtModSlabMass = AddModRow(gSlab, "Mass", "1.00");
+            txtModSlabWeight = AddModRow(gSlab, "Weight", "1.00");
+            groups.Controls.Add(gSlab, 2, 0);
+
+            var gWall = MakeModGroup("Vách (Wall) — Area");
+            txtModWallF11 = AddModRow(gWall, "F11", "0.50");
+            txtModWallF22 = AddModRow(gWall, "F22", "1.00");
+            txtModWallF12 = AddModRow(gWall, "F12", "0.50");
+            txtModWallM11 = AddModRow(gWall, "M11", "0.50");
+            txtModWallM22 = AddModRow(gWall, "M22", "0.50");
+            txtModWallM12 = AddModRow(gWall, "M12", "0.50");
+            txtModWallV13 = AddModRow(gWall, "V13", "0.50");
+            txtModWallV23 = AddModRow(gWall, "V23", "0.50");
+            txtModWallMass = AddModRow(gWall, "Mass", "1.00");
+            txtModWallWeight = AddModRow(gWall, "Weight", "1.00");
+            groups.Controls.Add(gWall, 3, 0);
+
+            var bar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
+                Margin = new Padding(0, 8, 0, 0)
+            };
+            root.Controls.Add(bar, 0, 4);
+
+            btnModApply = new Button { Text = "Apply Modifiers", Width = 170, Height = 40, Margin = new Padding(0, 0, 10, 0) };
+            btnModApply.Click += (s, e) => ApplyModifiers();
+            bar.Controls.Add(btnModApply);
+
+            btnModRollback = new Button { Text = "Rollback (= 1.0)", Width = 140, Height = 40, Margin = new Padding(0, 0, 10, 0) };
+            btnModRollback.Click += (s, e) => RollbackModifiers();
+            bar.Controls.Add(btnModRollback);
+
+            lblModInfo = new Label
+            {
+                AutoSize = false, Width = 620, Height = 40, ForeColor = Color.DimGray,
+                TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(8, 0, 0, 0)
+            };
+            lblModInfo.Text = "Chọn cấu kiện trong ETABS rồi bấm Apply Modifiers để gán hệ số.";
+            bar.Controls.Add(lblModInfo);
+        }
+
+        private static GroupBox MakeModGroup(string title)
+        {
+            var g = new GroupBox
+            {
+                Text = title, Dock = DockStyle.Fill, Padding = new Padding(8, 6, 8, 6), Margin = new Padding(0, 0, 10, 0)
+            };
+            var t = new TableLayoutPanel { Dock = DockStyle.Top, ColumnCount = 2, RowCount = 0, AutoSize = true };
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 64));
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            g.Controls.Add(t);
+            g.Tag = t;
+            return g;
+        }
+
+        private static TextBox AddModRow(GroupBox g, string label, string def)
+        {
+            var t = (TableLayoutPanel)g.Tag;
+            int row = t.RowCount;
+            t.RowCount = row + 1;
+            t.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            t.Controls.Add(new Label
+            {
+                Text = label, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+            }, 0, row);
+            var txt = new TextBox { Text = def, Dock = DockStyle.Fill, Margin = new Padding(2, 4, 2, 4) };
+            t.Controls.Add(txt, 1, row);
+            return txt;
+        }
+
+        private void ApplyModifiers()
+        {
+            int numberItems = 0;
+            int[] objectTypes = null;
+            string[] objectNames = null;
+            _sap.SelectObj.GetSelected(ref numberItems, ref objectTypes, ref objectNames);
+
+            if (numberItems == 0)
+            {
+                MessageBox.Show("Chưa chọn cấu kiện nào.", "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            double[] beam, col, slab, wall;
+            try
+            {
+                beam = new double[]
+                {
+                    ReadModValue(txtModBeamArea), ReadModValue(txtModBeamAs2), ReadModValue(txtModBeamAs3), ReadModValue(txtModBeamJ),
+                    ReadModValue(txtModBeamI22), ReadModValue(txtModBeamI33), ReadModValue(txtModBeamMass), ReadModValue(txtModBeamWeight)
+                };
+                col = new double[]
+                {
+                    ReadModValue(txtModColArea), ReadModValue(txtModColAs2), ReadModValue(txtModColAs3), ReadModValue(txtModColJ),
+                    ReadModValue(txtModColI22), ReadModValue(txtModColI33), ReadModValue(txtModColMass), ReadModValue(txtModColWeight)
+                };
+                slab = new double[]
+                {
+                    ReadModValue(txtModSlabF11), ReadModValue(txtModSlabF22), ReadModValue(txtModSlabF12), ReadModValue(txtModSlabM11), ReadModValue(txtModSlabM22),
+                    ReadModValue(txtModSlabM12), ReadModValue(txtModSlabV13), ReadModValue(txtModSlabV23), ReadModValue(txtModSlabMass), ReadModValue(txtModSlabWeight)
+                };
+                wall = new double[]
+                {
+                    ReadModValue(txtModWallF11), ReadModValue(txtModWallF22), ReadModValue(txtModWallF12), ReadModValue(txtModWallM11), ReadModValue(txtModWallM22),
+                    ReadModValue(txtModWallM12), ReadModValue(txtModWallV13), ReadModValue(txtModWallV23), ReadModValue(txtModWallMass), ReadModValue(txtModWallWeight)
+                };
+            }
+            catch
+            {
+                MessageBox.Show("Giá trị nhập không hợp lệ. Hãy nhập số, ví dụ 0.50", "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            int cBeam = 0, cCol = 0, cSlab = 0, cWall = 0;
+            for (int i = 0; i < numberItems; i++)
+            {
+                string name = objectNames[i];
+                if (objectTypes[i] == 2)
+                {
+                    if (IsColumnFrame(name)) { var m = (double[])col.Clone(); _sap.FrameObj.SetModifiers(name, ref m); cCol++; }
+                    else { var m = (double[])beam.Clone(); _sap.FrameObj.SetModifiers(name, ref m); cBeam++; }
+                }
+                else if (objectTypes[i] == 5)
+                {
+                    if (IsWallArea(name)) { var m = (double[])wall.Clone(); _sap.AreaObj.SetModifiers(name, ref m); cWall++; }
+                    else { var m = (double[])slab.Clone(); _sap.AreaObj.SetModifiers(name, ref m); cSlab++; }
+                }
+            }
+
+            _sap.View.RefreshView(0, false);
+
+            lblModInfo.Text = "Đã gán — Dầm: " + cBeam + "  |  Cột: " + cCol + "  |  Sàn: " + cSlab + "  |  Vách: " + cWall;
+
+            MessageBox.Show(
+                "Đã gán modifier:\n- Dầm: " + cBeam + "\n- Cột: " + cCol + "\n- Sàn: " + cSlab + "\n- Vách: " + cWall,
+                "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private void RollbackModifiers()
+        {
+            int numberItems = 0;
+            int[] objectTypes = null;
+            string[] objectNames = null;
+            _sap.SelectObj.GetSelected(ref numberItems, ref objectTypes, ref objectNames);
+
+            if (numberItems == 0)
+            {
+                MessageBox.Show("Chưa chọn cấu kiện nào để rollback.", "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            int cFrame = 0, cArea = 0;
+            for (int i = 0; i < numberItems; i++)
+            {
+                string name = objectNames[i];
+                if (objectTypes[i] == 2)
+                {
+                    var m = new double[8]; for (int k = 0; k < 8; k++) m[k] = 1.0;
+                    _sap.FrameObj.SetModifiers(name, ref m); cFrame++;
+                }
+                else if (objectTypes[i] == 5)
+                {
+                    var m = new double[10]; for (int k = 0; k < 10; k++) m[k] = 1.0;
+                    _sap.AreaObj.SetModifiers(name, ref m); cArea++;
+                }
+            }
+
+            _sap.View.RefreshView(0, false);
+
+            lblModInfo.Text = "Đã rollback về 1.0 — Frame: " + cFrame + "  |  Area: " + cArea;
+
+            MessageBox.Show(
+                "Đã rollback về 1.0:\n- Frame: " + cFrame + "\n- Area: " + cArea,
+                "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private static double ReadModValue(TextBox t)
+        {
+            string v = t.Text.Trim().Replace(",", ".");
+            return double.Parse(v, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private bool IsColumnFrame(string frameName)
+        {
+            string p1 = "", p2 = "";
+            _sap.FrameObj.GetPoints(frameName, ref p1, ref p2);
+            double xi = 0, yi = 0, zi = 0, xj = 0, yj = 0, zj = 0;
+            _sap.PointObj.GetCoordCartesian(p1, ref xi, ref yi, ref zi);
+            _sap.PointObj.GetCoordCartesian(p2, ref xj, ref yj, ref zj);
+            double dx = Math.Abs(xj - xi), dy = Math.Abs(yj - yi), dz = Math.Abs(zj - zi);
+            double horizontal = Math.Sqrt(dx * dx + dy * dy);
+            return dz > horizontal;
+        }
+
+        private bool IsWallArea(string areaName)
+        {
+            int n = 0;
+            string[] pts = null;
+            _sap.AreaObj.GetPoints(areaName, ref n, ref pts);
+            double zMin = double.MaxValue, zMax = double.MinValue;
+            for (int i = 0; i < n; i++)
+            {
+                double x = 0, y = 0, z = 0;
+                _sap.PointObj.GetCoordCartesian(pts[i], ref x, ref y, ref z);
+                zMin = Math.Min(zMin, z);
+                zMax = Math.Max(zMax, z);
+            }
+            return Math.Abs(zMax - zMin) > 0.10;
+        }
+
+        // ---------- Scaffold dùng chung cho mọi tab ----------
 
         private DataGridView BuildScaffold(TabPage tab, string title, string standard,
             string condition, string note, out FlowLayoutPanel bar)
@@ -371,12 +645,12 @@ namespace Etabs_Ultimate_Tools
             {
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(12)
             };
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));   // title
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));   // subtitle
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));   // condition
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));   // groupbox (thanh nhập + nút)
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));   // diễn giải (xuống dòng riêng)
-            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));   // lưới kết quả
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(root);
 
             root.Controls.Add(MakeTitle(title), 0, 0);
@@ -396,7 +670,6 @@ namespace Etabs_Ultimate_Tools
             };
             box.Controls.Add(bar);
 
-            // Diễn giải nằm thành một hàng riêng ngay dưới hàng nút, full width, tự động xuống dòng.
             root.Controls.Add(MakeNote(note), 0, 4);
 
             var grid = CreateGrid();
@@ -523,7 +796,7 @@ namespace Etabs_Ultimate_Tools
             AddAxialGridColumns();
         }
 
-        // ---------- Factory tạo control căn chỉnh đồng nhất ----------
+        // ---------- Factory tạo control ----------
 
         private static Label MakeTitle(string text) => new Label
         {
@@ -737,7 +1010,6 @@ namespace Etabs_Ultimate_Tools
 
             dgv.DataSource = null;
             dgv.DataSource = _rows;
-            
 
             if (_rows.Count > 0 && _rows.All(r => Math.Abs(r.Ptot) < 1e-9))
                 MessageBox.Show("Ptot vẫn bằng 0. Hãy kiểm tra Mass Summary by Story và model đã Run Analysis chưa.", "Check Model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -763,7 +1035,6 @@ namespace Etabs_Ultimate_Tools
 
             dgvWind.DataSource = null;
             dgvWind.DataSource = displayRows;
-           
 
             if (_windRows.Count > 0 && _windRows.All(r => Math.Abs(r.TopDisplacement) < 1e-12))
                 MessageBox.Show("Chuyển vị các tầng đang bằng 0. Hãy kiểm tra combo gió và bảng Diaphragm Center of Mass Displacements đã có dữ liệu chưa.", "Chuyển vị đỉnh", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -1024,7 +1295,7 @@ namespace Etabs_Ultimate_Tools
             public double AllowLimit { get; set; }
             public string Check { get; set; }
         }
-                
+
         private void RunExport(Action<string> writer, string suggestedName)
         {
             using (var sfd = new SaveFileDialog())
