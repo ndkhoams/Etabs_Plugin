@@ -27,16 +27,17 @@ namespace CheckModelPlugin
         private List<TopDisplacementRow> _windRows = new List<TopDisplacementRow>();
 
         private ComboBox cboWindDriftCombo;
-        private TextBox txtWindDriftLimit;
         private Button btnWindDriftRun, btnWindDriftExport;
         private DataGridView dgvWindDrift;
         private List<WindDriftRow> _windDriftRows = new List<WindDriftRow>();
 
-        private ComboBox cboSeisComboX, cboSeisComboY, cboSeisLimit;
+        private ComboBox cboSeisCombo, cboSeisLimit;
         private TextBox txtSeisQ, txtSeisNu;
         private Button btnSeisRun, btnSeisExport;
         private DataGridView dgvSeis;
         private List<SeismicDriftRow> _seismicDriftRows = new List<SeismicDriftRow>();
+
+        private const double WindDriftLimitDen = 500.0;
 
         public PDeltaCheckForm(cSapModel sap)
         {
@@ -164,14 +165,12 @@ namespace CheckModelPlugin
             dgvWindDrift = BuildScaffold(tab,
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG GIÓ",
                 "(Theo TCVN 2737:2023)",
-                "Điều kiện: drift = Δ/h ≤ 1/[giới hạn] cho từng tầng",
-                "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió. Δ = drift × chiều cao tầng. Giới hạn mặc định h/500 (chỉnh theo tiêu chuẩn áp dụng).",
+                "Điều kiện: drift = Δ/h ≤ 1/500 cho từng tầng",
+                "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió. Δ = drift × chiều cao tầng. Giới hạn cố định h/500 theo TCVN 2737:2023.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp gió:", 78));
             cboWindDriftCombo = MakeCombo(240); bar.Controls.Add(cboWindDriftCombo);
-            bar.Controls.Add(MakeFieldLabel("Giới hạn h/", 70));
-            txtWindDriftLimit = MakeTextBox("500", 55); bar.Controls.Add(txtWindDriftLimit);
 
             btnWindDriftRun = MakeButton("Tính kiểm tra"); btnWindDriftRun.Click += (s, e) => RunWindDriftCheck(); bar.Controls.Add(btnWindDriftRun);
             btnWindDriftExport = MakeButton("Xuất Excel"); btnWindDriftExport.Enabled = false; btnWindDriftExport.Click += (s, e) => ExportExcel(); bar.Controls.Add(btnWindDriftExport);
@@ -185,13 +184,11 @@ namespace CheckModelPlugin
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
                 "(Theo TCVN 9386:2025)",
                 "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  q × drift × ν ≤ limit",
-                "drift = de/h lấy từ ETABS Story Drifts (combo động đất, đàn hồi). dr = q × de là chuyển vị lệch tầng thiết kế. ν: hệ số chiết giảm (0.4 – 0.5). limit: 0.005 (giòn) / 0.0075 (dẻo) / 0.010 (không cản trở).",
+                "drift = de/h lấy từ ETABS Story Drifts (1 tổ hợp động đất dùng chung cho cả 2 phương, đàn hồi). dr = q × de là chuyển vị lệch tầng thiết kế. ν: hệ số chiết giảm (0.4 – 0.5). limit: 0.005 (giòn) / 0.0075 (dẻo) / 0.010 (không cản trở).",
                 out var bar);
 
-            bar.Controls.Add(MakeFieldLabel("Combo X:", 68));
-            cboSeisComboX = MakeCombo(180); bar.Controls.Add(cboSeisComboX);
-            bar.Controls.Add(MakeFieldLabel("Combo Y:", 68));
-            cboSeisComboY = MakeCombo(180); bar.Controls.Add(cboSeisComboY);
+            bar.Controls.Add(MakeFieldLabel("Tổ hợp động đất:", 110));
+            cboSeisCombo = MakeCombo(220); bar.Controls.Add(cboSeisCombo);
             bar.Controls.Add(MakeFieldLabel("q:", 22));
             txtSeisQ = MakeTextBox("1.5", 50); bar.Controls.Add(txtSeisQ);
             bar.Controls.Add(MakeFieldLabel("ν:", 22));
@@ -325,7 +322,7 @@ namespace CheckModelPlugin
             AddColumn(dgvWindDrift, "DeltaYmm", "Δy (mm)", 90, "N2");
             AddColumn(dgvWindDrift, "DriftX", "drift X", 105, "0.000000");
             AddColumn(dgvWindDrift, "DriftY", "drift Y", 105, "0.000000");
-            AddColumn(dgvWindDrift, "Limit", "Giới hạn", 105, "0.000000");
+            AddColumn(dgvWindDrift, "Limit", "Giới hạn 1/500", 110, "0.000000");
             AddColumn(dgvWindDrift, "Check", "Kiểm tra", 200, null, true);
         }
 
@@ -347,7 +344,7 @@ namespace CheckModelPlugin
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboComboX, cboComboY, cboWindCombo, cboWindDriftCombo, cboSeisComboX, cboSeisComboY })
+            foreach (var cbo in new[] { cboComboX, cboComboY, cboWindCombo, cboWindDriftCombo, cboSeisCombo })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
@@ -357,8 +354,7 @@ namespace CheckModelPlugin
             SelectByKeyword(cboComboY, "Vtot", "EY", "Y");
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
-            SelectByKeyword(cboSeisComboX, "EX", "EQX", "DDX", "QX", "SX", "DONGDATX", "X");
-            SelectByKeyword(cboSeisComboY, "EY", "EQY", "DDY", "QY", "SY", "DONGDATY", "Y");
+            SelectByKeyword(cboSeisCombo, "ENV_DD", "EQ", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
         }
 
         private static void SelectByKeyword(ComboBox cbo, params string[] keys)
@@ -441,7 +437,7 @@ namespace CheckModelPlugin
                 MessageBox.Show("Chưa chọn tổ hợp gió.", "Chuyển vị lệch tầng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            if (!double.TryParse(txtWindDriftLimit.Text, out var limitDen) || limitDen <= 0) limitDen = 500.0;
+            const double limitDen = WindDriftLimitDen;
 
             _sap.SetPresentUnits(eUnits.kN_m_C);
             _windDriftRows = WindDriftExtractor.Calculate(_sap, combo, combo, limitDen);
@@ -459,9 +455,8 @@ namespace CheckModelPlugin
 
         private void RunSeismicDriftCheck()
         {
-            string comboX = cboSeisComboX.Text.Trim();
-            string comboY = cboSeisComboY.Text.Trim();
-            if (string.IsNullOrWhiteSpace(comboX) && string.IsNullOrWhiteSpace(comboY))
+            string combo = cboSeisCombo.Text.Trim();
+            if (string.IsNullOrWhiteSpace(combo))
             {
                 MessageBox.Show("Chưa chọn tổ hợp động đất.", "Chuyển vị lệch tầng (động đất)", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -471,7 +466,7 @@ namespace CheckModelPlugin
             double limitRatio = GetSeismicLimit();
 
             _sap.SetPresentUnits(eUnits.kN_m_C);
-            _seismicDriftRows = SeismicDriftExtractor.Calculate(_sap, comboX, comboY, q, nu, limitRatio);
+            _seismicDriftRows = SeismicDriftExtractor.Calculate(_sap, combo, combo, q, nu, limitRatio);
 
             var displayRows = BuildSeismicDisplayRows(_seismicDriftRows, q, nu, limitRatio);
 
