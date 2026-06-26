@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ClosedXML.Excel;
@@ -8,7 +8,7 @@ namespace CheckModelPlugin
     public static class PDeltaExcelExporter
     {
         public static void Export(string filePath, List<PDeltaCheckRow> rows, double qFactor,
-            List<TopDisplacementRow> windRows = null)
+            List<TopDisplacementRow> windRows = null, List<WindDriftRow> windDriftRows = null)
         {
             using (var wb = new XLWorkbook())
             {
@@ -40,11 +40,13 @@ namespace CheckModelPlugin
                 if (windRows != null && windRows.Count > 0)
                     WriteWindSheet(wb, windRows);
 
+                if (windDriftRows != null && windDriftRows.Count > 0)
+                    WriteWindDriftSheet(wb, windDriftRows);
+
                 wb.SaveAs(filePath);
             }
         }
 
-        // ─── Style helpers (gom style header/body lặp lại) ───────────────
         private static void StyleHeaderRange(IXLRange header)
         {
             header.Style.Font.Bold = true;
@@ -169,9 +171,9 @@ namespace CheckModelPlugin
             ws.Range(firstData, 7, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 9, lastData, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-            ws.Range(firstData, 3, lastData, 4).Style.NumberFormat.Format = "0.00000";   // drift, q × drift
-            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0";         // Ptot, Vtot
-            ws.Range(firstData, 7, lastData, 8).Style.NumberFormat.Format = "0.000";     // θ, 1/(1-θ)
+            ws.Range(firstData, 3, lastData, 4).Style.NumberFormat.Format = "0.00000";
+            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0";
+            ws.Range(firstData, 7, lastData, 8).Style.NumberFormat.Format = "0.000";
         }
 
         private static void WriteWindSheet(XLWorkbook wb, List<TopDisplacementRow> rows)
@@ -202,7 +204,6 @@ namespace CheckModelPlugin
                 ? comboX
                 : "X: " + comboX + "; Y: " + comboY;
 
-            // Tính 1 lần duy nhất, dùng lại cho cả kết luận lẫn bảng
             var computed = storyRows.Select(st =>
             {
                 xRows.TryGetValue(st.TopStory, out var xr);
@@ -257,12 +258,12 @@ namespace CheckModelPlugin
             ws.Range("C14:H14").Merge();
             ws.Cell("C14").Style.Font.Bold = true;
             ws.Cell("C14").Style.Font.Italic = true;
+            ws.Cell("C14").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
 
-            int headerRow = 15;
-            string[] heads = { "Tầng", "Cao độ tầng\n(m)", "H\n(m)", "ΔX\n(mm)", "ΔY\n(mm)", "H/" + limitText + "\n(mm)", "Kiểm tra" };
+            int headerRow = 16;
+            string[] heads = { "Tầng", "Cao độ (m)", "H (m)", "ΔX (mm)", "ΔY (mm)", "H/" + limitText + " (mm)", "Kiểm tra" };
             for (int i = 0; i < heads.Length; i++)
                 ws.Cell(headerRow, 2 + i).Value = heads[i];
-
             StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 8));
 
             int r = headerRow + 1;
@@ -276,63 +277,183 @@ namespace CheckModelPlugin
                 ws.Cell(r, 6).Value = c.Dy;
                 ws.Cell(r, 7).Value = c.LimitMm;
                 ws.Cell(r, 8).Value = c.Ok ? "OK" : "NG";
+                if (!c.Ok) ws.Cell(r, 8).Style.Font.FontColor = XLColor.Red;
                 r++;
             }
 
             int lastData = Math.Max(firstData, r - 1);
-            if (lastData >= firstData)
-            {
-                StyleBodyBox(ws.Range(firstData, 2, lastData, 8));
-                ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
-                ws.Range(firstData, 8, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
-                ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
-                ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0.0";
-                ws.Range(firstData, 7, lastData, 7).Style.NumberFormat.Format = "0";
-            }
+            StyleBodyBox(ws.Range(firstData, 2, lastData, 8));
+            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 8, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
+            ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
+            ws.Range(firstData, 5, lastData, 7).Style.NumberFormat.Format = "0.0";
 
             ws.Column(1).Width = 3;
-            ws.Column(2).Width = 14;
-            ws.Column(3).Width = 16;
-            ws.Column(4).Width = 13;
-            for (int col = 5; col <= 8; col++) ws.Column(col).Width = 14;
-            ws.Rows().Height = 18;
-            ws.Row(1).Height = 21;
-            ws.Row(2).Height = 21;
-            ws.Row(3).Height = 18;
-            ws.Row(15).Height = 30;
-
-            ws.SheetView.View = XLSheetViewOptions.Normal;
-            ws.RangeUsed().Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            ws.Column(2).Width = 12;
+            for (int col = 3; col <= 8; col++) ws.Column(col).Width = 14;
         }
 
-        // Gom logic GroupBy + lấy dòng có |chuyển vị| lớn nhất (trước đây lặp cho X và Y)
         private static Dictionary<string, TopDisplacementRow> BuildMaxByStory(
-            List<TopDisplacementRow> rows, string direction)
+            List<TopDisplacementRow> rows, string dir)
         {
-            return rows
-                .Where(x => x.Direction.Equals(direction, StringComparison.OrdinalIgnoreCase))
-                .GroupBy(x => x.TopStory, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(
-                    g => g.Key,
-                    g => g.OrderByDescending(r => Math.Abs(r.TopDisplacement)).First(),
-                    StringComparer.OrdinalIgnoreCase);
+            var map = new Dictionary<string, TopDisplacementRow>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows.Where(x => x.Direction.Equals(dir, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!map.TryGetValue(row.TopStory, out var cur) ||
+                    Math.Abs(row.TopDisplacement) > Math.Abs(cur.TopDisplacement))
+                    map[row.TopStory] = row;
+            }
+            return map;
+        }
+
+        private static void WriteWindDriftSheet(XLWorkbook wb, List<WindDriftRow> rows)
+        {
+            var ws = wb.Worksheets.Add("CHUYEN VI LECH TANG");
+            EtabsHelper.ApplyA4PageSetup(ws);
+
+            var validRows = (rows ?? new List<WindDriftRow>())
+                .Where(x => x.Height > 1e-9 && !EtabsHelper.IsBaseLevel(x.Story))
+                .ToList();
+
+            var xRows = BuildMaxDriftByStory(validRows, "X");
+            var yRows = BuildMaxDriftByStory(validRows, "Y");
+
+            var storyRows = validRows
+                .GroupBy(x => x.Story, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(r => r.Elevation).First())
+                .OrderByDescending(x => x.Elevation)
+                .ToList();
+
+            double limitDen = validRows.Count > 0 ? validRows[0].LimitDenominator : 500.0;
+            if (limitDen <= 0) limitDen = 500.0;
+            double limit = 1.0 / limitDen;
+            string limitText = limitDen.ToString("0");
+
+            string comboX = xRows.Count > 0 ? xRows.Values.First().Combo : "";
+            string comboY = yRows.Count > 0 ? yRows.Values.First().Combo : "";
+            string comboText = string.Equals(comboX, comboY, StringComparison.OrdinalIgnoreCase)
+                ? comboX
+                : "X: " + comboX + "; Y: " + comboY;
+
+            var computed = storyRows.Select(st =>
+            {
+                xRows.TryGetValue(st.Story, out var xr);
+                yRows.TryGetValue(st.Story, out var yr);
+                double dxRatio = xr != null ? xr.Drift : 0.0;
+                double dyRatio = yr != null ? yr.Drift : 0.0;
+                return new
+                {
+                    Story = st,
+                    DriftX = dxRatio,
+                    DriftY = dyRatio,
+                    DxMm = dxRatio * st.Height * 1000.0,
+                    DyMm = dyRatio * st.Height * 1000.0,
+                    Ok = dxRatio <= limit && dyRatio <= limit
+                };
+            }).ToList();
+
+            bool anyNg = computed.Any(c => !c.Ok);
+
+            ws.Cell("A2").Value = "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG GIÓ";
+            ws.Range("A2:I2").Merge();
+            ws.Cell("A2").Style.Font.Bold = true;
+            ws.Cell("A2").Style.Font.FontSize = 14;
+            ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell("A3").Value = "(Theo TCVN 2737:2023)";
+            ws.Range("A3:I3").Merge();
+            ws.Cell("A3").Style.Font.Italic = true;
+            ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell("A5").Value = "1. Cơ sở lý thuyết";
+            ws.Cell("A5").Style.Font.Bold = true;
+            ws.Cell("B6").Value = "Chuyển vị lệch tầng (inter-story drift) là chênh lệch chuyển vị ngang giữa hai sàn liền kề.";
+            ws.Range("B6:I6").Merge();
+            ws.Cell("B7").Value = "Điều kiện kiểm tra: drift = Δ/h ≤ 1/" + limitText + " cho từng tầng.";
+            ws.Range("B7:I7").Merge();
+            ws.Cell("B8").Value = "Trong đó Δ là chuyển vị lệch tầng, h là chiều cao tầng. drift lấy trực tiếp từ ETABS Story Drifts.";
+            ws.Range("B8:I8").Merge();
+
+            ws.Cell("A10").Value = "2. Kiểm tra chuyển vị lệch tầng";
+            ws.Cell("A10").Style.Font.Bold = true;
+            ws.Cell("B11").Value = "Tổ hợp kiểm tra:";
+            ws.Cell("D11").Value = comboText;
+            ws.Range("D11:I11").Merge();
+
+            ws.Cell("B12").Value = "Kết luận:";
+            ws.Cell("C12").Value = anyNg
+                ? "Có tầng không đảm bảo điều kiện chuyển vị lệch tầng."
+                : "Tất cả các tầng đảm bảo điều kiện chuyển vị lệch tầng.";
+            ws.Range("C12:I12").Merge();
+            ws.Cell("C12").Style.Font.Bold = true;
+            ws.Cell("C12").Style.Font.Italic = true;
+            ws.Cell("C12").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
+
+            int headerRow = 14;
+            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "Δx (mm)", "Δy (mm)", "drift max", "Giới hạn 1/" + limitText, "Kiểm tra" };
+            for (int i = 0; i < heads.Length; i++)
+                ws.Cell(headerRow, 2 + i).Value = heads[i];
+            StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 9));
+
+            int r = headerRow + 1;
+            int firstData = r;
+            foreach (var c in computed)
+            {
+                double driftMax = Math.Max(c.DriftX, c.DriftY);
+                ws.Cell(r, 2).Value = c.Story.Story;
+                ws.Cell(r, 3).Value = c.Story.Elevation;
+                ws.Cell(r, 4).Value = c.Story.Height;
+                ws.Cell(r, 5).Value = c.DxMm;
+                ws.Cell(r, 6).Value = c.DyMm;
+                ws.Cell(r, 7).Value = driftMax;
+                ws.Cell(r, 8).Value = limit;
+                ws.Cell(r, 9).Value = c.Ok ? "OK" : "NG";
+                if (!c.Ok) ws.Cell(r, 9).Style.Font.FontColor = XLColor.Red;
+                r++;
+            }
+
+            int lastData = Math.Max(firstData, r - 1);
+            StyleBodyBox(ws.Range(firstData, 2, lastData, 9));
+            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 9, lastData, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
+            ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
+            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0.00";
+            ws.Range(firstData, 7, lastData, 8).Style.NumberFormat.Format = "0.000000";
+
+            ws.Column(1).Width = 3;
+            ws.Column(2).Width = 12;
+            for (int col = 3; col <= 9; col++) ws.Column(col).Width = 13;
+        }
+
+        private static Dictionary<string, WindDriftRow> BuildMaxDriftByStory(
+            List<WindDriftRow> rows, string dir)
+        {
+            var map = new Dictionary<string, WindDriftRow>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows.Where(x => x.Direction.Equals(dir, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!map.TryGetValue(row.Story, out var cur) ||
+                    Math.Abs(row.Drift) > Math.Abs(cur.Drift))
+                    map[row.Story] = row;
+            }
+            return map;
+        }
+
+        private static string GetSummary(double thetaMax)
+        {
+            if (thetaMax <= 0.10) return "Bỏ qua hiệu ứng bậc 2 (θmax ≤ 0.10).";
+            if (thetaMax <= 0.20) return "Nhân nội lực với 1/(1-θ) (0.10 < θmax ≤ 0.20).";
+            if (thetaMax <= 0.30) return "Cần xét P-Delta chính xác (0.20 < θmax ≤ 0.30).";
+            return "KHÔNG ĐẠT: θmax > 0.30, cần tăng độ cứng/thiết kế lại.";
         }
 
         private static string ShortCheck(double theta)
         {
-            if (theta <= 0.10) return "OK";
-            if (theta <= 0.20) return "> 0.1";
-            if (theta <= 0.30) return "> 0.2";
+            if (theta <= 0.10) return "OK (bỏ qua bậc 2)";
+            if (theta <= 0.20) return "OK (×1/(1-θ))";
+            if (theta <= 0.30) return "Xét P-Delta";
             return "NG";
-        }
-
-        private static string GetSummary(double theta)
-        {
-            if (theta <= 0.10) return "Không cần xét đến các hiệu ứng bậc 2";
-            if (theta <= 0.20) return "Cần xét gần đúng hiệu ứng bậc 2 bằng hệ số 1/(1-θ)";
-            if (theta <= 0.30) return "Ảnh hưởng P-Delta lớn, cần kiểm tra chính xác hơn";
-            return "Không đạt điều kiện θ ≤ 0.30, cần điều chỉnh thiết kế";
         }
     }
 }

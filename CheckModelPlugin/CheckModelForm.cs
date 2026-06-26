@@ -1,4 +1,4 @@
-﻿using ETABSv1;
+using ETABSv1;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -23,6 +23,12 @@ namespace CheckModelPlugin
         private DataGridView dgvWind;
         private List<TopDisplacementRow> _windRows = new List<TopDisplacementRow>();
 
+        private ComboBox cboWindDriftCombo;
+        private TextBox txtWindDriftLimit;
+        private Button btnWindDriftRun, btnWindDriftExport;
+        private DataGridView dgvWindDrift;
+        private List<WindDriftRow> _windDriftRows = new List<WindDriftRow>();
+
         public PDeltaCheckForm(cSapModel sap)
         {
             _sap = sap;
@@ -44,21 +50,21 @@ namespace CheckModelPlugin
 
             var tabPDelta = new TabPage("Check P-Delta");
             var tabWind = new TabPage("Chuyển vị đỉnh do gió");
+            var tabWindDrift = new TabPage("Kiểm tra chuyển vị lệch tầng do tải trọng gió");
             tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabWind);
+            tabs.TabPages.Add(tabWindDrift);
 
             BuildPDeltaTab(tabPDelta);
             BuildWindTab(tabWind);
+            BuildWindDriftTab(tabWindDrift);
         }
 
         private void BuildPDeltaTab(TabPage tab)
         {
             var main = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 5,
-                Padding = new Padding(10)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(10)
             };
             main.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             main.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
@@ -163,10 +169,7 @@ namespace CheckModelPlugin
         {
             var main = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
-                ColumnCount = 1,
-                RowCount = 5,
-                Padding = new Padding(10)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(10)
             };
             main.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
             main.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
@@ -245,6 +248,88 @@ namespace CheckModelPlugin
             main.Controls.Add(dgvWind, 0, 4);
         }
 
+        private void BuildWindDriftTab(TabPage tab)
+        {
+            var main = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Padding = new Padding(10)
+            };
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 30));
+            main.RowStyles.Add(new RowStyle(SizeType.Absolute, 105));
+            main.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            tab.Controls.Add(main);
+
+            main.Controls.Add(new Label
+            {
+                Text = "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG GIÓ",
+                Dock = DockStyle.Fill,
+                Font = new Font("Arial", 14F, FontStyle.Bold),
+                TextAlign = ContentAlignment.MiddleCenter
+            }, 0, 0);
+
+            main.Controls.Add(new Label
+            {
+                Text = "(Theo TCVN 2737:2023)",
+                Dock = DockStyle.Fill,
+                Font = new Font("Arial", 10F, FontStyle.Italic),
+                TextAlign = ContentAlignment.MiddleCenter
+            }, 0, 1);
+
+            main.Controls.Add(new Label
+            {
+                Text = "Điều kiện: drift = Δ/h ≤ 1/[giới hạn] cho từng tầng",
+                Dock = DockStyle.Fill,
+                Font = new Font("Arial", 10F),
+                ForeColor = Color.DarkBlue,
+                TextAlign = ContentAlignment.MiddleCenter
+            }, 0, 2);
+
+            var box = new GroupBox { Dock = DockStyle.Fill, Text = "Tổ hợp kiểm tra", Padding = new Padding(12) };
+            main.Controls.Add(box, 0, 3);
+
+            var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 7, RowCount = 2 };
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 230));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 80));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
+            layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            box.Controls.Add(layout);
+
+            AddLabelCell(layout, "Tổ hợp gió:", 0, 0);
+            cboWindDriftCombo = AddComboCell(layout, 1, 0);
+            AddLabelCell(layout, "Giới hạn h/", 2, 0);
+            txtWindDriftLimit = new TextBox { Text = "500", Width = 55, Anchor = AnchorStyles.Left | AnchorStyles.Top };
+            layout.Controls.Add(txtWindDriftLimit, 3, 0);
+
+            btnWindDriftRun = new Button { Text = "Tính kiểm tra", Width = 120, Height = 30, Margin = new Padding(0, 6, 8, 0) };
+            btnWindDriftRun.Click += (s, e) => RunWindDriftCheck();
+            layout.Controls.Add(btnWindDriftRun, 4, 0);
+
+            btnWindDriftExport = new Button { Text = "Xuất Excel", Width = 120, Height = 30, Enabled = false, Margin = new Padding(0, 6, 0, 0) };
+            btnWindDriftExport.Click += (s, e) => ExportExcel();
+            layout.Controls.Add(btnWindDriftExport, 5, 0);
+
+            var note = new Label
+            {
+                Dock = DockStyle.Fill,
+                Text = "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió. Δ = drift × chiều cao tầng. Giới hạn mặc định h/500 (chỉnh theo tiêu chuẩn áp dụng).",
+                ForeColor = Color.DimGray,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+            layout.SetColumnSpan(note, 6);
+            layout.Controls.Add(note, 0, 1);
+
+            dgvWindDrift = CreateGrid();
+            AddWindDriftGridColumns();
+            main.Controls.Add(dgvWindDrift, 0, 4);
+        }
+
         private DataGridView CreateGrid()
         {
             return new DataGridView
@@ -301,6 +386,20 @@ namespace CheckModelPlugin
             AddColumn(dgvWind, "Check", "Kiểm tra", 250, null, true);
         }
 
+        private void AddWindDriftGridColumns()
+        {
+            dgvWindDrift.Columns.Clear();
+            AddColumn(dgvWindDrift, "Story", "Tầng", 90);
+            AddColumn(dgvWindDrift, "Elevation", "Cao độ (m)", 100, "+0.000;-0.000;0.000");
+            AddColumn(dgvWindDrift, "Height", "h tầng (m)", 90, "N3");
+            AddColumn(dgvWindDrift, "DeltaXmm", "Δx (mm)", 90, "N2");
+            AddColumn(dgvWindDrift, "DeltaYmm", "Δy (mm)", 90, "N2");
+            AddColumn(dgvWindDrift, "DriftX", "drift X", 105, "0.000000");
+            AddColumn(dgvWindDrift, "DriftY", "drift Y", 105, "0.000000");
+            AddColumn(dgvWindDrift, "Limit", "Giới hạn", 105, "0.000000");
+            AddColumn(dgvWindDrift, "Check", "Kiểm tra", 200, null, true);
+        }
+
         private void AddColumn(DataGridView grid, string property, string header, int width, string format = null, bool fill = false)
         {
             var col = new DataGridViewTextBoxColumn
@@ -318,7 +417,7 @@ namespace CheckModelPlugin
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboComboX, cboComboY, cboWindCombo })
+            foreach (var cbo in new[] { cboComboX, cboComboY, cboWindCombo, cboWindDriftCombo })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
@@ -327,6 +426,7 @@ namespace CheckModelPlugin
             SelectByKeyword(cboComboX, "Vtot", "EX", "X");
             SelectByKeyword(cboComboY, "Vtot", "EY", "Y");
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
+            SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
         }
 
         private static void SelectByKeyword(ComboBox cbo, params string[] keys)
@@ -399,8 +499,30 @@ namespace CheckModelPlugin
             btnWindExport.Enabled = _windRows.Count > 0;
         }
 
-        // FIX: lấy dòng có |chuyển vị| lớn nhất cho mỗi phương để đồng nhất với
-        // PDeltaExcelExporter (trước đây dùng FirstOrDefault gây lệch số liệu).
+        private void RunWindDriftCheck()
+        {
+            string combo = cboWindDriftCombo.Text.Trim();
+            if (string.IsNullOrWhiteSpace(combo))
+            {
+                MessageBox.Show("Chưa chọn tổ hợp gió.", "Chuyển vị lệch tầng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (!double.TryParse(txtWindDriftLimit.Text, out var limitDen) || limitDen <= 0) limitDen = 500.0;
+
+            _sap.SetPresentUnits(eUnits.kN_m_C);
+            _windDriftRows = WindDriftExtractor.Calculate(_sap, combo, combo, limitDen);
+
+            var displayRows = BuildWindDriftDisplayRows(_windDriftRows, limitDen);
+
+            dgvWindDrift.DataSource = null;
+            dgvWindDrift.DataSource = displayRows;
+
+            if (_windDriftRows.Count > 0 && _windDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
+                MessageBox.Show("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp gió và model đã Run Analysis chưa.", "Chuyển vị lệch tầng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            btnWindDriftExport.Enabled = _windDriftRows.Count > 0;
+        }
+
         private List<WindGridRow> BuildWindDisplayRows(List<TopDisplacementRow> rows)
         {
             var result = new List<WindGridRow>();
@@ -439,6 +561,44 @@ namespace CheckModelPlugin
             return result;
         }
 
+        private List<WindDriftGridRow> BuildWindDriftDisplayRows(List<WindDriftRow> rows, double limitDen)
+        {
+            var result = new List<WindDriftGridRow>();
+            double limit = limitDen > 0 ? 1.0 / limitDen : 0.0;
+
+            var stories = rows
+                .Where(r => !EtabsHelper.IsBaseLevel(r.Story))
+                .GroupBy(r => r.Story, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Max(x => x.Elevation));
+
+            foreach (var g in stories)
+            {
+                var x = g.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.Drift)).FirstOrDefault();
+                var y = g.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.Drift)).FirstOrDefault();
+                var refRow = x ?? y;
+                if (refRow == null) continue;
+
+                double driftX = x != null ? x.Drift : 0.0;
+                double driftY = y != null ? y.Drift : 0.0;
+
+                result.Add(new WindDriftGridRow
+                {
+                    Story = refRow.Story,
+                    Elevation = refRow.Elevation,
+                    Height = refRow.Height,
+                    DriftX = driftX,
+                    DriftY = driftY,
+                    DeltaXmm = driftX * refRow.Height * 1000.0,
+                    DeltaYmm = driftY * refRow.Height * 1000.0,
+                    Limit = limit,
+                    Check = Math.Max(driftX, driftY) <= limit ? "OK" : "NG"
+                });
+            }
+            return result;
+        }
+
         private class WindGridRow
         {
             public string Story { get; set; }
@@ -447,6 +607,19 @@ namespace CheckModelPlugin
             public double DeltaX { get; set; }
             public double DeltaY { get; set; }
             public double LimitMm { get; set; }
+            public string Check { get; set; }
+        }
+
+        private class WindDriftGridRow
+        {
+            public string Story { get; set; }
+            public double Elevation { get; set; }
+            public double Height { get; set; }
+            public double DeltaXmm { get; set; }
+            public double DeltaYmm { get; set; }
+            public double DriftX { get; set; }
+            public double DriftY { get; set; }
+            public double Limit { get; set; }
             public string Check { get; set; }
         }
 
@@ -465,7 +638,7 @@ namespace CheckModelPlugin
                 sfd.FileName = "Kiem_tra_chuyen_vi_TCVN.xlsx";
                 if (sfd.ShowDialog() != DialogResult.OK) return;
 
-                PDeltaExcelExporter.Export(sfd.FileName, _rows, _qFactor, _windRows);
+                PDeltaExcelExporter.Export(sfd.FileName, _rows, _qFactor, _windRows, _windDriftRows);
                 MessageBox.Show("Đã xuất: " + sfd.FileName, "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
