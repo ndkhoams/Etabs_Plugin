@@ -86,12 +86,12 @@ namespace Etabs_Ultimate_Tools
             ws.PageSetup.PaperSize = ClosedXML.Excel.XLPaperSize.A4Paper;
             ws.PageSetup.PageOrientation = ClosedXML.Excel.XLPageOrientation.Portrait;
             ws.PageSetup.FitToPages(1, 0);
-            ws.PageSetup.Margins.Left = 0.7;
-            ws.PageSetup.Margins.Right = 0.7;
-            ws.PageSetup.Margins.Top = 0.5;
+            ws.PageSetup.Margins.Left = 0.75;
+            ws.PageSetup.Margins.Right = 0.75;
+            ws.PageSetup.Margins.Top = 0.75;
             ws.PageSetup.Margins.Bottom = 0.50;
             ws.PageSetup.Margins.Header = 0.50;
-            ws.PageSetup.Margins.Footer = 0.5;
+            ws.PageSetup.Margins.Footer = 0.75;
             ws.PageSetup.CenterHorizontally = true;
 
             ws.Style.Font.FontName = "Arial";
