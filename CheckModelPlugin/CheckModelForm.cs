@@ -132,7 +132,7 @@ namespace CheckModelPlugin
             txtQ = MakeTextBox("1.5", 60); bar.Controls.Add(txtQ);
 
             btnRun = MakeButton("Tính kiểm tra"); btnRun.Click += (s, e) => RunCheck(); bar.Controls.Add(btnRun);
-            btnExport = MakeButton("Xuất Excel"); btnExport.Enabled = false; btnExport.Click += (s, e) => ExportExcel(); bar.Controls.Add(btnExport);
+            btnExport = MakeButton("Xuất Excel"); btnExport.Enabled = false; btnExport.Click += (s, e) => ExportPDelta(); bar.Controls.Add(btnExport);
             btnClose = MakeButton("Đóng"); btnClose.Width = 84; btnClose.Click += (s, e) => Close(); bar.Controls.Add(btnClose);
 
             AddPDeltaGridColumns();
@@ -151,7 +151,7 @@ namespace CheckModelPlugin
             cboWindCombo = MakeCombo(240); bar.Controls.Add(cboWindCombo);
 
             btnWindRun = MakeButton("Tính kiểm tra"); btnWindRun.Click += (s, e) => RunWindCheck(); bar.Controls.Add(btnWindRun);
-            btnWindExport = MakeButton("Xuất Excel"); btnWindExport.Enabled = false; btnWindExport.Click += (s, e) => ExportExcel(); bar.Controls.Add(btnWindExport);
+            btnWindExport = MakeButton("Xuất Excel"); btnWindExport.Enabled = false; btnWindExport.Click += (s, e) => ExportWind(); bar.Controls.Add(btnWindExport);
 
             AddWindGridColumns();
         }
@@ -169,7 +169,7 @@ namespace CheckModelPlugin
             cboWindDriftCombo = MakeCombo(240); bar.Controls.Add(cboWindDriftCombo);
 
             btnWindDriftRun = MakeButton("Tính kiểm tra"); btnWindDriftRun.Click += (s, e) => RunWindDriftCheck(); bar.Controls.Add(btnWindDriftRun);
-            btnWindDriftExport = MakeButton("Xuất Excel"); btnWindDriftExport.Enabled = false; btnWindDriftExport.Click += (s, e) => ExportExcel(); bar.Controls.Add(btnWindDriftExport);
+            btnWindDriftExport = MakeButton("Xuất Excel"); btnWindDriftExport.Enabled = false; btnWindDriftExport.Click += (s, e) => ExportWindDrift(); bar.Controls.Add(btnWindDriftExport);
 
             AddWindDriftGridColumns();
         }
@@ -196,7 +196,7 @@ namespace CheckModelPlugin
             bar.Controls.Add(cboSeisLimit);
 
             btnSeisRun = MakeButton("Tính kiểm tra"); btnSeisRun.Click += (s, e) => RunSeismicDriftCheck(); bar.Controls.Add(btnSeisRun);
-            btnSeisExport = MakeButton("Xuất Excel"); btnSeisExport.Enabled = false; btnSeisExport.Click += (s, e) => ExportExcel(); bar.Controls.Add(btnSeisExport);
+            btnSeisExport = MakeButton("Xuất Excel"); btnSeisExport.Enabled = false; btnSeisExport.Click += (s, e) => ExportSeismic(); bar.Controls.Add(btnSeisExport);
 
             AddSeismicDriftGridColumns();
         }
@@ -627,17 +627,57 @@ namespace CheckModelPlugin
             public string Check { get; set; }
         }
                 
-        private void ExportExcel()
+        private void RunExport(Action<string> writer, string suggestedName)
         {
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "Excel Workbook (*.xlsx)|*.xlsx";
-                sfd.FileName = "Etabs_Model_Ultimate_Tool.xlsx";
+                sfd.FileName = suggestedName;
                 if (sfd.ShowDialog() != DialogResult.OK) return;
 
-                PDeltaExcelExporter.Export(sfd.FileName, _rows, _qFactor, _windRows, _windDriftRows, _seismicDriftRows);
+                writer(sfd.FileName);
                 MessageBox.Show("Đã xuất: " + sfd.FileName, "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
+        }
+
+        private void ExportPDelta()
+        {
+            if (_rows == null || _rows.Count == 0)
+            {
+                MessageBox.Show("Chưa có dữ liệu P-Delta để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            RunExport(file => PDeltaExcelExporter.Export(file, _rows, _qFactor), "P-Delta.xlsx");
+        }
+
+        private void ExportWind()
+        {
+            if (_windRows == null || _windRows.Count == 0)
+            {
+                MessageBox.Show("Chưa có dữ liệu chuyển vị đỉnh để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            RunExport(file => PDeltaExcelExporter.Export(file, null, _qFactor, _windRows), "ChuyenViDinh_Gio.xlsx");
+        }
+
+        private void ExportWindDrift()
+        {
+            if (_windDriftRows == null || _windDriftRows.Count == 0)
+            {
+                MessageBox.Show("Chưa có dữ liệu chuyển vị lệch tầng do gió để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            RunExport(file => PDeltaExcelExporter.Export(file, null, _qFactor, null, _windDriftRows), "ChuyenViLechTang_Gio.xlsx");
+        }
+
+        private void ExportSeismic()
+        {
+            if (_seismicDriftRows == null || _seismicDriftRows.Count == 0)
+            {
+                MessageBox.Show("Chưa có dữ liệu chuyển vị lệch tầng do động đất để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            RunExport(file => PDeltaExcelExporter.Export(file, null, _qFactor, null, null, _seismicDriftRows), "ChuyenViLechTang_DongDat.xlsx");
         }
     }
 }
