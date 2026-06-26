@@ -66,7 +66,16 @@ namespace Etabs_Ultimate_Tools
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Arial", 9F);
 
-            var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Arial", 9F) };
+            var tabs = new TabControl
+            {
+                Dock = DockStyle.Fill,
+                Font = new Font("Arial", 10.5F, FontStyle.Bold),
+                SizeMode = TabSizeMode.Fixed,
+                ItemSize = new Size(196, 38),
+                DrawMode = TabDrawMode.OwnerDrawFixed,
+                Padding = new Point(14, 4)
+            };
+            tabs.DrawItem += Tabs_DrawItem;
             Controls.Add(tabs);
 
             var tabPDelta = new TabPage("P-Delta");
@@ -74,17 +83,100 @@ namespace Etabs_Ultimate_Tools
             var tabWindDrift = new TabPage("CV lệch tầng do gió");
             var tabSeis = new TabPage("CV lệch tầng do động đất");
             var tabAxial = new TabPage("Check lực dọc");
+            var tabColExport = new TabPage("Xuất nội lực cột");
             tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabWind);
             tabs.TabPages.Add(tabWindDrift);
             tabs.TabPages.Add(tabSeis);
             tabs.TabPages.Add(tabAxial);
+            tabs.TabPages.Add(tabColExport);
 
             BuildPDeltaTab(tabPDelta);
             BuildWindTab(tabWind);
             BuildWindDriftTab(tabWindDrift);
             BuildSeismicDriftTab(tabSeis);
             BuildAxialTab(tabAxial);
+            BuildColumnExportTab(tabColExport);
+        }
+
+        // ---------- Vẽ tab nổi bật (owner-draw) ----------
+
+        private void Tabs_DrawItem(object sender, DrawItemEventArgs e)
+        {
+            var tc = (TabControl)sender;
+            Rectangle tabRect = tc.GetTabRect(e.Index);
+            bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+
+            Color back = selected ? Color.FromArgb(37, 99, 235) : Color.FromArgb(226, 232, 240);
+            Color fore = selected ? Color.White : Color.FromArgb(45, 55, 72);
+
+            using (var b = new SolidBrush(back))
+                e.Graphics.FillRectangle(b, tabRect);
+
+            TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, tc.Font, tabRect, fore,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+            using (var pen = new Pen(selected ? Color.FromArgb(30, 64, 175) : Color.FromArgb(203, 213, 225), selected ? 2 : 1))
+                e.Graphics.DrawRectangle(pen, tabRect.X + 1, tabRect.Y + 1, tabRect.Width - 2, tabRect.Height - 2);
+        }
+
+        // ---------- Tab xuất nội lực cột (CSI Column) ----------
+
+        private void BuildColumnExportTab(TabPage tab)
+        {
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(12)
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            tab.Controls.Add(root);
+
+            root.Controls.Add(MakeTitle("XUẤT NỘI LỰC CỘT / VÁCH (CSI Column)"), 0, 0);
+            root.Controls.Add(MakeSubtitle("(Xuất PU, MUXT, MUYT, MUXB, MUYB cho cột và vách Pier đã chọn)"), 0, 1);
+            root.Controls.Add(MakeCondition("Quy đổi dấu theo mẫu nhập CSI Column — đơn vị kN, m"), 0, 2);
+
+            var box = new GroupBox
+            {
+                Dock = DockStyle.Fill, Text = "Xuất dữ liệu", Padding = new Padding(10, 8, 16, 8)
+            };
+            root.Controls.Add(box, 0, 3);
+
+            var bar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false, Margin = new Padding(0)
+            };
+            box.Controls.Add(bar);
+
+            var btnColExport = new Button
+            {
+                Text = "Chọn combo & Xuất...", Width = 220, Height = 34,
+                Margin = new Padding(0, 6, 10, 0), Font = new Font("Arial", 9.5F, FontStyle.Bold)
+            };
+            btnColExport.Click += (s, e) => RunColumnExport();
+            bar.Controls.Add(btnColExport);
+
+            root.Controls.Add(MakeNote("Chọn trực tiếp các cột (frame đứng) hoặc vách (area gán Pier) trong ETABS, bấm “Chọn combo & Xuất...” rồi chọn các tổ hợp cần xuất và định dạng TXT/Excel. Cần Run Analysis trước. Kết quả quy đổi dấu (PU, MUXT, MUYT, MUXB, MUYB) theo đúng mẫu nhập CSI Column."), 0, 4);
+
+            var spacer = new Panel { Dock = DockStyle.Fill };
+            root.Controls.Add(spacer, 0, 5);
+        }
+
+        private void RunColumnExport()
+        {
+            try
+            {
+                ColumnForceExporter.Run(_sap);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            }
         }
 
         // ---------- Scaffold dùng chung cho mọi tab (bảo đảm căn hàng đồng nhất) ----------
