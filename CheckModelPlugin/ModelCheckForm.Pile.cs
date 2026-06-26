@@ -23,7 +23,7 @@ namespace Etabs_Ultimate_Tools
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(root);
 
-            root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC"), 0, 0);
+            root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊ TẢI CỦA CỌC"), 0, 0);
             root.Controls.Add(MakeSubtitle("(So sánh phản lực đầu cọc theo phương đứng với SCT chịu kéo/nén, đơn vị kN)"), 0, 1);
 
             var main = new TableLayoutPanel
@@ -191,6 +191,32 @@ namespace Etabs_Ultimate_Tools
                 lblPileInfo.Text = "Model chưa khai báo loại point spring nào. Hãy gán point spring cho cọc trước.";
         }
 
+        // Đồng bộ bảng SCT với các loại cọc thực sự phát hiện được trong model
+        // (giữ nguyên giá trị SCT đã nhập, chỉ thêm dòng còn thiếu).
+        private void SyncPileCapsGrid()
+        {
+            if (dgvPileCaps == null) return;
+
+            var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataGridViewRow row in dgvPileCaps.Rows)
+            {
+                if (row.IsNewRow) continue;
+                string nm = Convert.ToString(row.Cells[0].Value);
+                if (!string.IsNullOrWhiteSpace(nm)) existing.Add(nm.Trim());
+            }
+
+            List<string> keys;
+            try { keys = PileReactionChecker.GetPileTypeKeys(_sap); }
+            catch { return; }
+
+            foreach (var key in keys)
+                if (!string.IsNullOrWhiteSpace(key) && !existing.Contains(key))
+                {
+                    dgvPileCaps.Rows.Add(key, "", "");
+                    existing.Add(key);
+                }
+        }
+
         private Dictionary<string, PileSpringType> ReadPileCaps()
         {
             var dict = new Dictionary<string, PileSpringType>(StringComparer.OrdinalIgnoreCase);
@@ -242,6 +268,7 @@ namespace Etabs_Ultimate_Tools
             try
             {
                 _sap.SetPresentUnits(eUnits.kN_m_C);
+                SyncPileCapsGrid();
                 cases = BuildPileCases();
             }
             catch (Exception ex)
@@ -284,7 +311,7 @@ namespace Etabs_Ultimate_Tools
             btnPileExport.Enabled = preview.Count > 0;
 
             if (preview.Count == 0)
-                Warn("Không tìm thấy cọc (point spring) nào có phản lực. Hãy kiểm tra model đã gán point spring và đã Run Analysis chưa.", PileTitle);
+                Warn("Không đọc được phản lực cọc. Kiểm tra: (1) các điểm cọc đã gán point spring chưa, (2) model đã Run Analysis chưa, (3) tổ hợp tải đã chọn đúng chưa.", PileTitle);
         }
 
         private void ExportPileReactions()
