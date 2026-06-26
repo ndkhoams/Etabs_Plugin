@@ -94,28 +94,30 @@ namespace Etabs_Ultimate_Tools
             tabs.DrawItem += Tabs_DrawItem;
             Controls.Add(tabs);
 
-            var tabPDelta = new TabPage("P-Delta");
-            var tabWind = new TabPage("Chuyển vị đỉnh");
-            var tabWindDrift = new TabPage("CV lệch tầng do gió");
-            var tabSeis = new TabPage("CV lệch tầng do động đất");
-            var tabAxial = new TabPage("Check lực dọc");
-            var tabColExport = new TabPage("Xuất nội lực cột");
             var tabModifier = new TabPage("Property Modifiers");
-            tabs.TabPages.Add(tabPDelta);
+            var tabWind = new TabPage("Displacements");
+            var tabWindDrift = new TabPage("Wind Drifts");
+            var tabSeis = new TabPage("Seismic Drifts");
+            var tabPDelta = new TabPage("P-Delta");
+            var tabAxial = new TabPage("Axial Force");
+            var tabColExport = new TabPage("Column Force Exporter");
+
+            tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
             tabs.TabPages.Add(tabWindDrift);
             tabs.TabPages.Add(tabSeis);
+            tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
-            tabs.TabPages.Add(tabModifier);
 
-            BuildPDeltaTab(tabPDelta);
+            BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
             BuildWindDriftTab(tabWindDrift);
             BuildSeismicDriftTab(tabSeis);
+            BuildPDeltaTab(tabPDelta);
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
-            BuildModifierTab(tabModifier);
+            
         }
 
         // ---------- Vẽ tab nổi bật (owner-draw) ----------
@@ -154,7 +156,7 @@ namespace Etabs_Ultimate_Tools
             tab.Controls.Add(root);
 
             root.Controls.Add(MakeTitle("XUẤT NỘI LỰC CỘT / VÁCH"), 0, 0);
-            root.Controls.Add(MakeSubtitle("(Xuất nội lực theo định dạng CSI Colum và Prokon)"), 0, 1);
+            root.Controls.Add(MakeSubtitle("(Xuất nội lực theo định dạng của CSI Column và Prokon, đơn vị kN-m)"), 0, 1);
 
             var main = new TableLayoutPanel
             {
@@ -178,7 +180,7 @@ namespace Etabs_Ultimate_Tools
 
             left.Controls.Add(new Label
             {
-                Text = "Chọn tổ hợp tải (Load Combination):",
+                Text = "Chọn Load Combination:",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 0);
 
@@ -246,7 +248,7 @@ namespace Etabs_Ultimate_Tools
 
             right.Controls.Add(new Label
             {
-                Text = "Xem trước nội lực (trước khi xuất):",
+                Text = "Preview:",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 0);
 
@@ -255,7 +257,7 @@ namespace Etabs_Ultimate_Tools
 
             AddColumnExportGridColumns();
 
-            lblColInfo.Text = "Chọn cột/vách trong ETABS, chọn tổ hợp rồi bấm Xem trước.";
+            lblColInfo.Text = "Chọn cột/vách trong ETABS trước khi mở tool, chọn tổ hợp rồi bấm Xem trước.";
         }
 
         private void ClbColCombos_MouseDown(object sender, MouseEventArgs e)
@@ -386,7 +388,7 @@ namespace Etabs_Ultimate_Tools
 
             root.Controls.Add(MakeTitle("PROPERTY MODIFIERS"), 0, 0);
             root.Controls.Add(MakeSubtitle("(Gán hệ số tiết diện cho cấu kiện đang chọn trong ETABS)"), 0, 1);
-            root.Controls.Add(MakeCondition("Chọn cấu kiện trong ETABS trước — công cụ tự nhận diện Dầm/Cột (frame) và Sàn/Vách (area)"), 0, 2);
+           
 
             var groups = new TableLayoutPanel
             {
@@ -395,7 +397,7 @@ namespace Etabs_Ultimate_Tools
             for (int i = 0; i < 4; i++) groups.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25f));
             root.Controls.Add(groups, 0, 3);
 
-            var gBeam = MakeModGroup("Dầm (Beam) — Frame");
+            var gBeam = MakeModGroup("Beam");
             txtModBeamArea = AddModRow(gBeam, "Area", "1.00");
             txtModBeamAs2 = AddModRow(gBeam, "As2", "1.00");
             txtModBeamAs3 = AddModRow(gBeam, "As3", "1.00");
@@ -406,7 +408,7 @@ namespace Etabs_Ultimate_Tools
             txtModBeamWeight = AddModRow(gBeam, "Weight", "1.00");
             groups.Controls.Add(gBeam, 0, 0);
 
-            var gCol = MakeModGroup("Cột (Column) — Frame");
+            var gCol = MakeModGroup("Column");
             txtModColArea = AddModRow(gCol, "Area", "1.00");
             txtModColAs2 = AddModRow(gCol, "As2", "1.00");
             txtModColAs3 = AddModRow(gCol, "As3", "1.00");
@@ -417,7 +419,7 @@ namespace Etabs_Ultimate_Tools
             txtModColWeight = AddModRow(gCol, "Weight", "1.00");
             groups.Controls.Add(gCol, 1, 0);
 
-            var gSlab = MakeModGroup("Sàn (Slab) — Area");
+            var gSlab = MakeModGroup("Slab");
             txtModSlabF11 = AddModRow(gSlab, "F11", "1.00");
             txtModSlabF22 = AddModRow(gSlab, "F22", "1.00");
             txtModSlabF12 = AddModRow(gSlab, "F12", "1.00");
@@ -430,9 +432,9 @@ namespace Etabs_Ultimate_Tools
             txtModSlabWeight = AddModRow(gSlab, "Weight", "1.00");
             groups.Controls.Add(gSlab, 2, 0);
 
-            var gWall = MakeModGroup("Vách (Wall) — Area");
+            var gWall = MakeModGroup("Wall");
             txtModWallF11 = AddModRow(gWall, "F11", "0.50");
-            txtModWallF22 = AddModRow(gWall, "F22", "1.00");
+            txtModWallF22 = AddModRow(gWall, "F22", "0.50");
             txtModWallF12 = AddModRow(gWall, "F12", "0.50");
             txtModWallM11 = AddModRow(gWall, "M11", "0.50");
             txtModWallM22 = AddModRow(gWall, "M22", "0.50");
@@ -454,7 +456,7 @@ namespace Etabs_Ultimate_Tools
             btnModApply.Click += (s, e) => ApplyModifiers();
             bar.Controls.Add(btnModApply);
 
-            btnModRollback = new Button { Text = "Rollback (= 1.0)", Width = 140, Height = 40, Margin = new Padding(0, 0, 10, 0) };
+            btnModRollback = new Button { Text = "Reset (= 1.0)", Width = 140, Height = 40, Margin = new Padding(0, 0, 10, 0) };
             btnModRollback.Click += (s, e) => RollbackModifiers();
             bar.Controls.Add(btnModRollback);
 
@@ -463,7 +465,7 @@ namespace Etabs_Ultimate_Tools
                 AutoSize = false, Width = 620, Height = 40, ForeColor = Color.DimGray,
                 TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(8, 0, 0, 0)
             };
-            lblModInfo.Text = "Chọn cấu kiện trong ETABS rồi bấm Apply Modifiers để gán hệ số.";
+            lblModInfo.Text = "Chọn cấu kiện trong ETABS trước khi mở tool, bấm Apply Modifiers để gán hệ số.";
             bar.Controls.Add(lblModInfo);
         }
 
@@ -573,7 +575,7 @@ namespace Etabs_Ultimate_Tools
 
             if (numberItems == 0)
             {
-                MessageBox.Show("Chưa chọn cấu kiện nào để rollback.", "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Chưa chọn cấu kiện nào để reset.", "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -595,10 +597,10 @@ namespace Etabs_Ultimate_Tools
 
             _sap.View.RefreshView(0, false);
 
-            lblModInfo.Text = "Đã rollback về 1.0 — Frame: " + cFrame + "  |  Area: " + cArea;
+            lblModInfo.Text = "Đã reset về 1.0 — Frame: " + cFrame + "  |  Area: " + cArea;
 
             MessageBox.Show(
-                "Đã rollback về 1.0:\n- Frame: " + cFrame + "\n- Area: " + cArea,
+                "Đã reset về 1.0:\n- Frame: " + cFrame + "\n- Area: " + cArea,
                 "Property Modifiers", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
 
@@ -685,7 +687,7 @@ namespace Etabs_Ultimate_Tools
                 "KIỂM TRA ĐIỀU KIỆN P-DELTA",
                 "(Theo TCVN 9386-1:2025)",
                 "θ = dr / h × Ptot / Vtot =  q × drift × Ptot / Vtot (mục 4.4.2.2 eq. 4.28)",
-                "drift = Δ/h được xác định từ hệ quả của tác động động đất thiết kế (mục 4.3.4); Vtot là tổng lực cắt tầng do động đất gây ra; 2 thành phần này đều lấy từ tổ hợp các thành phần phương ngang của động đất SRSS(EX^2+EY^2) (mục 4.3.3.5.1.2b). Ptot tự động lấy từ Mass Summary by Story.",
+                "drift = Δ/h được xác định từ hệ quả của tác động động đất thiết kế (mục 4.3.4); Vtot là tổng lực cắt tầng do động đất gây ra; 2 thành phần này đều lấy từ tổ hợp các thành phần phương ngang của động đất SRSS(EX;EY) (mục 4.3.3.5.1.2b). Ptot tự động lấy từ Mass Summary by Story.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp:", 68));
@@ -693,7 +695,7 @@ namespace Etabs_Ultimate_Tools
             bar.Controls.Add(MakeFieldLabel("q:", 22));
             txtQ = MakeTextBox("1.5", 60); bar.Controls.Add(txtQ);
 
-            btnRun = MakeButton("Tính kiểm tra"); btnRun.Click += (s, e) => RunCheck(); bar.Controls.Add(btnRun);
+            btnRun = MakeButton("Tính toán"); btnRun.Click += (s, e) => RunCheck(); bar.Controls.Add(btnRun);
             btnExport = MakeButton("Xuất Excel"); btnExport.Enabled = false; btnExport.Click += (s, e) => ExportPDelta(); bar.Controls.Add(btnExport);
             btnClose = MakeButton("Đóng"); btnClose.Width = 84; btnClose.Click += (s, e) => Close(); bar.Controls.Add(btnClose);
 
@@ -705,14 +707,14 @@ namespace Etabs_Ultimate_Tools
             dgvWind = BuildScaffold(tab,
                 "KIỂM TRA CHUYỂN VỊ ĐỈNH CÔNG TRÌNH",
                 "(Theo TCVN 2737:2023)",
-                "Điều kiện kiểm tra: f ≤ fu  |  Chuyển vị ngang tổng thể giới hạn H/500",
+                "Điều kiện kiểm tra: f ≤ fu",
                 "Giới hạn chuyển vị ngang tổng thể là H/500. H được tính là khoảng cách từ mặt móng đến mái.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp gió:", 78));
             cboWindCombo = MakeCombo(240); bar.Controls.Add(cboWindCombo);
 
-            btnWindRun = MakeButton("Tính kiểm tra"); btnWindRun.Click += (s, e) => RunWindCheck(); bar.Controls.Add(btnWindRun);
+            btnWindRun = MakeButton("Tính toán"); btnWindRun.Click += (s, e) => RunWindCheck(); bar.Controls.Add(btnWindRun);
             btnWindExport = MakeButton("Xuất Excel"); btnWindExport.Enabled = false; btnWindExport.Click += (s, e) => ExportWind(); bar.Controls.Add(btnWindExport);
 
             AddWindGridColumns();
@@ -724,13 +726,13 @@ namespace Etabs_Ultimate_Tools
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG GIÓ",
                 "(Theo TCVN 2737:2023)",
                 "Điều kiện: drift = Δ/h ≤ 1/500 cho từng tầng",
-                "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió. Giới hạn h/500 theo TCVN 2737:2023.",
+                "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp gió:", 78));
             cboWindDriftCombo = MakeCombo(240); bar.Controls.Add(cboWindDriftCombo);
 
-            btnWindDriftRun = MakeButton("Tính kiểm tra"); btnWindDriftRun.Click += (s, e) => RunWindDriftCheck(); bar.Controls.Add(btnWindDriftRun);
+            btnWindDriftRun = MakeButton("Tính toán"); btnWindDriftRun.Click += (s, e) => RunWindDriftCheck(); bar.Controls.Add(btnWindDriftRun);
             btnWindDriftExport = MakeButton("Xuất Excel"); btnWindDriftExport.Enabled = false; btnWindDriftExport.Click += (s, e) => ExportWindDrift(); bar.Controls.Add(btnWindDriftExport);
 
             AddWindDriftGridColumns();
@@ -742,7 +744,8 @@ namespace Etabs_Ultimate_Tools
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
                 "(Theo TCVN 9386-1:2025)",
                 "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  drift ≤ limit/(ν·q) (mục 4.4.3.2)",
-                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2).\nCHÚ THÍCH: Các giá trị khác nhau của ν phụ thuộc vào các nguy cơ động đất và vào cấp hậu quả của công trình, khuyến nghị như sau: ν = 0,4 cho các cấp hậu quả C3-a và C3-b, và ν = 0,5 cho các cấp hậu quả C1 và C2.",
+                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SRSS(EX;EY)." +
+                "\nCHÚ THÍCH: Các giá trị khác nhau của ν phụ thuộc vào các nguy cơ động đất và vào cấp hậu quả của công trình, khuyến nghị như sau: ν = 0,4 cho các cấp hậu quả C3-a và C3-b, và ν = 0,5 cho các cấp hậu quả C1 và C2.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp động đất:", 110));
@@ -757,7 +760,7 @@ namespace Etabs_Ultimate_Tools
             cboSeisLimit.SelectedIndex = 0;
             bar.Controls.Add(cboSeisLimit);
 
-            btnSeisRun = MakeButton("Tính kiểm tra"); btnSeisRun.Click += (s, e) => RunSeismicDriftCheck(); bar.Controls.Add(btnSeisRun);
+            btnSeisRun = MakeButton("Tính toán"); btnSeisRun.Click += (s, e) => RunSeismicDriftCheck(); bar.Controls.Add(btnSeisRun);
             btnSeisExport = MakeButton("Xuất Excel"); btnSeisExport.Enabled = false; btnSeisExport.Click += (s, e) => ExportSeismic(); bar.Controls.Add(btnSeisExport);
 
             AddSeismicDriftGridColumns();
@@ -767,12 +770,12 @@ namespace Etabs_Ultimate_Tools
         {
             dgvAxial = BuildScaffold(tab,
                 "KIỂM TRA HỆ SỐ LỰC DỌC QUY ĐỔI",
-                "(Cột & vách Pier — theo cấp bền bê tông)",
-                "ʋd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc, fck = 0.8·fck,cube",
-                "Chọn trực tiếp cột hoặc area vách (Pier) trong ETABS rồi bấm Kiểm tra. Ac·fcd và ʋd được tính tự động; vách (tỷ lệ cạnh > 4) dùng giới hạn 0.40, còn lại 0.65. Cần Run Analysis trước khi kiểm tra.",
+                "(Theo TCVN 9386-1:2025)",
+                "ʋd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc",
+                "Chọn cột hoặc vách (Pier) trong ETABS trước khi mở tool.",
                 out var bar);
 
-            bar.Controls.Add(MakeFieldLabel("Cấp bê tông:", 88));
+            bar.Controls.Add(MakeFieldLabel("Bê tông:", 88));
             cboAxialConcrete = MakeCombo(110);
             cboAxialConcrete.Items.AddRange(new object[] { "B15", "B20", "B22.5", "B25", "B30", "B35", "B40", "B45", "B50", "B55", "B60", "B70", "B80" });
             cboAxialConcrete.SelectedItem = "B30";
@@ -782,7 +785,7 @@ namespace Etabs_Ultimate_Tools
             bar.Controls.Add(MakeFieldLabel("Combo:", 56));
             cboAxialCombo = MakeCombo(220); bar.Controls.Add(cboAxialCombo);
 
-            btnAxialRun = MakeButton("Kiểm tra"); btnAxialRun.Click += (s, e) => RunAxialCheck(); bar.Controls.Add(btnAxialRun);
+            btnAxialRun = MakeButton("Tính toán"); btnAxialRun.Click += (s, e) => RunAxialCheck(); bar.Controls.Add(btnAxialRun);
             btnAxialExport = MakeButton("Xuất Excel"); btnAxialExport.Enabled = false; btnAxialExport.Click += (s, e) => ExportAxial(); bar.Controls.Add(btnAxialExport);
 
             lblAxialInfo = new Label
@@ -818,7 +821,7 @@ namespace Etabs_Ultimate_Tools
 
         private static Label MakeNote(string text) => new Label
         {
-            Text = text, Dock = DockStyle.Fill, AutoSize = false, Font = new Font("Arial", 8.5F),
+            Text = text, Dock = DockStyle.Fill, AutoSize = false, Font = new Font("Arial", 10F),
             ForeColor = Color.DimGray, TextAlign = ContentAlignment.TopLeft,
             Padding = new Padding(2, 2, 2, 0)
         };
@@ -935,7 +938,7 @@ namespace Etabs_Ultimate_Tools
             AddColumn(dgvAxial, "STT", "STT", 45);
             AddColumn(dgvAxial, "Story", "Tầng", 80);
             AddColumn(dgvAxial, "ElementType", "Loại", 80);
-            AddColumn(dgvAxial, "Element", "LABEL", 110);
+            AddColumn(dgvAxial, "Element", "Label", 110);
             AddColumn(dgvAxial, "Combo", "Combo", 150);
             AddColumn(dgvAxial, "Ned", "Ned (kN)", 90, "0");
             AddColumn(dgvAxial, "T3", "t3 (m)", 70, "0.000");

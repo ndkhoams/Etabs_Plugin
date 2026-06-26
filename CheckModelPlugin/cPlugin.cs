@@ -2,7 +2,7 @@ using ETABSv1;
 using System;
 using System.Windows.Forms;
 
-namespace Etabs_Ultimate_Tools //CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     public class cPlugin
     {
@@ -25,7 +25,7 @@ namespace Etabs_Ultimate_Tools //CheckModelPlugin
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Etabs Modal Ultimate Tool", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "Etabs Ultimate Tool", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _callback.Finish(1);
             }
         }
