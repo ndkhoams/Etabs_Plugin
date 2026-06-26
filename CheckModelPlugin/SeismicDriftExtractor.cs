@@ -7,7 +7,7 @@ namespace CheckModelPlugin
 {
     /// <summary>
     /// Kiểm tra chuyển vị lệch tầng do tải trọng động đất theo TCVN 9386-1:2025.
-    /// Điều kiện hạn chế hư hỏng: dr · ν ≤ limit · h  ⇔  q × drift × ν ≤ limit
+    /// Điều kiện hạn chế hư hỏng: dr · ν ≤ limit · h  ⇔  drift ≤ limit/(ν·q)
     /// với drift = de/h lấy trực tiếp từ ETABS Story Drifts (tổ hợp động đất thuần 1.0EX + 0.3EY, đàn hồi),
     /// lấy max trị tuyệt đối theo từng tầng & từng phương.
     /// </summary>
@@ -23,6 +23,9 @@ namespace CheckModelPlugin
             if (q <= 0) q = 1.0;
             if (nu <= 0) nu = 1.0;
 
+            // Ngưỡng drift cho phép: drift ≤ limit/(ν·q)
+            double allow = (q * nu) > 0 ? limitRatio / (q * nu) : 0.0;
+
             foreach (var combo in new[] { (Name: comboX, Dir: "X"), (Name: comboY, Dir: "Y") })
             {
                 if (string.IsNullOrWhiteSpace(combo.Name)) continue;
@@ -35,7 +38,6 @@ namespace CheckModelPlugin
                     if (st.Height <= 0) continue;
 
                     double drift = drifts.TryGetValue(st.Name, out var d) ? d : 0.0;
-                    double reduced = q * drift * nu;
 
                     rows.Add(new SeismicDriftRow
                     {
@@ -48,7 +50,7 @@ namespace CheckModelPlugin
                         Nu = nu,
                         Drift = drift,
                         LimitRatio = limitRatio,
-                        Check = limitRatio > 0 && reduced > limitRatio ? "NG" : "OK"
+                        Check = allow > 0 && drift > allow ? "NG" : "OK"
                     });
                 }
             }
