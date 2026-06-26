@@ -72,7 +72,7 @@ namespace CheckModelPlugin
             BuildSeismicDriftTab(tabSeis);
         }
 
-        // ---------- Scaffold dùng chung cho mọi tab (đảm bảo căn hàng đồng nhất) ----------
+        // ---------- Scaffold dùng chung cho mọi tab (bảo đảm căn hàng đồng nhất) ----------
 
         private DataGridView BuildScaffold(TabPage tab, string title, string standard,
             string condition, string note, out FlowLayoutPanel bar)
@@ -295,10 +295,10 @@ namespace CheckModelPlugin
             AddColumn(dgv, "Direction", "Phương", 60);
             AddColumn(dgv, "Story", "Tầng", 80);
             AddColumn(dgv, "ElasticDrift", "drift", 120, "N5");
-            AddColumn(dgv, "DesignDrift", "q × drift", 120, "N5");
+            AddColumn(dgv, "DesignDrift", "q × drift", 125, "N5");
             AddColumn(dgv, "Ptot", "Ptot (kN)", 105, "0");
             AddColumn(dgv, "Vtot", "Vtot (kN)", 105, "0");
-            AddColumn(dgv, "Theta", "θ", 90, "N3");
+            AddColumn(dgv, "Theta", "θ", 110, "N3");
             AddColumn(dgv, "Amplification", "1/(1-θ)", 90, "N3");
             AddColumn(dgv, "Conclusion", "Kết luận", 300, null, true);
         }
@@ -308,4 +308,358 @@ namespace CheckModelPlugin
             dgvWind.Columns.Clear();
             AddColumn(dgvWind, "Story", "Tầng", 90);
             AddColumn(dgvWind, "StoryElevation", "Cao độ tầng (m)", 120, "+0.000;-0.000;0.000");
-            AddColumn(dgvWind, "Height
+            AddColumn(dgvWind, "Height", "H (m)", 110, "N3");
+            AddColumn(dgvWind, "DeltaX", "ΔX (mm)", 120, "N1");
+            AddColumn(dgvWind, "DeltaY", "ΔY (mm)", 120, "N1");
+            AddColumn(dgvWind, "LimitMm", "H/500 (mm)", 120, "N0");
+            AddColumn(dgvWind, "Check", "Kiểm tra", 250, null, true);
+        }
+
+        private void AddWindDriftGridColumns()
+        {
+            dgvWindDrift.Columns.Clear();
+            AddColumn(dgvWindDrift, "Story", "Tầng", 90);
+            AddColumn(dgvWindDrift, "Elevation", "Cao độ (m)", 100, "+0.000;-0.000;0.000");
+            AddColumn(dgvWindDrift, "Height", "h tầng (m)", 90, "N3");
+            AddColumn(dgvWindDrift, "DeltaXmm", "Δx (mm)", 90, "N2");
+            AddColumn(dgvWindDrift, "DeltaYmm", "Δy (mm)", 90, "N2");
+            AddColumn(dgvWindDrift, "DriftX", "drift X", 105, "0.000000");
+            AddColumn(dgvWindDrift, "DriftY", "drift Y", 105, "0.000000");
+            AddColumn(dgvWindDrift, "Limit", "Giới hạn", 105, "0.000000");
+            AddColumn(dgvWindDrift, "Check", "Kiểm tra", 200, null, true);
+        }
+
+        private void AddSeismicDriftGridColumns()
+        {
+            dgvSeis.Columns.Clear();
+            AddColumn(dgvSeis, "Story", "Tầng", 90);
+            AddColumn(dgvSeis, "Elevation", "Cao độ (m)", 95, "+0.000;-0.000;0.000");
+            AddColumn(dgvSeis, "Height", "h tầng (m)", 85, "N3");
+            AddColumn(dgvSeis, "DriftX", "drift X (de/h)", 110, "0.000000");
+            AddColumn(dgvSeis, "DriftY", "drift Y (de/h)", 110, "0.000000");
+            AddColumn(dgvSeis, "ReducedMax", "q × drift × ν", 110, "0.000000");
+            AddColumn(dgvSeis, "Limit", "Giới hạn", 95, "0.000000");
+            AddColumn(dgvSeis, "Check", "Kiểm tra", 170, null, true);
+        }
+
+        // ---------- Tải danh sách tổ hợp ----------
+
+        private void LoadCombos()
+        {
+            var combos = PDeltaExtractor.GetLoadCombinations(_sap);
+            foreach (var cbo in new[] { cboComboX, cboComboY, cboWindCombo, cboWindDriftCombo, cboSeisComboX, cboSeisComboY })
+            {
+                cbo.Items.Clear();
+                cbo.Items.AddRange(combos.Cast<object>().ToArray());
+            }
+
+            SelectByKeyword(cboComboX, "Vtot", "EX", "X");
+            SelectByKeyword(cboComboY, "Vtot", "EY", "Y");
+            SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
+            SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
+            SelectByKeyword(cboSeisComboX, "EX", "EQX", "DDX", "QX", "SX", "DONGDATX", "X");
+            SelectByKeyword(cboSeisComboY, "EY", "EQY", "DDY", "QY", "SY", "DONGDATY", "Y");
+        }
+
+        private static void SelectByKeyword(ComboBox cbo, params string[] keys)
+        {
+            foreach (var key in keys)
+                for (int i = 0; i < cbo.Items.Count; i++)
+                    if (string.Equals(cbo.Items[i].ToString(), key, StringComparison.OrdinalIgnoreCase)) { cbo.SelectedIndex = i; return; }
+
+            foreach (var key in keys)
+                for (int i = 0; i < cbo.Items.Count; i++)
+                    if (cbo.Items[i].ToString().IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) { cbo.SelectedIndex = i; return; }
+
+            if (cbo.Items.Count > 0 && cbo.SelectedIndex < 0) cbo.SelectedIndex = 0;
+        }
+
+        // ---------- Tính toán ----------
+
+        private void RunCheck()
+        {
+            if (!double.TryParse(txtQ.Text, out var q)) q = 1.0;
+            _qFactor = q;
+
+            string comboX = cboComboX.Text.Trim();
+            string comboY = cboComboY.Text.Trim();
+            if (string.IsNullOrWhiteSpace(comboX) || string.IsNullOrWhiteSpace(comboY))
+            {
+                MessageBox.Show("Chưa chọn đủ Combo X/Y.", "Check Model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            _sap.SetPresentUnits(eUnits.kN_m_C);
+            _sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
+
+            _rows = new List<PDeltaCheckRow>();
+            _rows.AddRange(PDeltaExtractor.Calculate(_sap, comboX, comboX, "X", q));
+            _rows.AddRange(PDeltaExtractor.Calculate(_sap, comboY, comboY, "Y", q));
+            _rows = _rows.OrderBy(r => r.Direction).ThenByDescending(r => r.Elevation).ToList();
+
+            dgv.DataSource = null;
+            dgv.DataSource = _rows;
+            UpdateTitleSummary();
+
+            if (_rows.Count > 0 && _rows.All(r => Math.Abs(r.Ptot) < 1e-9))
+                MessageBox.Show("Ptot vẫn bằng 0. Hãy kiểm tra Mass Summary by Story và model đã Run Analysis chưa.", "Check Model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            btnExport.Enabled = _rows.Count > 0;
+        }
+
+        private void RunWindCheck()
+        {
+            const double limit = 500.0;
+            string windCombo = cboWindCombo.Text.Trim();
+
+            if (string.IsNullOrWhiteSpace(windCombo))
+            {
+                MessageBox.Show("Chưa chọn tổ hợp gió.", "Chuyển vị đỉnh", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            _sap.SetPresentUnits(eUnits.kN_m_C);
+            _windRows = TopDisplacementExtractor.Calculate(_sap, windCombo, windCombo, limit);
+
+            var displayRows = BuildWindDisplayRows(_windRows);
+
+            dgvWind.DataSource = null;
+            dgvWind.DataSource = displayRows;
+            UpdateTitleSummary();
+
+            if (_windRows.Count > 0 && _windRows.All(r => Math.Abs(r.TopDisplacement) < 1e-12))
+                MessageBox.Show("Chuyển vị các tầng đang bằng 0. Hãy kiểm tra combo gió và bảng Diaphragm Center of Mass Displacements đã có dữ liệu chưa.", "Chuyển vị đỉnh", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            btnWindExport.Enabled = _windRows.Count > 0;
+        }
+
+        private void RunWindDriftCheck()
+        {
+            string combo = cboWindDriftCombo.Text.Trim();
+            if (string.IsNullOrWhiteSpace(combo))
+            {
+                MessageBox.Show("Chưa chọn tổ hợp gió.", "Chuyển vị lệch tầng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (!double.TryParse(txtWindDriftLimit.Text, out var limitDen) || limitDen <= 0) limitDen = 500.0;
+
+            _sap.SetPresentUnits(eUnits.kN_m_C);
+            _windDriftRows = WindDriftExtractor.Calculate(_sap, combo, combo, limitDen);
+
+            var displayRows = BuildWindDriftDisplayRows(_windDriftRows, limitDen);
+
+            dgvWindDrift.DataSource = null;
+            dgvWindDrift.DataSource = displayRows;
+
+            if (_windDriftRows.Count > 0 && _windDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
+                MessageBox.Show("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp gió và model đã Run Analysis chưa.", "Chuyển vị lệch tầng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            btnWindDriftExport.Enabled = _windDriftRows.Count > 0;
+        }
+
+        private void RunSeismicDriftCheck()
+        {
+            string comboX = cboSeisComboX.Text.Trim();
+            string comboY = cboSeisComboY.Text.Trim();
+            if (string.IsNullOrWhiteSpace(comboX) && string.IsNullOrWhiteSpace(comboY))
+            {
+                MessageBox.Show("Chưa chọn tổ hợp động đất.", "Chuyển vị lệch tầng (động đất)", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            if (!double.TryParse(txtSeisQ.Text, out var q) || q <= 0) q = 1.0;
+            if (!double.TryParse(txtSeisNu.Text, out var nu) || nu <= 0) nu = 1.0;
+            double limitRatio = GetSeismicLimit();
+
+            _sap.SetPresentUnits(eUnits.kN_m_C);
+            _seismicDriftRows = SeismicDriftExtractor.Calculate(_sap, comboX, comboY, q, nu, limitRatio);
+
+            var displayRows = BuildSeismicDisplayRows(_seismicDriftRows, q, nu, limitRatio);
+
+            dgvSeis.DataSource = null;
+            dgvSeis.DataSource = displayRows;
+
+            if (_seismicDriftRows.Count > 0 && _seismicDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
+                MessageBox.Show("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp động đất và model đã Run Analysis chưa.", "Chuyển vị lệch tầng (động đất)", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            btnSeisExport.Enabled = _seismicDriftRows.Count > 0;
+        }
+
+        private double GetSeismicLimit()
+        {
+            switch (cboSeisLimit.SelectedIndex)
+            {
+                case 1: return 0.0075;
+                case 2: return 0.010;
+                default: return 0.005;
+            }
+        }
+
+        private List<WindGridRow> BuildWindDisplayRows(List<TopDisplacementRow> rows)
+        {
+            var result = new List<WindGridRow>();
+            var stories = rows
+                .Where(r => !EtabsHelper.IsBaseLevel(r.TopStory))
+                .GroupBy(r => r.TopStory, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Max(x => x.TopElevation));
+
+            foreach (var g in stories)
+            {
+                var x = g.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.TopDisplacement)).FirstOrDefault();
+                var y = g.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.TopDisplacement)).FirstOrDefault();
+                var refRow = x ?? y;
+                if (refRow == null) continue;
+
+                double h = refRow.TopElevation;
+                double storyElevation = refRow.StoryElevation;
+                double dx = x != null ? x.TopDisplacementMm : 0.0;
+                double dy = y != null ? y.TopDisplacementMm : 0.0;
+                double limitMm = h * 1000.0 / 500.0;
+
+                result.Add(new WindGridRow
+                {
+                    Story = refRow.TopStory,
+                    StoryElevation = storyElevation,
+                    Height = h,
+                    DeltaX = dx,
+                    DeltaY = dy,
+                    LimitMm = limitMm,
+                    Check = Math.Max(dx, dy) <= limitMm ? "OK" : "NG"
+                });
+            }
+
+            return result;
+        }
+
+        private List<WindDriftGridRow> BuildWindDriftDisplayRows(List<WindDriftRow> rows, double limitDen)
+        {
+            var result = new List<WindDriftGridRow>();
+            double limit = limitDen > 0 ? 1.0 / limitDen : 0.0;
+
+            var stories = rows
+                .Where(r => !EtabsHelper.IsBaseLevel(r.Story))
+                .GroupBy(r => r.Story, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Max(x => x.Elevation));
+
+            foreach (var g in stories)
+            {
+                var x = g.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.Drift)).FirstOrDefault();
+                var y = g.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.Drift)).FirstOrDefault();
+                var refRow = x ?? y;
+                if (refRow == null) continue;
+
+                double driftX = x != null ? x.Drift : 0.0;
+                double driftY = y != null ? y.Drift : 0.0;
+
+                result.Add(new WindDriftGridRow
+                {
+                    Story = refRow.Story,
+                    Elevation = refRow.Elevation,
+                    Height = refRow.Height,
+                    DriftX = driftX,
+                    DriftY = driftY,
+                    DeltaXmm = driftX * refRow.Height * 1000.0,
+                    DeltaYmm = driftY * refRow.Height * 1000.0,
+                    Limit = limit,
+                    Check = Math.Max(driftX, driftY) <= limit ? "OK" : "NG"
+                });
+            }
+            return result;
+        }
+
+        private List<SeisGridRow> BuildSeismicDisplayRows(List<SeismicDriftRow> rows, double q, double nu, double limit)
+        {
+            var result = new List<SeisGridRow>();
+            var stories = rows
+                .Where(r => !EtabsHelper.IsBaseLevel(r.Story))
+                .GroupBy(r => r.Story, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Max(x => x.Elevation));
+
+            foreach (var g in stories)
+            {
+                var x = g.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.Drift)).FirstOrDefault();
+                var y = g.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.Drift)).FirstOrDefault();
+                var refRow = x ?? y;
+                if (refRow == null) continue;
+
+                double driftX = x != null ? x.Drift : 0.0;
+                double driftY = y != null ? y.Drift : 0.0;
+                double reducedMax = q * Math.Max(driftX, driftY) * nu;
+
+                result.Add(new SeisGridRow
+                {
+                    Story = refRow.Story,
+                    Elevation = refRow.Elevation,
+                    Height = refRow.Height,
+                    DriftX = driftX,
+                    DriftY = driftY,
+                    ReducedMax = reducedMax,
+                    Limit = limit,
+                    Check = limit > 0 && reducedMax <= limit ? "OK" : "NG"
+                });
+            }
+            return result;
+        }
+
+        private class WindGridRow
+        {
+            public string Story { get; set; }
+            public double StoryElevation { get; set; }
+            public double Height { get; set; }
+            public double DeltaX { get; set; }
+            public double DeltaY { get; set; }
+            public double LimitMm { get; set; }
+            public string Check { get; set; }
+        }
+
+        private class WindDriftGridRow
+        {
+            public string Story { get; set; }
+            public double Elevation { get; set; }
+            public double Height { get; set; }
+            public double DeltaXmm { get; set; }
+            public double DeltaYmm { get; set; }
+            public double DriftX { get; set; }
+            public double DriftY { get; set; }
+            public double Limit { get; set; }
+            public string Check { get; set; }
+        }
+
+        private class SeisGridRow
+        {
+            public string Story { get; set; }
+            public double Elevation { get; set; }
+            public double Height { get; set; }
+            public double DriftX { get; set; }
+            public double DriftY { get; set; }
+            public double ReducedMax { get; set; }
+            public double Limit { get; set; }
+            public string Check { get; set; }
+        }
+
+        private void UpdateTitleSummary()
+        {
+            double qx = _rows.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase)).Select(r => r.Theta).DefaultIfEmpty(0).Max();
+            double qy = _rows.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase)).Select(r => r.Theta).DefaultIfEmpty(0).Max();
+            Text = string.Format("Check Model | θmax X = {0:0.0000}; θmax Y = {1:0.0000}", qx, qy);
+        }
+
+        private void ExportExcel()
+        {
+            using (var sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "Excel Workbook (*.xlsx)|*.xlsx";
+                sfd.FileName = "Kiem_tra_chuyen_vi_TCVN.xlsx";
+                if (sfd.ShowDialog() != DialogResult.OK) return;
+
+                PDeltaExcelExporter.Export(sfd.FileName, _rows, _qFactor, _windRows, _windDriftRows, _seismicDriftRows);
+                MessageBox.Show("Đã xuất: " + sfd.FileName, "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+    }
+}
