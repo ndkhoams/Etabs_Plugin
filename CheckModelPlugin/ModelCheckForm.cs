@@ -90,9 +90,9 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill,
                 Font = new Font("Arial", 9F),
                 SizeMode = TabSizeMode.Fixed,
-                ItemSize = new Size(196, 38),
+                ItemSize = new Size(165, 38),
                 DrawMode = TabDrawMode.OwnerDrawFixed,
-                Padding = new Point(14, 4)
+                Padding = new Point(10, 4)
             };
             tabs.DrawItem += Tabs_DrawItem;
             Controls.Add(tabs);
@@ -158,7 +158,7 @@ namespace Etabs_Ultimate_Tools
             using (var b = new SolidBrush(back))
                 e.Graphics.FillRectangle(b, tabRect);
 
-            using (var tabFont = new Font("Arial", 10.5F, FontStyle.Bold))
+            using (var tabFont = new Font("Arial", 9F, FontStyle.Bold))
                 TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, tabFont, tabRect, fore,
                     TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
