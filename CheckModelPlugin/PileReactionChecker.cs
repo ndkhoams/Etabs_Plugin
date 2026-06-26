@@ -85,6 +85,10 @@ namespace Etabs_Ultimate_Tools
 
             sap.SetPresentUnits(eUnits.kN_m_C);
 
+            // Bật chế độ bao (Envelopes): tổ hợp bao trả về CẢ Max và Min cho mỗi điểm,
+            // đảm bảo không mất giá trị kéo (min) hoặc nén (max).
+            try { sap.Results.Setup.SetOptionMultiValuedCombo(1); } catch { }
+
             var piles = GetPilePoints(sap);
             if (piles.Count == 0) return rows;
 
