@@ -182,9 +182,9 @@ namespace CheckModelPlugin
         {
             dgvSeis = BuildScaffold(tab,
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
-                "(Theo TCVN 9386:2025)",
+                "(Theo TCVN 9386-1:2025)",
                 "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  q × drift × ν ≤ limit",
-                "drift = de/h lấy từ ETABS Story Drifts (1 tổ hợp động đất dùng chung cho cả 2 phương, đàn hồi). dr = q × de là chuyển vị lệch tầng thiết kế. ν: hệ số chiết giảm (0.4 – 0.5). limit: 0.005 (giòn) / 0.0075 (dẻo) / 0.010 (không cản trở).",
+                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. Tổ hợp drift là động đất thuần theo quy tắc phương 1.0EX + 0.3EY (KHÔNG dùng tổ hợp trọng lực G+Q+E — tổ hợp đó chỉ dùng cho nội lực & P-Delta). dr = q × de là chuyển vị lệch tầng thiết kế. ν: hệ số chiết giảm (0.4 – 0.5). limit: 0.005 (giòn) / 0.0075 (dẻo) / 0.010 (không cản trở).",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp động đất:", 110));
