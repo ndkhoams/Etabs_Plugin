@@ -468,6 +468,7 @@ namespace CheckModelPlugin
             if (q <= 0) q = 1.0;
             if (nu <= 0) nu = 1.0;
             if (limit <= 0) limit = 0.005;
+            double allow = (q * nu) > 0 ? limit / (q * nu) : 0.0;
             string limitText = limit.ToString("0.####");
 
             string comboX = xRows.Count > 0 ? xRows.Values.First().Combo : "";
@@ -482,8 +483,8 @@ namespace CheckModelPlugin
                 yRows.TryGetValue(st.Story, out var yr);
                 double dx = xr != null ? xr.Drift : 0.0;
                 double dy = yr != null ? yr.Drift : 0.0;
-                double reducedMax = q * Math.Max(dx, dy) * nu;
-                return new { Story = st, DriftX = dx, DriftY = dy, ReducedMax = reducedMax, Ok = reducedMax <= limit };
+                double driftMax = Math.Max(dx, dy);
+                return new { Story = st, DriftX = dx, DriftY = dy, DriftMax = driftMax, Ok = allow > 0 && driftMax <= allow };
             }).ToList();
 
             bool anyNg = computed.Any(c => !c.Ok);
@@ -505,7 +506,7 @@ namespace CheckModelPlugin
             ws.Range("B6:J6").Merge();
             ws.Cell("B7").Value = "Trong đó dr = q · de là chuyển vị lệch tầng thiết kế; de là chuyển vị lệch tầng đàn hồi.";
             ws.Range("B7:J7").Merge();
-            ws.Cell("B8").Value = "Quy về tỷ số: q × drift × ν ≤ limit, với drift = de/h lấy từ ETABS Story Drifts.";
+            ws.Cell("B8").Value = "Quy về dạng so sánh trực tiếp: drift ≤ limit/(ν·q), với drift = de/h lấy từ ETABS Story Drifts.";
             ws.Range("B8:J8").Merge();
             ws.Cell("B9").Value = "ν - hệ số chiết giảm; limit - giới hạn (0.005 giòn / 0.0075 dẻo / 0.010 không cản trở).";
             ws.Range("B9:J9").Merge();
@@ -518,7 +519,7 @@ namespace CheckModelPlugin
             ws.Cell("D13").Value = comboText;
             ws.Range("D13:J13").Merge();
             ws.Cell("B14").Value = "Tham số:";
-            ws.Cell("D14").Value = "q = " + q.ToString("0.###") + " ; ν = " + nu.ToString("0.###") + " ; limit = " + limitText;
+            ws.Cell("D14").Value = "q = " + q.ToString("0.###") + " ; ν = " + nu.ToString("0.###") + " ; limit = " + limitText + " ; [drift] = limit/(ν·q) = " + allow.ToString("0.000000");
             ws.Range("D14:J14").Merge();
 
             ws.Cell("B15").Value = "Kết luận:";
@@ -531,7 +532,7 @@ namespace CheckModelPlugin
             ws.Cell("C15").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
 
             int headerRow = 17;
-            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "drift X", "drift Y", "q", "ν", "q×drift×ν", "Giới hạn", "Kiểm tra" };
+            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "drift X", "drift Y", "drift max", "q", "ν", "Giới hạn limit/(ν·q)", "Kiểm tra" };
             for (int i = 0; i < heads.Length; i++)
                 ws.Cell(headerRow, 2 + i).Value = heads[i];
             StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 11));
@@ -545,10 +546,10 @@ namespace CheckModelPlugin
                 ws.Cell(r, 4).Value = c.Story.Height;
                 ws.Cell(r, 5).Value = c.DriftX;
                 ws.Cell(r, 6).Value = c.DriftY;
-                ws.Cell(r, 7).Value = q;
-                ws.Cell(r, 8).Value = nu;
-                ws.Cell(r, 9).Value = c.ReducedMax;
-                ws.Cell(r, 10).Value = limit;
+                ws.Cell(r, 7).Value = c.DriftMax;
+                ws.Cell(r, 8).Value = q;
+                ws.Cell(r, 9).Value = nu;
+                ws.Cell(r, 10).Value = allow;
                 ws.Cell(r, 11).Value = c.Ok ? "OK" : "NG";
                 if (!c.Ok) ws.Cell(r, 11).Style.Font.FontColor = XLColor.Red;
                 r++;
@@ -560,9 +561,9 @@ namespace CheckModelPlugin
             ws.Range(firstData, 11, lastData, 11).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
             ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
-            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0.000000";
-            ws.Range(firstData, 7, lastData, 8).Style.NumberFormat.Format = "0.###";
-            ws.Range(firstData, 9, lastData, 10).Style.NumberFormat.Format = "0.000000";
+            ws.Range(firstData, 5, lastData, 7).Style.NumberFormat.Format = "0.000000";
+            ws.Range(firstData, 8, lastData, 9).Style.NumberFormat.Format = "0.###";
+            ws.Range(firstData, 10, lastData, 10).Style.NumberFormat.Format = "0.000000";
 
             ws.Column(1).Width = 3;
             ws.Column(2).Width = 12;
