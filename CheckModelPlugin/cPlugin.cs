@@ -25,7 +25,7 @@ namespace Etabs_Ultimate_Tools
             }
             catch (Exception ex)
             {
-                MessageBox.Show(ex.Message, "Etabs Ultimate Tools", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(ex.Message, "Etabs Ultimate Tool", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 _callback.Finish(1);
             }
         }
