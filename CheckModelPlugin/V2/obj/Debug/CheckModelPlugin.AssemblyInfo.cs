@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("CheckModelPlugin")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+6369b352a61bf526c94f20bef1bdaf609013e5c3")]
 [assembly: System.Reflection.AssemblyProductAttribute("CheckModelPlugin")]
 [assembly: System.Reflection.AssemblyTitleAttribute("CheckModelPlugin")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

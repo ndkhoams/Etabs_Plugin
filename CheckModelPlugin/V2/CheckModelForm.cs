@@ -39,11 +39,7 @@ namespace CheckModelPlugin
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Arial", 9F);
 
-            var tabs = new TabControl
-            {
-                Dock = DockStyle.Fill,
-                Font = new Font("Arial", 9F)
-            };
+            var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Arial", 9F) };
             Controls.Add(tabs);
 
             var tabPDelta = new TabPage("Check P-Delta");
@@ -89,7 +85,7 @@ namespace CheckModelPlugin
 
             main.Controls.Add(new Label
             {
-                Text = "θ = q × drift × Ptot / Vtot   |   drift = Δ/h từ ETABS Story Drift",
+                Text = "θ = q × drift × Ptot / Vtot | drift = Δ/h từ ETABS Story Drift",
                 Dock = DockStyle.Fill,
                 Font = new Font("Arial", 10F),
                 ForeColor = Color.DarkBlue,
@@ -197,7 +193,7 @@ namespace CheckModelPlugin
 
             main.Controls.Add(new Label
             {
-                Text = "Điều kiện kiểm tra: f ≤ fu   |   Chuyển vị ngang tổng thể giới hạn H/500",
+                Text = "Điều kiện kiểm tra: f ≤ fu | Chuyển vị ngang tổng thể giới hạn H/500",
                 Dock = DockStyle.Fill,
                 Font = new Font("Arial", 10F),
                 ForeColor = Color.DarkBlue,
@@ -336,21 +332,13 @@ namespace CheckModelPlugin
         private static void SelectByKeyword(ComboBox cbo, params string[] keys)
         {
             foreach (var key in keys)
-            {
                 for (int i = 0; i < cbo.Items.Count; i++)
-                {
-                    var text = cbo.Items[i].ToString();
-                    if (string.Equals(text, key, StringComparison.OrdinalIgnoreCase)) { cbo.SelectedIndex = i; return; }
-                }
-            }
+                    if (string.Equals(cbo.Items[i].ToString(), key, StringComparison.OrdinalIgnoreCase)) { cbo.SelectedIndex = i; return; }
+
             foreach (var key in keys)
-            {
                 for (int i = 0; i < cbo.Items.Count; i++)
-                {
-                    var text = cbo.Items[i].ToString();
-                    if (text.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) { cbo.SelectedIndex = i; return; }
-                }
-            }
+                    if (cbo.Items[i].ToString().IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) { cbo.SelectedIndex = i; return; }
+
             if (cbo.Items.Count > 0 && cbo.SelectedIndex < 0) cbo.SelectedIndex = 0;
         }
 
@@ -411,18 +399,22 @@ namespace CheckModelPlugin
             btnWindExport.Enabled = _windRows.Count > 0;
         }
 
+        // FIX: lấy dòng có |chuyển vị| lớn nhất cho mỗi phương để đồng nhất với
+        // PDeltaExcelExporter (trước đây dùng FirstOrDefault gây lệch số liệu).
         private List<WindGridRow> BuildWindDisplayRows(List<TopDisplacementRow> rows)
         {
             var result = new List<WindGridRow>();
             var stories = rows
-                .Where(r => !IsBaseLevel(r.TopStory))
-                .GroupBy(r => r.TopStory)
+                .Where(r => !EtabsHelper.IsBaseLevel(r.TopStory))
+                .GroupBy(r => r.TopStory, StringComparer.OrdinalIgnoreCase)
                 .OrderByDescending(g => g.Max(x => x.TopElevation));
 
             foreach (var g in stories)
             {
-                var x = g.FirstOrDefault(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase));
-                var y = g.FirstOrDefault(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase));
+                var x = g.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.TopDisplacement)).FirstOrDefault();
+                var y = g.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase))
+                         .OrderByDescending(r => Math.Abs(r.TopDisplacement)).FirstOrDefault();
                 var refRow = x ?? y;
                 if (refRow == null) continue;
 
@@ -458,18 +450,10 @@ namespace CheckModelPlugin
             public string Check { get; set; }
         }
 
-        private static bool IsBaseLevel(string storyName)
-        {
-            if (string.IsNullOrWhiteSpace(storyName)) return false;
-            string s = storyName.Trim();
-            return s.Equals("Base", StringComparison.OrdinalIgnoreCase) ||
-                   s.IndexOf("Base", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         private void UpdateTitleSummary()
         {
-            double qx = _rows.Where(r => r.Direction == "X").Select(r => r.Theta).DefaultIfEmpty(0).Max();
-            double qy = _rows.Where(r => r.Direction == "Y").Select(r => r.Theta).DefaultIfEmpty(0).Max();
+            double qx = _rows.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase)).Select(r => r.Theta).DefaultIfEmpty(0).Max();
+            double qy = _rows.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase)).Select(r => r.Theta).DefaultIfEmpty(0).Max();
             Text = string.Format("Check Model | θmax X = {0:0.0000}; θmax Y = {1:0.0000}", qx, qy);
         }
 

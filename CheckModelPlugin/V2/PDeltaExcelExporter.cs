@@ -7,27 +7,13 @@ namespace CheckModelPlugin
 {
     public static class PDeltaExcelExporter
     {
-        public static void Export(string filePath, List<PDeltaCheckRow> rows, double qFactor, List<TopDisplacementRow> windRows = null)
+        public static void Export(string filePath, List<PDeltaCheckRow> rows, double qFactor,
+            List<TopDisplacementRow> windRows = null)
         {
             using (var wb = new XLWorkbook())
             {
                 var ws = wb.Worksheets.Add("P-DELTA");
-
-                // Thiết lập trang in giống file mẫu: A4, hướng dọc, fit toàn bộ cột trên 1 trang.
-                ws.PageSetup.PaperSize = XLPaperSize.A4Paper;
-                ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
-                ws.PageSetup.FitToPages(1, 0); // Fit all columns on 1 page, số trang cao để tự động.
-                ws.PageSetup.Margins.Left = 0.75;
-                ws.PageSetup.Margins.Right = 0.75;
-                ws.PageSetup.Margins.Top = 0.75;
-                ws.PageSetup.Margins.Bottom = 0.50;
-                ws.PageSetup.Margins.Header = 0.50;
-                ws.PageSetup.Margins.Footer = 0.75;
-                ws.PageSetup.CenterHorizontally = true;
-
-                // Toàn bộ workbook dùng Arial theo file mẫu.
-                ws.Style.Font.FontName = "Arial";
-                ws.Style.Font.FontSize = 11;
+                EtabsHelper.ApplyA4PageSetup(ws);
 
                 WriteHeaderAndNotes(ws);
 
@@ -41,7 +27,6 @@ namespace CheckModelPlugin
                     rows.Where(x => x.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase)).ToList(),
                     "3. Kiểm tra theo phương Y", qFactor, ref row);
 
-                // Khổ cột theo file mẫu.
                 ws.Column(1).Width = 3;
                 for (int c = 2; c <= 9; c++) ws.Column(c).Width = 12;
                 ws.Rows().Height = 18;
@@ -57,6 +42,26 @@ namespace CheckModelPlugin
 
                 wb.SaveAs(filePath);
             }
+        }
+
+        // ─── Style helpers (gom style header/body lặp lại) ───────────────
+        private static void StyleHeaderRange(IXLRange header)
+        {
+            header.Style.Font.Bold = true;
+            header.Style.Fill.BackgroundColor = XLColor.LightGray;
+            header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            header.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            header.Style.Alignment.WrapText = true;
+            header.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            header.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+        }
+
+        private static void StyleBodyBox(IXLRange body)
+        {
+            body.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            body.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            body.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
         }
 
         private static void WriteHeaderAndNotes(IXLWorksheet ws)
@@ -89,7 +94,6 @@ namespace CheckModelPlugin
             ws.Cell("B10").Value = "q × drift - tỷ số lệch tầng thiết kế";
             ws.Cell("B11").Value = "q - hệ số ứng xử";
             ws.Range("B11:I11").Merge();
-            
 
             ws.Cell("A13").Value = "Các điều kiện khống chế:";
             ws.Cell("A13").Style.Font.Bold = true;
@@ -99,7 +103,8 @@ namespace CheckModelPlugin
             ws.Cell("B16").Value = "θ không được vượt quá 0.30";
         }
 
-        private static void WriteDirectionSection(IXLWorksheet ws, List<PDeltaCheckRow> dirRows, string sectionTitle, double qFactor, ref int r)
+        private static void WriteDirectionSection(IXLWorksheet ws, List<PDeltaCheckRow> dirRows,
+            string sectionTitle, double qFactor, ref int r)
         {
             ws.Cell(r, 1).Value = sectionTitle;
             ws.Cell(r, 1).Style.Font.Bold = true;
@@ -107,7 +112,6 @@ namespace CheckModelPlugin
             r++;
 
             double thetaMax = dirRows.Count > 0 ? dirRows.Max(x => x.Theta) : 0.0;
-            string summary = GetSummary(thetaMax);
 
             ws.Cell(r, 2).Value = "Hệ số ứng xử :";
             ws.Cell(r, 4).Value = "q =";
@@ -122,7 +126,7 @@ namespace CheckModelPlugin
             r++;
 
             ws.Cell(r, 2).Value = "Kết luận:";
-            ws.Cell(r, 3).Value = summary;
+            ws.Cell(r, 3).Value = GetSummary(thetaMax);
             ws.Range(r, 3, r, 9).Merge();
             ws.Cell(r, 3).Style.Font.Bold = true;
             ws.Cell(r, 3).Style.Font.Italic = true;
@@ -131,33 +135,17 @@ namespace CheckModelPlugin
             int headerRow1 = r;
             int headerRow2 = r + 1;
 
-            ws.Cell(headerRow1, 2).Value = "Tầng";
-            ws.Cell(headerRow1, 3).Value = "drift";
-            ws.Cell(headerRow1, 4).Value = "q × drift";
-            ws.Cell(headerRow1, 5).Value = "Ptot";
-            ws.Cell(headerRow1, 6).Value = "Vtot";
-            ws.Cell(headerRow1, 7).Value = "θ";
-            ws.Cell(headerRow1, 8).Value = "1/(1-θ)";
-            ws.Cell(headerRow1, 9).Value = "Kiểm tra";
+            string[] heads = { "Tầng", "drift", "q × drift", "Ptot", "Vtot", "θ", "1/(1-θ)", "Kiểm tra" };
+            for (int i = 0; i < heads.Length; i++)
+                ws.Cell(headerRow1, 2 + i).Value = heads[i];
 
             ws.Cell(headerRow2, 5).Value = "(kN)";
             ws.Cell(headerRow2, 6).Value = "(kN)";
 
-            ws.Range(headerRow1, 2, headerRow2, 2).Merge();
-            ws.Range(headerRow1, 3, headerRow2, 3).Merge();
-            ws.Range(headerRow1, 4, headerRow2, 4).Merge();
-            ws.Range(headerRow1, 7, headerRow2, 7).Merge();
-            ws.Range(headerRow1, 8, headerRow2, 8).Merge();
-            ws.Range(headerRow1, 9, headerRow2, 9).Merge();
+            foreach (int col in new[] { 2, 3, 4, 7, 8, 9 })
+                ws.Range(headerRow1, col, headerRow2, col).Merge();
 
-            var header = ws.Range(headerRow1, 2, headerRow2, 9);
-            header.Style.Font.Bold = true;
-            header.Style.Fill.BackgroundColor = XLColor.LightGray;
-            header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            header.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-            header.Style.Alignment.WrapText = true;
-            header.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-            header.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            StyleHeaderRange(ws.Range(headerRow1, 2, headerRow2, 9));
 
             r += 2;
             int firstData = r;
@@ -176,62 +164,27 @@ namespace CheckModelPlugin
             }
 
             int lastData = Math.Max(firstData, r - 1);
-            var body = ws.Range(firstData, 2, lastData, 9);
-            body.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-            body.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
-            body.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            StyleBodyBox(ws.Range(firstData, 2, lastData, 9));
             ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
             ws.Range(firstData, 7, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 9, lastData, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
 
-            // Định dạng số giống file mẫu. Ptot/Vtot không dùng dấu phân cách hàng nghìn.
             ws.Range(firstData, 3, lastData, 4).Style.NumberFormat.Format = "0.00000";   // drift, q × drift
             ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0";         // Ptot, Vtot
             ws.Range(firstData, 7, lastData, 8).Style.NumberFormat.Format = "0.000";     // θ, 1/(1-θ)
         }
 
-
-        private static bool IsBaseLevel(string storyName)
-        {
-            if (string.IsNullOrWhiteSpace(storyName)) return false;
-            string s = storyName.Trim();
-            return s.Equals("Base", StringComparison.OrdinalIgnoreCase) ||
-                   s.IndexOf("Base", StringComparison.OrdinalIgnoreCase) >= 0;
-        }
-
         private static void WriteWindSheet(XLWorkbook wb, List<TopDisplacementRow> rows)
         {
             var ws = wb.Worksheets.Add("CHUYEN VI DINH");
-
-            // Thiết lập trang in giống file mẫu: Arial, A4 đứng, fit toàn bộ cột trên 1 trang.
-            ws.PageSetup.PaperSize = XLPaperSize.A4Paper;
-            ws.PageSetup.PageOrientation = XLPageOrientation.Portrait;
-            ws.PageSetup.FitToPages(1, 0);
-            ws.PageSetup.Margins.Left = 0.75;
-            ws.PageSetup.Margins.Right = 0.75;
-            ws.PageSetup.Margins.Top = 0.75;
-            ws.PageSetup.Margins.Bottom = 0.50;
-            ws.PageSetup.Margins.Header = 0.50;
-            ws.PageSetup.Margins.Footer = 0.75;
-            ws.PageSetup.CenterHorizontally = true;
-
-            ws.Style.Font.FontName = "Arial";
-            ws.Style.Font.FontSize = 11;
+            EtabsHelper.ApplyA4PageSetup(ws);
 
             var validRows = (rows ?? new List<TopDisplacementRow>())
-                .Where(x => x.TopElevation > 1e-9 && !IsBaseLevel(x.TopStory))
+                .Where(x => x.TopElevation > 1e-9 && !EtabsHelper.IsBaseLevel(x.TopStory))
                 .ToList();
 
-            var xRows = validRows
-                .Where(x => x.Direction.Equals("X", StringComparison.OrdinalIgnoreCase))
-                .GroupBy(x => x.TopStory, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(r => Math.Abs(r.TopDisplacement)).First(), StringComparer.OrdinalIgnoreCase);
-
-            var yRows = validRows
-                .Where(x => x.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase))
-                .GroupBy(x => x.TopStory, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.OrderByDescending(r => Math.Abs(r.TopDisplacement)).First(), StringComparer.OrdinalIgnoreCase);
+            var xRows = BuildMaxByStory(validRows, "X");
+            var yRows = BuildMaxByStory(validRows, "Y");
 
             var storyRows = validRows
                 .GroupBy(x => x.TopStory, StringComparer.OrdinalIgnoreCase)
@@ -249,7 +202,19 @@ namespace CheckModelPlugin
                 ? comboX
                 : "X: " + comboX + "; Y: " + comboY;
 
-            // Tiêu đề giống file mẫu.
+            // Tính 1 lần duy nhất, dùng lại cho cả kết luận lẫn bảng
+            var computed = storyRows.Select(st =>
+            {
+                xRows.TryGetValue(st.TopStory, out var xr);
+                yRows.TryGetValue(st.TopStory, out var yr);
+                double dx = xr != null ? xr.TopDisplacementMm : 0.0;
+                double dy = yr != null ? yr.TopDisplacementMm : 0.0;
+                double limitMm = st.TopElevation * 1000.0 / limit;
+                return new { Story = st, Dx = dx, Dy = dy, LimitMm = limitMm, Ok = dx <= limitMm && dy <= limitMm };
+            }).ToList();
+
+            bool anyNg = computed.Any(c => !c.Ok);
+
             ws.Cell("A2").Value = "KIỂM TRA CHUYỂN VỊ ĐỈNH CÔNG TRÌNH";
             ws.Range("A2:H2").Merge();
             ws.Cell("A2").Style.Font.Bold = true;
@@ -285,15 +250,6 @@ namespace CheckModelPlugin
             ws.Cell("D13").Value = comboText;
             ws.Range("D13:H13").Merge();
 
-            bool anyNg = false;
-            foreach (var st in storyRows)
-            {
-                double dx = xRows.ContainsKey(st.TopStory) ? xRows[st.TopStory].TopDisplacementMm : 0.0;
-                double dy = yRows.ContainsKey(st.TopStory) ? yRows[st.TopStory].TopDisplacementMm : 0.0;
-                double limitMm = st.TopElevation * 1000.0 / limit;
-                if (dx > limitMm || dy > limitMm) anyNg = true;
-            }
-
             ws.Cell("B14").Value = "Kết luận:";
             ws.Cell("C14").Value = anyNg
                 ? "Công trình không đảm bảo điều kiện chuyển vị đỉnh."
@@ -303,50 +259,30 @@ namespace CheckModelPlugin
             ws.Cell("C14").Style.Font.Italic = true;
 
             int headerRow = 15;
-            ws.Cell(headerRow, 2).Value = "Tầng";
-            ws.Cell(headerRow, 3).Value = "Cao độ tầng\n(m)";
-            ws.Cell(headerRow, 4).Value = "H\n(m)";
-            ws.Cell(headerRow, 5).Value = "ΔX\n(mm)";
-            ws.Cell(headerRow, 6).Value = "ΔY\n(mm)";
-            ws.Cell(headerRow, 7).Value = "H/" + limitText + "\n(mm)";
-            ws.Cell(headerRow, 8).Value = "Kiểm tra";
+            string[] heads = { "Tầng", "Cao độ tầng\n(m)", "H\n(m)", "ΔX\n(mm)", "ΔY\n(mm)", "H/" + limitText + "\n(mm)", "Kiểm tra" };
+            for (int i = 0; i < heads.Length; i++)
+                ws.Cell(headerRow, 2 + i).Value = heads[i];
 
-            var header = ws.Range(headerRow, 2, headerRow, 8);
-            header.Style.Font.Bold = true;
-            header.Style.Fill.BackgroundColor = XLColor.LightGray;
-            header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            header.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-            header.Style.Alignment.WrapText = true;
-            header.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-            header.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 8));
 
             int r = headerRow + 1;
             int firstData = r;
-            foreach (var st in storyRows)
+            foreach (var c in computed)
             {
-                double dx = xRows.ContainsKey(st.TopStory) ? xRows[st.TopStory].TopDisplacementMm : 0.0;
-                double dy = yRows.ContainsKey(st.TopStory) ? yRows[st.TopStory].TopDisplacementMm : 0.0;
-                double limitMm = st.TopElevation * 1000.0 / limit;
-                string check = (dx <= limitMm && dy <= limitMm) ? "OK" : "NG";
-
-                ws.Cell(r, 2).Value = st.TopStory;
-                ws.Cell(r, 3).Value = st.StoryElevation;
-                ws.Cell(r, 4).Value = st.TopElevation;
-                ws.Cell(r, 5).Value = dx;
-                ws.Cell(r, 6).Value = dy;
-                ws.Cell(r, 7).Value = limitMm;
-                ws.Cell(r, 8).Value = check;
+                ws.Cell(r, 2).Value = c.Story.TopStory;
+                ws.Cell(r, 3).Value = c.Story.StoryElevation;
+                ws.Cell(r, 4).Value = c.Story.TopElevation;
+                ws.Cell(r, 5).Value = c.Dx;
+                ws.Cell(r, 6).Value = c.Dy;
+                ws.Cell(r, 7).Value = c.LimitMm;
+                ws.Cell(r, 8).Value = c.Ok ? "OK" : "NG";
                 r++;
             }
 
             int lastData = Math.Max(firstData, r - 1);
             if (lastData >= firstData)
             {
-                var body = ws.Range(firstData, 2, lastData, 8);
-                body.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-                body.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
-                body.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-                body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+                StyleBodyBox(ws.Range(firstData, 2, lastData, 8));
                 ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
                 ws.Range(firstData, 8, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
                 ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
@@ -355,15 +291,11 @@ namespace CheckModelPlugin
                 ws.Range(firstData, 7, lastData, 7).Style.NumberFormat.Format = "0";
             }
 
-            // Định dạng cột/khổ trang theo file Excel mẫu.
             ws.Column(1).Width = 3;
             ws.Column(2).Width = 14;
             ws.Column(3).Width = 16;
             ws.Column(4).Width = 13;
-            ws.Column(5).Width = 14;
-            ws.Column(6).Width = 14;
-            ws.Column(7).Width = 14;
-            ws.Column(8).Width = 14;
+            for (int col = 5; col <= 8; col++) ws.Column(col).Width = 14;
             ws.Rows().Height = 18;
             ws.Row(1).Height = 21;
             ws.Row(2).Height = 21;
@@ -372,6 +304,19 @@ namespace CheckModelPlugin
 
             ws.SheetView.View = XLSheetViewOptions.Normal;
             ws.RangeUsed().Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+        }
+
+        // Gom logic GroupBy + lấy dòng có |chuyển vị| lớn nhất (trước đây lặp cho X và Y)
+        private static Dictionary<string, TopDisplacementRow> BuildMaxByStory(
+            List<TopDisplacementRow> rows, string direction)
+        {
+            return rows
+                .Where(x => x.Direction.Equals(direction, StringComparison.OrdinalIgnoreCase))
+                .GroupBy(x => x.TopStory, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.OrderByDescending(r => Math.Abs(r.TopDisplacement)).First(),
+                    StringComparer.OrdinalIgnoreCase);
         }
 
         private static string ShortCheck(double theta)

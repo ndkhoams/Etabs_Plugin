@@ -31,7 +31,7 @@ namespace CheckModelPlugin
                 if (vtot <= 1.0) continue;
 
                 double ptot = GetOrZero(pTot, st.Name);
-                double theta = ptot * dr / vtot;   // θ = Ptot × (Δd/h) / Vtot
+                double theta = ptot * dr / vtot; // θ = Ptot × (Δd/h) / Vtot
 
                 rows.Add(new PDeltaCheckRow
                 {
@@ -51,12 +51,8 @@ namespace CheckModelPlugin
             return rows;
         }
 
-        // ─── Public ───────────────────────────────────────────────────────────────
-
         public static List<string> GetLoadCombinations(cSapModel sap)
             => EtabsHelper.GetLoadCombinations(sap);
-
-        // ─── Kết luận ─────────────────────────────────────────────────────────────
 
         private static string GetConclusion(double theta)
         {
@@ -65,8 +61,6 @@ namespace CheckModelPlugin
             if (theta <= 0.30) return "Cần xét P-Delta chính xác / kiểm soát";
             return "NG - θ > 0.30, cần tăng độ cứng/thiết kế lại";
         }
-
-        // ─── Đọc Ptot từ Mass Summary ─────────────────────────────────────────────
 
         private static Dictionary<string, double> ReadPtotFromMassSummary(
             cSapModel sap, List<EtabsHelper.StoryInfo> stories)
@@ -91,7 +85,7 @@ namespace CheckModelPlugin
                         "Mass", "Total Mass", "Story Mass", "Mass kN-s²/m"));
                 if (m <= 0) continue;
 
-                if (storyMass.ContainsKey(story)) storyMass[story] += m;
+                if (storyMass.TryGetValue(story, out var cur)) storyMass[story] = cur + m;
                 else storyMass[story] = m;
             }
 
@@ -109,8 +103,6 @@ namespace CheckModelPlugin
             }
             return result;
         }
-
-        // ─── Đọc Story Drifts ─────────────────────────────────────────────────────
 
         private static Dictionary<string, double> ReadStoryDrifts(
             cSapModel sap, string loadCase, string dir)
@@ -130,13 +122,11 @@ namespace CheckModelPlugin
                 if (!dirArr[i].StartsWith(dir, StringComparison.OrdinalIgnoreCase)) continue;
 
                 double val = Math.Abs(drift[i]);
-                if (!result.ContainsKey(story[i]) || val > result[story[i]])
+                if (!result.TryGetValue(story[i], out var cur) || val > cur)
                     result[story[i]] = val;
             }
             return result;
         }
-
-        // ─── Đọc Story Forces (Vtot) ──────────────────────────────────────────────
 
         private static Dictionary<string, double> ReadStoryForces(
             cSapModel sap, string loadCase, string dir)
@@ -161,20 +151,17 @@ namespace CheckModelPlugin
                 double v = Math.Abs(EtabsTableReader.GetDouble(row,
                     forceField, "V" + dir, forceField + " kN", "V" + dir + " kN", "F" + dir));
 
-                if (!result.ContainsKey(story) || v > result[story])
+                if (!result.TryGetValue(story, out var cur) || v > cur)
                     result[story] = v;
             }
             return result;
         }
 
-        // ─── Helpers ──────────────────────────────────────────────────────────────
-
         private static bool IsBottom(string location)
         {
             if (string.IsNullOrWhiteSpace(location)) return true;
             string s = location.Trim();
-            return s.Equals("Bottom", StringComparison.OrdinalIgnoreCase)
-                || s.Equals("Bot", StringComparison.OrdinalIgnoreCase)
+            return s.Equals("Bot", StringComparison.OrdinalIgnoreCase)
                 || s.Equals("B", StringComparison.OrdinalIgnoreCase)
                 || s.IndexOf("Bottom", StringComparison.OrdinalIgnoreCase) >= 0;
         }

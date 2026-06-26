@@ -10,13 +10,12 @@ namespace CheckModelPlugin
     /// </summary>
     internal static class EtabsHelper
     {
-        // ─── Story ────────────────────────────────────────────────────────────────
-
+        // ─── Story ────────────────────────────────────────────────────────
         public class StoryInfo
         {
-            public string Name;
-            public double Elevation;
-            public double Height;
+            public string Name { get; set; }
+            public double Elevation { get; set; }
+            public double Height { get; set; }
         }
 
         /// <summary>Đọc danh sách tầng từ ETABS, sắp xếp theo cao độ tăng dần.</summary>
@@ -44,8 +43,6 @@ namespace CheckModelPlugin
             return list.OrderBy(x => x.Elevation).ToList();
         }
 
-        // ─── Naming helpers ───────────────────────────────────────────────────────
-
         /// <summary>Trả về true nếu tên tầng là "Base" hoặc chứa "Base".</summary>
         public static bool IsBaseLevel(string storyName)
         {
@@ -53,12 +50,7 @@ namespace CheckModelPlugin
             return storyName.Trim().IndexOf("Base", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        // ─── Output case matching ─────────────────────────────────────────────────
-
-        /// <summary>
-        /// Kiểm tra outputCase trùng với selectedName (bao gồm: rỗng, bằng nhau, hoặc chứa nhau).
-        /// Dùng cho cả Story Forces và Diaphragm Displacements.
-        /// </summary>
+        /// <summary>outputCase trùng selectedName (rỗng, bằng, hoặc chứa nhau).</summary>
         public static bool IsSameOrBlank(string outputCase, string selectedName)
         {
             if (string.IsNullOrWhiteSpace(outputCase)) return true;
@@ -67,8 +59,6 @@ namespace CheckModelPlugin
             return outputCase.IndexOf(selectedName, StringComparison.OrdinalIgnoreCase) >= 0
                 || selectedName.IndexOf(outputCase, StringComparison.OrdinalIgnoreCase) >= 0;
         }
-
-        // ─── Load case / combo selection ──────────────────────────────────────────
 
         public static void SelectCaseOrCombo(cSapModel sap, string name)
         {
@@ -91,12 +81,7 @@ namespace CheckModelPlugin
             return names == null ? new List<string>() : names.OrderBy(x => x).ToList();
         }
 
-        // ─── Excel page setup ─────────────────────────────────────────────────────
-
-        /// <summary>
-        /// Áp dụng thiết lập trang in chuẩn A4 cho một worksheet.
-        /// Tránh copy/paste cùng block trong nhiều hàm WriteXxxSheet.
-        /// </summary>
+        /// <summary>Áp dụng thiết lập trang in chuẩn A4 cho một worksheet.</summary>
         public static void ApplyA4PageSetup(ClosedXML.Excel.IXLWorksheet ws)
         {
             ws.PageSetup.PaperSize = ClosedXML.Excel.XLPaperSize.A4Paper;

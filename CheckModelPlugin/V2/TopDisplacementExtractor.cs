@@ -7,6 +7,11 @@ namespace CheckModelPlugin
 {
     public static class TopDisplacementExtractor
     {
+        // Ngưỡng đoán đơn vị: giá trị lớn hơn mức này (m) được coi là đang ở mm.
+        // Vì đã SetPresentUnits(kN_m_C) nên đầu ra thường đã là mét; ngưỡng chỉ là
+        // lớp phòng vệ khi bảng trả về mm. Điều chỉnh nếu công trình rất cao (>5 m chuyển vị).
+        private const double MmGuessThresholdMeters = 5.0;
+
         public static List<TopDisplacementRow> Calculate(
             cSapModel sap, string comboX, string comboY, double limitDenominator)
         {
@@ -22,17 +27,15 @@ namespace CheckModelPlugin
                 .OrderByDescending(x => x.Story.Elevation)
                 .ToList();
 
-            foreach (var combo in new[] { (comboX, "X"), (comboY, "Y") })
+            foreach (var combo in new[] { (Name: comboX, Dir: "X"), (Name: comboY, Dir: "Y") })
             {
-                if (string.IsNullOrWhiteSpace(combo.Item1)) continue;
+                if (string.IsNullOrWhiteSpace(combo.Name)) continue;
                 foreach (var item in checkStories)
-                    rows.Add(CalculateOne(sap, combo.Item1, combo.Item2,
+                    rows.Add(CalculateOne(sap, combo.Name, combo.Dir,
                         item.Story.Name, item.Story.Elevation, item.H, limitDenominator));
             }
             return rows;
         }
-
-        // ─── Tính cho một tầng / một phương ──────────────────────────────────────
 
         private static TopDisplacementRow CalculateOne(
             cSapModel sap, string combo, string dir,
@@ -63,8 +66,6 @@ namespace CheckModelPlugin
             };
         }
 
-        // ─── Xác định cao độ mặt móng/ngàm ──────────────────────────────────────
-
         private static double FindFoundationElevation(
             cSapModel sap, List<EtabsHelper.StoryInfo> stories,
             string comboX, string comboY)
@@ -83,10 +84,8 @@ namespace CheckModelPlugin
             foreach (var st in stories.OrderBy(s => s.Elevation))
             {
                 bool hasData = false, isFixed = true;
-
                 if (xMap.TryGetValue(st.Name, out var ux)) { hasData = true; if (Math.Abs(ux) > zeroTol) isFixed = false; }
                 if (yMap.TryGetValue(st.Name, out var uy)) { hasData = true; if (Math.Abs(uy) > zeroTol) isFixed = false; }
-
                 if (hasData && isFixed) return st.Elevation;
             }
 
@@ -99,9 +98,6 @@ namespace CheckModelPlugin
             return stories.Min(s => s.Elevation);
         }
 
-        // ─── Đọc chuyển vị ───────────────────────────────────────────────────────
-
-        /// <summary>Đọc chuyển vị của một tầng cụ thể (topStory) từ danh sách bảng ưu tiên.</summary>
         private static double ReadDisplacement(
             cSapModel sap, string combo, string dir, string topStory, string[] tableNames)
         {
@@ -133,7 +129,6 @@ namespace CheckModelPlugin
             return bestAnyCase;
         }
 
-        /// <summary>Đọc map story → chuyển vị lớn nhất từ danh sách bảng ưu tiên.</summary>
         private static Dictionary<string, double> ReadDisplacementMap(
             cSapModel sap, string combo, string dir, string[] tableNames)
         {
@@ -156,17 +151,15 @@ namespace CheckModelPlugin
                         "Output Case", "OutputCase", "Load Case", "LoadCase", "Case", "Combo", "Combination");
                     double u = NormalizeToMeters(ReadDirectionalDisplacement(row, dir));
 
-                    if (!bestAnyCase.ContainsKey(story) || u > bestAnyCase[story]) bestAnyCase[story] = u;
+                    if (!bestAnyCase.TryGetValue(story, out var anyCur) || u > anyCur) bestAnyCase[story] = u;
                     if (EtabsHelper.IsSameOrBlank(outputCase, combo))
-                        if (!bestWithCase.ContainsKey(story) || u > bestWithCase[story]) bestWithCase[story] = u;
+                        if (!bestWithCase.TryGetValue(story, out var wcCur) || u > wcCur) bestWithCase[story] = u;
                 }
 
                 if (bestWithCase.Count > 0) return bestWithCase;
             }
             return bestAnyCase;
         }
-
-        // ─── Helpers ──────────────────────────────────────────────────────────────
 
         private static double ReadDirectionalDisplacement(Dictionary<string, string> row, string dir)
         {
@@ -189,7 +182,7 @@ namespace CheckModelPlugin
         private static double NormalizeToMeters(double u)
         {
             u = Math.Abs(u);
-            if (u > 5.0) u /= 1000.0;   // giá trị > 5 thường là mm
+            if (u > MmGuessThresholdMeters) u /= 1000.0;
             return u;
         }
     }

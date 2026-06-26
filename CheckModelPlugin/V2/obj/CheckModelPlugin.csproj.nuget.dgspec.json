@@ -1,20 +1,20 @@
 {
   "format": 1,
   "restore": {
-    "F:\\Dropbox\\VS\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj": {}
+    "C:\\Users\\khoan\\Documents\\GitHub\\Etabs_Plugin\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj": {}
   },
   "projects": {
-    "F:\\Dropbox\\VS\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj": {
+    "C:\\Users\\khoan\\Documents\\GitHub\\Etabs_Plugin\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "F:\\Dropbox\\VS\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj",
+        "projectUniqueName": "C:\\Users\\khoan\\Documents\\GitHub\\Etabs_Plugin\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj",
         "projectName": "CheckModelPlugin",
-        "projectPath": "F:\\Dropbox\\VS\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj",
-        "packagesPath": "C:\\Users\\admin\\.nuget\\packages\\",
-        "outputPath": "F:\\Dropbox\\VS\\CheckModelPlugin\\V2\\obj\\",
+        "projectPath": "C:\\Users\\khoan\\Documents\\GitHub\\Etabs_Plugin\\CheckModelPlugin\\V2\\CheckModelPlugin.csproj",
+        "packagesPath": "C:\\Users\\khoan\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\khoan\\Documents\\GitHub\\Etabs_Plugin\\CheckModelPlugin\\V2\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
-          "C:\\Users\\admin\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\khoan\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
         ],
         "originalTargetFrameworks": [

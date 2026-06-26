@@ -8,9 +8,7 @@ namespace CheckModelPlugin
 {
     public static class EtabsTableReader
     {
-        // ─── Tên bảng ETABS phổ biến theo từng loại dữ liệu ──────────────────────
-        // Tập trung tại đây thay vì rải rác ở các Extractor.
-
+        // ─── Tên bảng ETABS phổ biến ─────────────────────────────────────
         internal static readonly string[] MassSummaryTableNames =
         {
             "Mass Summary by Story",
@@ -37,8 +35,7 @@ namespace CheckModelPlugin
             "Story Max Over Avg Displacements"
         };
 
-        // ─── Đọc bảng ─────────────────────────────────────────────────────────────
-
+        // ─── Đọc bảng ────────────────────────────────────────────────────
         public static List<Dictionary<string, string>> ReadTable(cSapModel sap, string tableKey, string outputCase)
         {
             TrySelectComboForDatabaseTables(sap, outputCase);
@@ -71,9 +68,7 @@ namespace CheckModelPlugin
             return rows;
         }
 
-        /// <summary>
-        /// Thử nhiều tên bảng cho đến khi có dữ liệu, trả về bảng đầu tiên không rỗng.
-        /// </summary>
+        /// <summary>Thử nhiều tên bảng cho đến khi có dữ liệu.</summary>
         public static List<Dictionary<string, string>> ReadTableWithFallback(
             cSapModel sap, string[] tableNames, string outputCase)
         {
@@ -89,42 +84,47 @@ namespace CheckModelPlugin
             return new List<Dictionary<string, string>>();
         }
 
-        // ─── Helpers truy xuất field ──────────────────────────────────────────────
-
+        // ─── Helpers truy xuất field ─────────────────────────────────────
         public static string Get(Dictionary<string, string> row, params string[] keys)
         {
-            // Ưu tiên 1: khớp chính xác
+            // Pass 1: khớp chính xác (row dùng comparer OrdinalIgnoreCase)
             foreach (var key in keys)
                 if (row.TryGetValue(key, out var v)) return v;
 
-            // Ưu tiên 2: so sánh sau khi chuẩn hóa (bỏ ký tự đặc biệt / đơn vị)
+            // Chuẩn hóa toàn bộ cột MỘT LẦN duy nhất (tránh tính lặp như bản cũ)
+            var normMap = new Dictionary<string, string>(row.Count);
+            foreach (var kv in row)
+            {
+                string fk = NormalizeKey(kv.Key);
+                if (fk.Length > 0 && !normMap.ContainsKey(fk)) normMap[fk] = kv.Value;
+            }
+
+            // Pass 2: khớp sau chuẩn hóa + alias đơn vị
             foreach (var key in keys)
             {
                 string nk = NormalizeKey(key);
-                foreach (var kv in row)
-                {
-                    string fk = NormalizeKey(kv.Key);
-                    if (fk == nk) return kv.Value;
+                if (normMap.TryGetValue(nk, out var v)) return v;
 
-                    if (nk == "p" && (fk == "p" || fk == "pkn" || fk == "pkip" || fk == "pnewton")) return kv.Value;
-                    if (nk == "vx" && (fk == "vx" || fk == "vxkn" || fk == "vxkip")) return kv.Value;
-                    if (nk == "vy" && (fk == "vy" || fk == "vykn" || fk == "vykip")) return kv.Value;
-                }
+                if (nk == "p" && (normMap.TryGetValue("pkn", out v) ||
+                                  normMap.TryGetValue("pkip", out v) ||
+                                  normMap.TryGetValue("pnewton", out v))) return v;
+                if (nk == "vx" && (normMap.TryGetValue("vxkn", out v) ||
+                                   normMap.TryGetValue("vxkip", out v))) return v;
+                if (nk == "vy" && (normMap.TryGetValue("vykn", out v) ||
+                                   normMap.TryGetValue("vykip", out v))) return v;
             }
 
-            // Ưu tiên 3: so khớp gần đúng (chỉ áp dụng với key >= 2 ký tự)
+            // Pass 3: khớp gần đúng (Contains), chỉ với key >= 2 ký tự
             foreach (var key in keys)
             {
                 string nk = NormalizeKey(key);
                 if (nk.Length < 2) continue;
-                foreach (var kv in row)
+                foreach (var kv in normMap)
                 {
-                    string fk = NormalizeKey(kv.Key);
-                    if (fk.Length >= 2 && (fk.Contains(nk) || nk.Contains(fk)))
+                    if (kv.Key.Length >= 2 && (kv.Key.Contains(nk) || nk.Contains(kv.Key)))
                         return kv.Value;
                 }
             }
-
             return "";
         }
 
@@ -154,7 +154,11 @@ namespace CheckModelPlugin
             return "";
         }
 
-        // ─── Private helpers ──────────────────────────────────────────────────────
+        // ─── Private helpers ─────────────────────────────────────────────
+
+        // Cache method theo (Type + tên) để tránh quét reflection lặp lại.
+        private static readonly Dictionary<string, MethodInfo[]> _methodCache =
+            new Dictionary<string, MethodInfo[]>();
 
         private static void TrySelectComboForDatabaseTables(cSapModel sap, string comboName)
         {
@@ -167,7 +171,6 @@ namespace CheckModelPlugin
                 object db = sap.DatabaseTables;
                 Type t = db.GetType();
 
-                // Gọi tất cả overload phổ biến qua reflection để tương thích nhiều bản ETABSv1.dll.
                 TryInvokeFlexible(db, t, "DeselectAllLoadCasesAndCombosForDisplay", comboName);
                 TryInvokeFlexible(db, t, "DeselectAllCasesAndCombosForDisplay", comboName);
                 TryInvokeFlexible(db, t, "SetLoadCombinationsSelectedForDisplay", comboName);
@@ -180,9 +183,8 @@ namespace CheckModelPlugin
 
         private static void TryInvokeFlexible(object target, Type type, string methodName, string comboName)
         {
-            foreach (var mi in type.GetMethods(BindingFlags.InvokeMethod | BindingFlags.Public | BindingFlags.Instance))
+            foreach (var mi in GetCachedMethods(type, methodName))
             {
-                if (!string.Equals(mi.Name, methodName, StringComparison.OrdinalIgnoreCase)) continue;
                 try
                 {
                     var ps = mi.GetParameters();
@@ -205,10 +207,25 @@ namespace CheckModelPlugin
             }
         }
 
+        private static MethodInfo[] GetCachedMethods(Type type, string methodName)
+        {
+            string cacheKey = type.FullName + "::" + methodName;
+            if (_methodCache.TryGetValue(cacheKey, out var cached)) return cached;
+
+            var list = new List<MethodInfo>();
+            foreach (var mi in type.GetMethods(BindingFlags.InvokeMethod | BindingFlags.Public | BindingFlags.Instance))
+                if (string.Equals(mi.Name, methodName, StringComparison.OrdinalIgnoreCase))
+                    list.Add(mi);
+
+            var arr = list.ToArray();
+            _methodCache[cacheKey] = arr;
+            return arr;
+        }
+
         private static string NormalizeKey(string s)
         {
             if (string.IsNullOrWhiteSpace(s)) return "";
-            var chars = new System.Text.StringBuilder();
+            var chars = new System.Text.StringBuilder(s.Length);
             foreach (char ch in s.ToLowerInvariant())
                 if (char.IsLetterOrDigit(ch)) chars.Append(ch);
             return chars.ToString();
