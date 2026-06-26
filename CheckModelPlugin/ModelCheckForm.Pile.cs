@@ -73,7 +73,7 @@ namespace Etabs_Ultimate_Tools
 
             left.Controls.Add(new Label
             {
-                Text = "SCT chịu kéo/nén theo loại cọc & từng tổ hợp (kN):",
+                Text = "SCT chịu kéo/nén theo loại cọc & từng tổ hợp (kN) — tự điền Kz×0.01:",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 1);
 
@@ -137,7 +137,7 @@ namespace Etabs_Ultimate_Tools
             right.Controls.Add(dgvPilePreview, 0, 1);
             AddPileGridColumns();
 
-            lblPileInfo.Text = "Nhập SCT kéo/nén cho từng loại cọc theo mỗi tổ hợp, chọn 3 tổ hợp rồi bấm Xem trước.";
+            lblPileInfo.Text = "SCT tạm được tự điền = Kz×0.01; chỉnh lại nếu cần, chọn 3 tổ hợp rồi bấm Xem trước.";
         }
 
         // Header gộp 2 dòng: dòng trên = trường hợp tải, dòng dưới = Kéo/Nén.
@@ -224,10 +224,10 @@ namespace Etabs_Ultimate_Tools
         {
             dgvPilePreview.Columns.Clear();
             dgvPilePreview.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
-            AddColumn(dgvPilePreview, "LoadType", "Trường hợp", 160, null, true);
+            AddColumn(dgvPilePreview, "LoadType", "Trường hợp", 150, null, true);
             AddColumn(dgvPilePreview, "PileType", "Loại cọc", 80, null, true);
             AddColumn(dgvPilePreview, "PileId", "Số hiệu cọc", 90, null, true);
-            AddColumn(dgvPilePreview, "Combo", "Tổ hợp", 120, null, true);
+            AddColumn(dgvPilePreview, "Combo", "Tổ hợp", 140, null, true);
             AddColumn(dgvPilePreview, "Reaction", "Phản lực (kN)", 100, "0.#", true);
             AddColumn(dgvPilePreview, "TensionCap", "SCT kéo (kN)", 95, "0.#", true);
             AddColumn(dgvPilePreview, "CompressionCap", "SCT nén (kN)", 95, "0.#", true);
@@ -238,37 +238,71 @@ namespace Etabs_Ultimate_Tools
         {
             if (dgvPileCaps == null) return;
             dgvPileCaps.Rows.Clear();
-            foreach (var name in PileReactionChecker.GetSpringTypes(_sap))
-                dgvPileCaps.Rows.Add(name, "", "", "", "", "", "");
+
+            List<PileTypeInfo> infos = new List<PileTypeInfo>();
+            try { infos = PileReactionChecker.GetPileTypeInfos(_sap); }
+            catch { infos = new List<PileTypeInfo>(); }
+
+            if (infos.Count > 0)
+            {
+                foreach (var info in infos)
+                {
+                    int idx = dgvPileCaps.Rows.Add(info.Key, "", "", "", "", "", "");
+                    FillRowDefaults(dgvPileCaps.Rows[idx], info.DefaultCap);
+                }
+            }
+            else
+            {
+                foreach (var name in PileReactionChecker.GetSpringTypes(_sap))
+                    dgvPileCaps.Rows.Add(name, "", "", "", "", "", "");
+            }
 
             if (dgvPileCaps.Rows.Count == 0 && lblPileInfo != null)
                 lblPileInfo.Text = "Model chưa khai báo loại point spring nào. Hãy gán point spring cho cọc trước.";
         }
 
-        // Đồng bộ bảng SCT với các loại cọc thực sự phát hiện được trong model
-        // (giữ nguyên giá trị SCT đã nhập, chỉ thêm dòng còn thiếu).
+        // Đồng bộ bảng SCT với các loại cọc thực phát hiện được (thêm dòng thiếu,
+        // tự điền SCT tạm = Kz×0.01 vào các ô còn trống, giữ nguyên ô đã nhập).
         private void SyncPileCapsGrid()
         {
             if (dgvPileCaps == null) return;
 
-            var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            List<PileTypeInfo> infos;
+            try { infos = PileReactionChecker.GetPileTypeInfos(_sap); }
+            catch { return; }
+
+            var rowByType = new Dictionary<string, DataGridViewRow>(StringComparer.OrdinalIgnoreCase);
             foreach (DataGridViewRow row in dgvPileCaps.Rows)
             {
                 if (row.IsNewRow) continue;
                 string nm = Convert.ToString(row.Cells[0].Value);
-                if (!string.IsNullOrWhiteSpace(nm)) existing.Add(nm.Trim());
+                if (!string.IsNullOrWhiteSpace(nm)) rowByType[nm.Trim()] = row;
             }
 
-            List<string> keys;
-            try { keys = PileReactionChecker.GetPileTypeKeys(_sap); }
-            catch { return; }
-
-            foreach (var key in keys)
-                if (!string.IsNullOrWhiteSpace(key) && !existing.Contains(key))
+            foreach (var info in infos)
+            {
+                DataGridViewRow row;
+                if (!rowByType.TryGetValue(info.Key, out row))
                 {
-                    dgvPileCaps.Rows.Add(key, "", "", "", "", "", "");
-                    existing.Add(key);
+                    int idx = dgvPileCaps.Rows.Add(info.Key, "", "", "", "", "", "");
+                    row = dgvPileCaps.Rows[idx];
+                    rowByType[info.Key] = row;
                 }
+                FillRowDefaults(row, info.DefaultCap);
+            }
+        }
+
+        // Điền SCT tạm vào các ô kéo/nén còn trống (không ghi đè giá trị đã có).
+        private static void FillRowDefaults(DataGridViewRow row, double defaultCap)
+        {
+            if (row == null || defaultCap <= 0) return;
+            string val = Math.Round(defaultCap, 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            for (int c = 1; c <= 6; c++)
+            {
+                object cur = row.Cells[c].Value;
+                if (cur == null || string.IsNullOrWhiteSpace(cur.ToString()))
+                    row.Cells[c].Value = val;
+            }
         }
 
         // Đọc SCT cho 1 trường hợp tải (theo cặp cột kéo/nén tương ứng).
@@ -302,13 +336,20 @@ namespace Etabs_Ultimate_Tools
         private List<PileReactionCase> BuildPileCases()
         {
             var cases = new List<PileReactionCase>();
-            cases.AddRange(PileReactionChecker.ComputeCases(_sap, cboPileVert.Text.Trim(),
-                "TỔ HỢP TẢI ĐỨNG", "TAI DUNG", ReadPileCaps(CapTensVert, CapCompVert)));
-            cases.AddRange(PileReactionChecker.ComputeCases(_sap, cboPileWind.Text.Trim(),
-                "TỔ HỢP TẢI GIÓ", "TAI GIO", ReadPileCaps(CapTensWind, CapCompWind)));
-            cases.AddRange(PileReactionChecker.ComputeCases(_sap, cboPileEq.Text.Trim(),
-                "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT", ReadPileCaps(CapTensEq, CapCompEq)));
+            AddPileCase(cases, cboPileVert.Text.Trim(), "TỔ HỢP TẢI ĐỨNG", "TAI DUNG",
+                ReadPileCaps(CapTensVert, CapCompVert));
+            AddPileCase(cases, cboPileWind.Text.Trim(), "TỔ HỢP TẢI GIÓ", "TAI GIO",
+                ReadPileCaps(CapTensWind, CapCompWind));
+            AddPileCase(cases, cboPileEq.Text.Trim(), "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT",
+                ReadPileCaps(CapTensEq, CapCompEq));
             return cases;
+        }
+
+        private void AddPileCase(List<PileReactionCase> cases, string combo, string title,
+            string sheet, Dictionary<string, PileSpringType> caps)
+        {
+            var c = PileReactionChecker.ComputeCase(_sap, combo, title, sheet, caps);
+            if (c != null) cases.Add(c);
         }
 
         private void PreviewPileReactions()
