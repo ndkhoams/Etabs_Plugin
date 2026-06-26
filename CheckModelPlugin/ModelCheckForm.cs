@@ -44,8 +44,7 @@ namespace Etabs_Ultimate_Tools
         private List<AxialCheckRow> _axialRows = new List<AxialCheckRow>();
 
         private CheckedListBox clbColCombos;
-        private RadioButton rdoColText, rdoColExcel;
-        private Button btnColPreview, btnColExportFile;
+        private Button btnColPreview, btnColExportText, btnColExportExcel;
         private DataGridView dgvColPreview;
         private Label lblColInfo;
         private List<ForceRow> _colRows = new List<ForceRow>();
@@ -174,7 +173,7 @@ namespace Etabs_Ultimate_Tools
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 60));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             main.Controls.Add(left, 0, 0);
 
@@ -218,19 +217,13 @@ namespace Etabs_Ultimate_Tools
             };
             left.Controls.Add(fmtRow, 0, 3);
 
-            var grpFmt = new GroupBox { Text = "Định dạng xuất", Width = 224, Height = 50, Padding = new Padding(8, 2, 8, 2), Margin = new Padding(0, 0, 12, 0) };
-            fmtRow.Controls.Add(grpFmt);
+            btnColExportText = new Button { Text = "Xuất Text (.txt)", Width = 168, Height = 42, Enabled = false, Margin = new Padding(0, 3, 12, 0) };
+            btnColExportText.Click += (s, e) => ExportColumnForces(false);
+            fmtRow.Controls.Add(btnColExportText);
 
-            var fmtBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
-            grpFmt.Controls.Add(fmtBar);
-            rdoColText = new RadioButton { Text = "Text (.txt)", AutoSize = true, Checked = true, Margin = new Padding(4, 4, 12, 0) };
-            rdoColExcel = new RadioButton { Text = "Excel (.xlsx)", AutoSize = true, Margin = new Padding(4, 4, 0, 0) };
-            fmtBar.Controls.Add(rdoColText);
-            fmtBar.Controls.Add(rdoColExcel);
-
-            btnColExportFile = new Button { Text = "Xuất", Width = 120, Height = 42, Enabled = false, Margin = new Padding(0, 3, 0, 0) };
-            btnColExportFile.Click += (s, e) => ExportColumnForces();
-            fmtRow.Controls.Add(btnColExportFile);
+            btnColExportExcel = new Button { Text = "Xuất Excel (.xlsx)", Width = 168, Height = 42, Enabled = false, Margin = new Padding(0, 3, 0, 0) };
+            btnColExportExcel.Click += (s, e) => ExportColumnForces(true);
+            fmtRow.Controls.Add(btnColExportExcel);
 
             lblColInfo = new Label
             {
@@ -289,12 +282,13 @@ namespace Etabs_Ultimate_Tools
         private void AddColumnExportGridColumns()
         {
             dgvColPreview.Columns.Clear();
-            AddColumn(dgvColPreview, "Name", "NAME", 240);
-            AddColumn(dgvColPreview, "PU", "PU", 90, "0.##");
-            AddColumn(dgvColPreview, "MUXT", "MUXT", 90, "0.##");
-            AddColumn(dgvColPreview, "MUYT", "MUYT", 90, "0.##");
-            AddColumn(dgvColPreview, "MUXB", "MUXB", 90, "0.##");
-            AddColumn(dgvColPreview, "MUYB", "MUYB", 90, "0.##");
+            dgvColPreview.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            AddColumn(dgvColPreview, "Name", "NAME", 240, null, true);
+            AddColumn(dgvColPreview, "PU", "PU", 80, "0.##", true);
+            AddColumn(dgvColPreview, "MUXT", "MUXT", 80, "0.##", true);
+            AddColumn(dgvColPreview, "MUYT", "MUYT", 80, "0.##", true);
+            AddColumn(dgvColPreview, "MUXB", "MUXB", 80, "0.##", true);
+            AddColumn(dgvColPreview, "MUYB", "MUYB", 80, "0.##", true);
         }
 
         private void PreviewColumnForces()
@@ -322,7 +316,8 @@ namespace Etabs_Ultimate_Tools
                 _colRows = new List<ForceRow>();
                 dgvColPreview.DataSource = null;
                 lblColInfo.Text = "Chưa chọn cột hoặc vách (Pier) nào trong ETABS.";
-                btnColExportFile.Enabled = false;
+                btnColExportText.Enabled = false;
+                btnColExportExcel.Enabled = false;
                 MessageBox.Show("Chưa chọn cột hoặc vách (Pier) nào trong ETABS.", "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
@@ -335,18 +330,17 @@ namespace Etabs_Ultimate_Tools
             if (_colRows.Count == 0)
                 MessageBox.Show("Không có nội lực để xuất. Hãy chạy Analyze trước.", "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
 
-            btnColExportFile.Enabled = _colRows.Count > 0;
+            btnColExportText.Enabled = _colRows.Count > 0;
+            btnColExportExcel.Enabled = _colRows.Count > 0;
         }
 
-        private void ExportColumnForces()
+        private void ExportColumnForces(bool excel)
         {
             if (_colRows == null || _colRows.Count == 0)
             {
                 MessageBox.Show("Chưa có dữ liệu. Hãy bấm Xem trước trước khi xuất.", "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
-            bool excel = rdoColExcel.Checked;
 
             using (var sfd = new SaveFileDialog())
             {
@@ -877,6 +871,7 @@ namespace Etabs_Ultimate_Tools
                 SortMode = DataGridViewColumnSortMode.NotSortable,
                 AutoSizeMode = fill ? DataGridViewAutoSizeColumnMode.Fill : DataGridViewAutoSizeColumnMode.None
             };
+            if (fill) col.FillWeight = width;
             if (!string.IsNullOrWhiteSpace(format)) col.DefaultCellStyle.Format = format;
             grid.Columns.Add(col);
         }
