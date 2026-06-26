@@ -231,23 +231,23 @@ namespace CheckModelPlugin
         private static Label MakeFieldLabel(string text, int width) => new Label
         {
             Text = text, AutoSize = false, Width = width, Height = CtrlHeight,
-            TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 4, 0)
+            TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 4, 10, 0)
         };
 
         private static ComboBox MakeCombo(int width) => new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList, Width = width,
-            Margin = new Padding(0, 5, 14, 0)
+            Margin = new Padding(0, 5, 26, 0)
         };
 
         private static TextBox MakeTextBox(string value, int width) => new TextBox
         {
-            Text = value, Width = width, Margin = new Padding(0, 6, 14, 0)
+            Text = value, Width = width, Margin = new Padding(0, 6, 26, 0)
         };
 
         private static Button MakeButton(string text) => new Button
         {
-            Text = text, Width = 118, Height = CtrlHeight, Margin = new Padding(0, 4, 8, 0)
+            Text = text, Width = 118, Height = CtrlHeight, Margin = new Padding(0, 4, 14, 0)
         };
 
         private DataGridView CreateGrid()
@@ -315,11 +315,9 @@ namespace CheckModelPlugin
             AddColumn(dgvWindDrift, "Story", "Tầng", 90);
             AddColumn(dgvWindDrift, "Elevation", "Cao độ (m)", 100, "+0.000;-0.000;0.000");
             AddColumn(dgvWindDrift, "Height", "h tầng (m)", 90, "N3");
-            AddColumn(dgvWindDrift, "DeltaXmm", "Δx (mm)", 90, "N2");
-            AddColumn(dgvWindDrift, "DeltaYmm", "Δy (mm)", 90, "N2");
-            AddColumn(dgvWindDrift, "DriftX", "drift X", 105, "0.000000");
-            AddColumn(dgvWindDrift, "DriftY", "drift Y", 105, "0.000000");
-            AddColumn(dgvWindDrift, "Limit", "Giới hạn 1/500", 110, "0.000000");
+            AddColumn(dgvWindDrift, "DriftX", "drift X", 110, "0.000000");
+            AddColumn(dgvWindDrift, "DriftY", "drift Y", 110, "0.000000");
+            AddColumn(dgvWindDrift, "Limit", "Giới hạn 1/500", 120, "0.000000");
             AddColumn(dgvWindDrift, "Check", "Kiểm tra", 200, null, true);
         }
 
@@ -551,8 +549,6 @@ namespace CheckModelPlugin
                     Height = refRow.Height,
                     DriftX = driftX,
                     DriftY = driftY,
-                    DeltaXmm = driftX * refRow.Height * 1000.0,
-                    DeltaYmm = driftY * refRow.Height * 1000.0,
                     Limit = limit,
                     Check = Math.Max(driftX, driftY) <= limit ? "OK" : "NG"
                 });
@@ -613,8 +609,6 @@ namespace CheckModelPlugin
             public string Story { get; set; }
             public double Elevation { get; set; }
             public double Height { get; set; }
-            public double DeltaXmm { get; set; }
-            public double DeltaYmm { get; set; }
             public double DriftX { get; set; }
             public double DriftY { get; set; }
             public double Limit { get; set; }
