@@ -351,8 +351,6 @@ namespace CheckModelPlugin
                     Story = st,
                     DriftX = dxRatio,
                     DriftY = dyRatio,
-                    DxMm = dxRatio * st.Height * 1000.0,
-                    DyMm = dyRatio * st.Height * 1000.0,
                     Ok = dxRatio <= limit && dyRatio <= limit
                 };
             }).ToList();
@@ -395,10 +393,10 @@ namespace CheckModelPlugin
             ws.Cell("C12").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
 
             int headerRow = 14;
-            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "Δx (mm)", "Δy (mm)", "drift max", "Giới hạn 1/" + limitText, "Kiểm tra" };
+            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "drift max", "Giới hạn 1/" + limitText, "Kiểm tra" };
             for (int i = 0; i < heads.Length; i++)
                 ws.Cell(headerRow, 2 + i).Value = heads[i];
-            StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 9));
+            StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 7));
 
             int r = headerRow + 1;
             int firstData = r;
@@ -408,27 +406,24 @@ namespace CheckModelPlugin
                 ws.Cell(r, 2).Value = c.Story.Story;
                 ws.Cell(r, 3).Value = c.Story.Elevation;
                 ws.Cell(r, 4).Value = c.Story.Height;
-                ws.Cell(r, 5).Value = c.DxMm;
-                ws.Cell(r, 6).Value = c.DyMm;
-                ws.Cell(r, 7).Value = driftMax;
-                ws.Cell(r, 8).Value = limit;
-                ws.Cell(r, 9).Value = c.Ok ? "OK" : "NG";
-                if (!c.Ok) ws.Cell(r, 9).Style.Font.FontColor = XLColor.Red;
+                ws.Cell(r, 5).Value = driftMax;
+                ws.Cell(r, 6).Value = limit;
+                ws.Cell(r, 7).Value = c.Ok ? "OK" : "NG";
+                if (!c.Ok) ws.Cell(r, 7).Style.Font.FontColor = XLColor.Red;
                 r++;
             }
 
             int lastData = Math.Max(firstData, r - 1);
-            StyleBodyBox(ws.Range(firstData, 2, lastData, 9));
+            StyleBodyBox(ws.Range(firstData, 2, lastData, 7));
             ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
-            ws.Range(firstData, 9, lastData, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(firstData, 7, lastData, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
             ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
-            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0.00";
-            ws.Range(firstData, 7, lastData, 8).Style.NumberFormat.Format = "0.000000";
+            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0.000000";
 
             ws.Column(1).Width = 3;
             ws.Column(2).Width = 12;
-            for (int col = 3; col <= 9; col++) ws.Column(col).Width = 13;
+            for (int col = 3; col <= 7; col++) ws.Column(col).Width = 14;
         }
 
         private static Dictionary<string, WindDriftRow> BuildMaxDriftByStory(
@@ -532,10 +527,10 @@ namespace CheckModelPlugin
             ws.Cell("C15").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
 
             int headerRow = 17;
-            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "drift X", "drift Y", "drift max", "q", "ν", "Giới hạn limit/(ν·q)", "Kiểm tra" };
+            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "drift X", "drift Y", "Giới hạn limit/(ν·q)", "Kiểm tra" };
             for (int i = 0; i < heads.Length; i++)
                 ws.Cell(headerRow, 2 + i).Value = heads[i];
-            StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 11));
+            StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 8));
 
             int r = headerRow + 1;
             int firstData = r;
@@ -546,28 +541,26 @@ namespace CheckModelPlugin
                 ws.Cell(r, 4).Value = c.Story.Height;
                 ws.Cell(r, 5).Value = c.DriftX;
                 ws.Cell(r, 6).Value = c.DriftY;
-                ws.Cell(r, 7).Value = c.DriftMax;
-                ws.Cell(r, 8).Value = q;
-                ws.Cell(r, 9).Value = nu;
-                ws.Cell(r, 10).Value = allow;
-                ws.Cell(r, 11).Value = c.Ok ? "OK" : "NG";
-                if (!c.Ok) ws.Cell(r, 11).Style.Font.FontColor = XLColor.Red;
+                ws.Cell(r, 7).Value = allow;
+                ws.Cell(r, 8).Value = c.Ok ? "OK" : "NG";
+                if (!c.Ok) ws.Cell(r, 8).Style.Font.FontColor = XLColor.Red;
                 r++;
             }
 
             int lastData = Math.Max(firstData, r - 1);
-            StyleBodyBox(ws.Range(firstData, 2, lastData, 11));
+            StyleBodyBox(ws.Range(firstData, 2, lastData, 8));
             ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
-            ws.Range(firstData, 11, lastData, 11).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(firstData, 8, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
             ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
-            ws.Range(firstData, 5, lastData, 7).Style.NumberFormat.Format = "0.000000";
-            ws.Range(firstData, 8, lastData, 9).Style.NumberFormat.Format = "0.###";
-            ws.Range(firstData, 10, lastData, 10).Style.NumberFormat.Format = "0.000000";
+            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0.000000";
+            ws.Range(firstData, 7, lastData, 7).Style.NumberFormat.Format = "0.000000";
 
             ws.Column(1).Width = 3;
             ws.Column(2).Width = 12;
-            for (int col = 3; col <= 11; col++) ws.Column(col).Width = 12;
+            for (int col = 3; col <= 6; col++) ws.Column(col).Width = 13;
+            ws.Column(7).Width = 18;
+            ws.Column(8).Width = 12;
         }
 
         private static Dictionary<string, SeismicDriftRow> BuildMaxSeismicByStory(
