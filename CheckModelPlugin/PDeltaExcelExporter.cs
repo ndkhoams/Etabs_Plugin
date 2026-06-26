@@ -494,7 +494,7 @@ namespace CheckModelPlugin
             ws.Cell("A2").Style.Font.FontSize = 14;
             ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
-            ws.Cell("A3").Value = "(Theo TCVN 9386:2025)";
+            ws.Cell("A3").Value = "(Theo TCVN 9386-1:2025)";
             ws.Range("A3:J3").Merge();
             ws.Cell("A3").Style.Font.Italic = true;
             ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -509,26 +509,28 @@ namespace CheckModelPlugin
             ws.Range("B8:J8").Merge();
             ws.Cell("B9").Value = "ν - hệ số chiết giảm; limit - giới hạn (0.005 giòn / 0.0075 dẻo / 0.010 không cản trở).";
             ws.Range("B9:J9").Merge();
+            ws.Cell("B10").Value = "Tổ hợp tính drift: động đất thuần theo quy tắc phương 1.0EX + 0.3EY (và 0.3EX + 1.0EY); KHÔNG dùng tổ hợp trọng lực G+Q+E (tổ hợp đó chỉ dùng cho nội lực & kiểm tra P-Delta).";
+            ws.Range("B10:J10").Merge();
 
-            ws.Cell("A11").Value = "2. Kiểm tra chuyển vị lệch tầng";
-            ws.Cell("A11").Style.Font.Bold = true;
-            ws.Cell("B12").Value = "Tổ hợp kiểm tra:";
-            ws.Cell("D12").Value = comboText;
-            ws.Range("D12:J12").Merge();
-            ws.Cell("B13").Value = "Tham số:";
-            ws.Cell("D13").Value = "q = " + q.ToString("0.###") + " ; ν = " + nu.ToString("0.###") + " ; limit = " + limitText;
+            ws.Cell("A12").Value = "2. Kiểm tra chuyển vị lệch tầng";
+            ws.Cell("A12").Style.Font.Bold = true;
+            ws.Cell("B13").Value = "Tổ hợp kiểm tra:";
+            ws.Cell("D13").Value = comboText;
             ws.Range("D13:J13").Merge();
+            ws.Cell("B14").Value = "Tham số:";
+            ws.Cell("D14").Value = "q = " + q.ToString("0.###") + " ; ν = " + nu.ToString("0.###") + " ; limit = " + limitText;
+            ws.Range("D14:J14").Merge();
 
-            ws.Cell("B14").Value = "Kết luận:";
-            ws.Cell("C14").Value = anyNg
+            ws.Cell("B15").Value = "Kết luận:";
+            ws.Cell("C15").Value = anyNg
                 ? "Có tầng không đảm bảo điều kiện chuyển vị lệch tầng do động đất."
                 : "Tất cả các tầng đảm bảo điều kiện chuyển vị lệch tầng do động đất.";
-            ws.Range("C14:J14").Merge();
-            ws.Cell("C14").Style.Font.Bold = true;
-            ws.Cell("C14").Style.Font.Italic = true;
-            ws.Cell("C14").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
+            ws.Range("C15:J15").Merge();
+            ws.Cell("C15").Style.Font.Bold = true;
+            ws.Cell("C15").Style.Font.Italic = true;
+            ws.Cell("C15").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
 
-            int headerRow = 16;
+            int headerRow = 17;
             string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "drift X", "drift Y", "q", "ν", "q×drift×ν", "Giới hạn", "Kiểm tra" };
             for (int i = 0; i < heads.Length; i++)
                 ws.Cell(headerRow, 2 + i).Value = heads[i];
