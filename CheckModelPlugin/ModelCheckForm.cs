@@ -49,6 +49,7 @@ namespace Etabs_Ultimate_Tools
         private DataGridView dgvColPreview;
         private Label lblColInfo;
         private List<ForceRow> _colRows = new List<ForceRow>();
+        private int _lastColIndex = -1;
 
         private const double AxialAlphaCc = 1.0;
         private const double AxialGammaC = 1.2;
@@ -142,34 +143,33 @@ namespace Etabs_Ultimate_Tools
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(root);
 
-            root.Controls.Add(MakeTitle("XUẤT NỘI LỰC CỘT / VÁCH (CSI Column)"), 0, 0);
-            root.Controls.Add(MakeSubtitle("(Xuất PU, MUXT, MUYT, MUXB, MUYB cho cột và vách Pier đã chọn)"), 0, 1);
+            root.Controls.Add(MakeTitle("XUẤT NỘI LỰC CỘT / VÁCH"), 0, 0);
+            root.Controls.Add(MakeSubtitle("(Xuất nội lực theo định dạng CSI Colum và Prokon)"), 0, 1);
             root.Controls.Add(MakeCondition("Quy đổi dấu theo mẫu nhập CSI Column — đơn vị kN, m"), 0, 2);
 
             var main = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
             };
-            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 380));
             main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             root.Controls.Add(main, 0, 3);
 
             // ----- Cột trái: chọn tổ hợp + tùy chọn xuất -----
             var left = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = new Padding(0, 0, 10, 0)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Margin = new Padding(0, 0, 10, 0)
             };
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             main.Controls.Add(left, 0, 0);
 
             left.Controls.Add(new Label
             {
-                Text = "Chọn tổ hợp tải (Load Combination):",
+                Text = "Chọn tổ hợp tải (Load Combination) — giữ Shift để chọn hàng loạt:",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 0);
 
@@ -178,8 +178,10 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false,
                 BorderStyle = BorderStyle.FixedSingle
             };
+            clbColCombos.MouseDown += ClbColCombos_MouseDown;
             left.Controls.Add(clbColCombos, 0, 1);
 
+            // Hàng nút chọn: Chọn tất cả / Bỏ chọn / Xem trước
             var selBar = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
@@ -187,44 +189,46 @@ namespace Etabs_Ultimate_Tools
             };
             left.Controls.Add(selBar, 0, 2);
 
-            var btnSelAll = new Button { Text = "Chọn tất cả", Width = 150, Height = 28, Margin = new Padding(0, 0, 8, 0) };
+            var btnSelAll = new Button { Text = "Chọn tất cả", Width = 104, Height = 28, Margin = new Padding(0, 0, 6, 0) };
             btnSelAll.Click += (s, e) => SetColCombosChecked(true);
             selBar.Controls.Add(btnSelAll);
 
-            var btnDeselAll = new Button { Text = "Bỏ chọn", Width = 150, Height = 28 };
+            var btnDeselAll = new Button { Text = "Bỏ chọn", Width = 104, Height = 28, Margin = new Padding(0, 0, 6, 0) };
             btnDeselAll.Click += (s, e) => SetColCombosChecked(false);
             selBar.Controls.Add(btnDeselAll);
 
+            btnColPreview = new Button { Text = "Xem trước", Width = 104, Height = 28, Margin = new Padding(0, 0, 0, 0) };
+            btnColPreview.Click += (s, e) => PreviewColumnForces();
+            selBar.Controls.Add(btnColPreview);
+
+            // Hàng định dạng xuất + nút Xuất nằm ngang hàng
+            var fmtRow = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
+            };
+            fmtRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            fmtRow.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
+            left.Controls.Add(fmtRow, 0, 3);
+
             var grpFmt = new GroupBox { Text = "Định dạng xuất", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4) };
-            left.Controls.Add(grpFmt, 0, 3);
+            fmtRow.Controls.Add(grpFmt, 0, 0);
 
             var fmtBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
             grpFmt.Controls.Add(fmtBar);
-            rdoColText = new RadioButton { Text = "Text (.txt)", AutoSize = true, Checked = true, Margin = new Padding(4, 6, 24, 0) };
+            rdoColText = new RadioButton { Text = "Text (.txt)", AutoSize = true, Checked = true, Margin = new Padding(4, 6, 16, 0) };
             rdoColExcel = new RadioButton { Text = "Excel (.xlsx)", AutoSize = true, Margin = new Padding(4, 6, 0, 0) };
             fmtBar.Controls.Add(rdoColText);
             fmtBar.Controls.Add(rdoColExcel);
 
-            var actBar = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
-                Margin = new Padding(0, 6, 0, 0)
-            };
-            left.Controls.Add(actBar, 0, 4);
-
-            btnColPreview = new Button { Text = "Xem trước", Width = 150, Height = 32, Margin = new Padding(0, 0, 8, 0) };
-            btnColPreview.Click += (s, e) => PreviewColumnForces();
-            actBar.Controls.Add(btnColPreview);
-
-            btnColExportFile = new Button { Text = "Xuất", Width = 150, Height = 32, Enabled = false };
+            btnColExportFile = new Button { Text = "Xuất", Dock = DockStyle.Fill, Enabled = false, Margin = new Padding(0, 8, 0, 8) };
             btnColExportFile.Click += (s, e) => ExportColumnForces();
-            actBar.Controls.Add(btnColExportFile);
+            fmtRow.Controls.Add(btnColExportFile, 1, 0);
 
             lblColInfo = new Label
             {
                 Dock = DockStyle.Fill, ForeColor = Color.DimGray, TextAlign = ContentAlignment.MiddleLeft
             };
-            left.Controls.Add(lblColInfo, 0, 5);
+            left.Controls.Add(lblColInfo, 0, 4);
 
             // ----- Cột phải: xem trước nội lực -----
             var right = new TableLayoutPanel
@@ -247,6 +251,27 @@ namespace Etabs_Ultimate_Tools
             AddColumnExportGridColumns();
 
             lblColInfo.Text = "Chọn cột/vách trong ETABS, chọn tổ hợp rồi bấm Xem trước.";
+        }
+
+        private void ClbColCombos_MouseDown(object sender, MouseEventArgs e)
+        {
+            int index = clbColCombos.IndexFromPoint(e.Location);
+            if (index < 0) return;
+
+            if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift && _lastColIndex >= 0 && _lastColIndex != index)
+            {
+                // Trạng thái đích dựa trên item vừa bấm (CheckOnClick sẽ tự đảo trạng thái của chính item đó).
+                bool target = !clbColCombos.GetItemChecked(index);
+                int start = Math.Min(_lastColIndex, index);
+                int end = Math.Max(_lastColIndex, index);
+                for (int i = start; i <= end; i++)
+                {
+                    if (i == index) continue; // item này do CheckOnClick xử lý
+                    clbColCombos.SetItemChecked(i, target);
+                }
+            }
+
+            _lastColIndex = index;
         }
 
         private void SetColCombosChecked(bool state)
@@ -447,7 +472,7 @@ namespace Etabs_Ultimate_Tools
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
                 "(Theo TCVN 9386-1:2025)",
                 "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  drift ≤ limit/(ν·q) (mục 4.4.3.2)",
-                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2).",
+                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2). CHÚ THÍCH: Các giá trị khác nhau của ν phụ thuộc vào các nguy cơ động đất và vào cấp hậu quả của công trình, khuyến nghị như sau: ν = 0,4 cho các cấp hậu quả C3-a và C3-b, và ν = 0,5 cho các cấp hậu quả C1 và C2.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp động đất:", 110));
@@ -455,7 +480,7 @@ namespace Etabs_Ultimate_Tools
             bar.Controls.Add(MakeFieldLabel("q:", 22));
             txtSeisQ = MakeTextBox("1.5", 50); bar.Controls.Add(txtSeisQ);
             bar.Controls.Add(MakeFieldLabel("ν:", 22));
-            txtSeisNu = MakeTextBox("0.5", 50); bar.Controls.Add(txtSeisNu);
+            txtSeisNu = MakeTextBox("0.4", 50); bar.Controls.Add(txtSeisNu);
             bar.Controls.Add(MakeFieldLabel("limit:", 38));
             cboSeisLimit = MakeCombo(150);
             cboSeisLimit.Items.AddRange(new object[] { "0.005 (giòn)", "0.0075 (dẻo)", "0.010 (không cản trở)" });
