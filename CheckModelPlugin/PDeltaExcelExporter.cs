@@ -13,31 +13,8 @@ namespace CheckModelPlugin
         {
             using (var wb = new XLWorkbook())
             {
-                var ws = wb.Worksheets.Add("P-DELTA");
-                EtabsHelper.ApplyA4PageSetup(ws);
-
-                WriteHeaderAndNotes(ws);
-
-                int row = 18;
-                WriteDirectionSection(ws,
-                    rows.Where(x => x.Direction.Equals("X", StringComparison.OrdinalIgnoreCase)).ToList(),
-                    "2. Kiểm tra theo phương X", qFactor, ref row);
-
-                row += 2;
-                WriteDirectionSection(ws,
-                    rows.Where(x => x.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase)).ToList(),
-                    "3. Kiểm tra theo phương Y", qFactor, ref row);
-
-                ws.Column(1).Width = 3;
-                for (int c = 2; c <= 8; c++) ws.Column(c).Width = 12;
-                ws.Column(9).Width = 20;
-                ws.Rows().Height = 18;
-                ws.Row(1).Height = 21;
-                ws.Row(2).Height = 18;
-
-                ws.SheetView.View = XLSheetViewOptions.Normal;
-                ws.SheetView.FreezeRows(0);
-                ws.RangeUsed().Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                if (rows != null && rows.Count > 0)
+                    WritePDeltaSheet(wb, rows, qFactor);
 
                 if (windRows != null && windRows.Count > 0)
                     WriteWindSheet(wb, windRows);
@@ -48,8 +25,40 @@ namespace CheckModelPlugin
                 if (seismicDriftRows != null && seismicDriftRows.Count > 0)
                     WriteSeismicDriftSheet(wb, seismicDriftRows);
 
+                if (!wb.Worksheets.Any())
+                    wb.Worksheets.Add("EMPTY");
+
                 wb.SaveAs(filePath);
             }
+        }
+
+        private static void WritePDeltaSheet(XLWorkbook wb, List<PDeltaCheckRow> rows, double qFactor)
+        {
+            var ws = wb.Worksheets.Add("P-DELTA");
+            EtabsHelper.ApplyA4PageSetup(ws);
+
+            WriteHeaderAndNotes(ws);
+
+            int row = 18;
+            WriteDirectionSection(ws,
+                rows.Where(x => x.Direction.Equals("X", StringComparison.OrdinalIgnoreCase)).ToList(),
+                "2. Kiểm tra theo phương X", qFactor, ref row);
+
+            row += 2;
+            WriteDirectionSection(ws,
+                rows.Where(x => x.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase)).ToList(),
+                "3. Kiểm tra theo phương Y", qFactor, ref row);
+
+            ws.Column(1).Width = 3;
+            for (int c = 2; c <= 8; c++) ws.Column(c).Width = 12;
+            ws.Column(9).Width = 20;
+            ws.Rows().Height = 18;
+            ws.Row(1).Height = 21;
+            ws.Row(2).Height = 18;
+
+            ws.SheetView.View = XLSheetViewOptions.Normal;
+            ws.SheetView.FreezeRows(0);
+            ws.RangeUsed().Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         }
 
         private static void StyleHeaderRange(IXLRange header)
