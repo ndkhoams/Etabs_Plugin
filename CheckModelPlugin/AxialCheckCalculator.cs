@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     /// <summary>
     /// Tính toán kiểm tra hệ số lực dọc quy đổi cho cột và vách Pier.

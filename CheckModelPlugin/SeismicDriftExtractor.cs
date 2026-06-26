@@ -3,7 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     /// <summary>
     /// Kiểm tra chuyển vị lệch tầng do tải trọng động đất theo TCVN 9386-1:2025.

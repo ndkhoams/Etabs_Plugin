@@ -5,7 +5,7 @@ using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     public class ModelCheckForm : Form
     {
@@ -59,7 +59,7 @@ namespace CheckModelPlugin
 
         private void InitializeComponent()
         {
-            Text = "Etabs Model Ultimate Tool";
+            Text = "Etabs Ultimate Tools";
             Width = 1360;
             Height = 780;
             MinimumSize = new Size(1240, 700);
@@ -763,7 +763,7 @@ namespace CheckModelPlugin
                 MessageBox.Show("Chưa có dữ liệu P-Delta để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            RunExport(file => PDeltaExcelExporter.Export(file, _rows, _qFactor), "P-Delta.xlsx");
+            RunExport(file => ExcelExporter.Export(file, _rows, _qFactor), "P-Delta.xlsx");
         }
 
         private void ExportWind()
@@ -773,7 +773,7 @@ namespace CheckModelPlugin
                 MessageBox.Show("Chưa có dữ liệu chuyển vị đỉnh để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            RunExport(file => PDeltaExcelExporter.Export(file, null, _qFactor, _windRows), "ChuyenViDinh_Gio.xlsx");
+            RunExport(file => ExcelExporter.Export(file, null, _qFactor, _windRows), "ChuyenViDinh_Gio.xlsx");
         }
 
         private void ExportWindDrift()
@@ -783,7 +783,7 @@ namespace CheckModelPlugin
                 MessageBox.Show("Chưa có dữ liệu chuyển vị lệch tầng do gió để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            RunExport(file => PDeltaExcelExporter.Export(file, null, _qFactor, null, _windDriftRows), "ChuyenViLechTang_Gio.xlsx");
+            RunExport(file => ExcelExporter.Export(file, null, _qFactor, null, _windDriftRows), "ChuyenViLechTang_Gio.xlsx");
         }
 
         private void ExportSeismic()
@@ -793,7 +793,7 @@ namespace CheckModelPlugin
                 MessageBox.Show("Chưa có dữ liệu chuyển vị lệch tầng do động đất để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-            RunExport(file => PDeltaExcelExporter.Export(file, null, _qFactor, null, null, _seismicDriftRows), "ChuyenViLechTang_DongDat.xlsx");
+            RunExport(file => ExcelExporter.Export(file, null, _qFactor, null, null, _seismicDriftRows), "ChuyenViLechTang_DongDat.xlsx");
         }
 
         private void ExportAxial()

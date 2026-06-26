@@ -1,4 +1,4 @@
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     /// <summary>Một dòng kết quả kiểm tra chuyển vị lệch tầng do gió.</summary>
     public class WindDriftRow

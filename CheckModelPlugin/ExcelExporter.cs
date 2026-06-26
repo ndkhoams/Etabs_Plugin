@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using ClosedXML.Excel;
 
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
-    public static class PDeltaExcelExporter
+    public static class ExcelExporter
     {
         public static void Export(string filePath, List<PDeltaCheckRow> rows, double qFactor,
             List<TopDisplacementRow> windRows = null, List<WindDriftRow> windDriftRows = null,
@@ -368,30 +368,30 @@ namespace CheckModelPlugin
             bool anyNg = computed.Any(c => !c.Ok);
 
             ws.Cell("A2").Value = "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG GIÓ";
-            ws.Range("A2:I2").Merge();
+            ws.Range("A2:G2").Merge();
             ws.Cell("A2").Style.Font.Bold = true;
             ws.Cell("A2").Style.Font.FontSize = 14;
             ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Cell("A3").Value = "(Theo TCVN 2737:2023)";
-            ws.Range("A3:I3").Merge();
+            ws.Range("A3:G3").Merge();
             ws.Cell("A3").Style.Font.Italic = true;
             ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Cell("A5").Value = "1. Cơ sở lý thuyết";
             ws.Cell("A5").Style.Font.Bold = true;
             ws.Cell("B6").Value = "Chuyển vị lệch tầng (inter-story drift) là chênh lệch chuyển vị ngang giữa hai sàn liền kề.";
-            ws.Range("B6:I6").Merge();
+            ws.Range("B6:G6").Merge();
             ws.Cell("B7").Value = "Điều kiện kiểm tra: drift = Δ/h ≤ 1/" + limitText + " cho từng tầng.";
-            ws.Range("B7:I7").Merge();
+            ws.Range("B7:G7").Merge();
             ws.Cell("B8").Value = "Trong đó Δ là chuyển vị lệch tầng, h là chiều cao tầng.";
-            ws.Range("B8:I8").Merge();
+            ws.Range("B8:G8").Merge();
 
             ws.Cell("A10").Value = "2. Kiểm tra chuyển vị lệch tầng";
             ws.Cell("A10").Style.Font.Bold = true;
             ws.Cell("B11").Value = "Tổ hợp kiểm tra:";
             ws.Cell("D11").Value = comboText;
-            ws.Range("D11:I11").Merge();
+            ws.Range("D11:G11").Merge();
 
             ws.Cell("B12").Value = "Kết luận:";
             ws.Cell("C12").Value = anyNg
@@ -495,37 +495,37 @@ namespace CheckModelPlugin
             bool anyNg = computed.Any(c => !c.Ok);
 
             ws.Cell("A2").Value = "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT";
-            ws.Range("A2:J2").Merge();
+            ws.Range("A2:H2").Merge();
             ws.Cell("A2").Style.Font.Bold = true;
             ws.Cell("A2").Style.Font.FontSize = 14;
             ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Cell("A3").Value = "(Theo TCVN 9386-1:2025)";
-            ws.Range("A3:J3").Merge();
+            ws.Range("A3:H3").Merge();
             ws.Cell("A3").Style.Font.Italic = true;
             ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Cell("A5").Value = "1. Cơ sở lý thuyết";
             ws.Cell("A5").Style.Font.Bold = true;
             ws.Cell("B6").Value = "Điều kiện hạn chế hư hỏng (damage limitation): dr · ν ≤ limit · h.";
-            ws.Range("B6:J6").Merge();
+            ws.Range("B6:H6").Merge();
             ws.Cell("B7").Value = "Trong đó dr = q · de là chuyển vị lệch tầng thiết kế; de là chuyển vị lệch tầng đàn hồi.";
-            ws.Range("B7:J7").Merge();
+            ws.Range("B7:H7").Merge();
             ws.Cell("B8").Value = "drift ≤ limit/(ν·q), với drift = de/h";
-            ws.Range("B8:J8").Merge();
+            ws.Range("B8:H8").Merge();
             ws.Cell("B9").Value = "ν - hệ số chiết giảm; limit - giới hạn (0.005 giòn / 0.0075 dẻo / 0.010 không cản trở).";
-            ws.Range("B9:J9").Merge();
+            ws.Range("B9:H9").Merge();
             ws.Cell("B10").Value = "Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2)";
-            ws.Range("B10:J10").Merge();
+            ws.Range("B10:H10").Merge();
 
             ws.Cell("A12").Value = "2. Kiểm tra chuyển vị lệch tầng";
             ws.Cell("A12").Style.Font.Bold = true;
             ws.Cell("B13").Value = "Tổ hợp kiểm tra:";
             ws.Cell("D13").Value = comboText;
-            ws.Range("D13:J13").Merge();
+            ws.Range("D13:JH3").Merge();
             ws.Cell("B14").Value = "Tham số:";
             ws.Cell("D14").Value = "q = " + q.ToString("0.###") + " ; ν = " + nu.ToString("0.###") + " ; limit = " + limitText + " ; [drift] = limit/(ν·q) = " + allow.ToString("0.000000");
-            ws.Range("D14:J14").Merge();
+            ws.Range("D14:H14").Merge();
 
             ws.Cell("B15").Value = "Kết luận:";
             ws.Cell("C15").Value = anyNg

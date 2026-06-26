@@ -1,4 +1,4 @@
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     /// <summary>
     /// Một hàng kết quả kiểm tra lực dọc quy đổi (cột hoặc vách Pier).

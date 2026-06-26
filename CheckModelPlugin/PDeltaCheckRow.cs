@@ -1,4 +1,4 @@
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     public class PDeltaCheckRow
     {

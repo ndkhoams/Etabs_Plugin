@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Reflection;
 
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     public static class EtabsTableReader
     {

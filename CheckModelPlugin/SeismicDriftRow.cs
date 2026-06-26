@@ -1,4 +1,4 @@
-namespace CheckModelPlugin
+namespace Etabs_Ultimate_Tools
 {
     /// <summary>Một dòng kết quả kiểm tra chuyển vị lệch tầng do động đất (TCVN 9386-1:2025).</summary>
     public class SeismicDriftRow
