@@ -48,7 +48,7 @@
               "RelativeDocumentMoniker": "PDeltaExcelExporter.cs",
               "ToolTip": "C:\\Users\\khoan\\Documents\\GitHub\\Etabs_Plugin\\CheckModelPlugin\\V2\\PDeltaExcelExporter.cs",
               "RelativeToolTip": "PDeltaExcelExporter.cs",
-              "ViewState": "AgIAACoBAAAAAAAAAADwv1EBAAABAAAAAAAAAA==",
+              "ViewState": "AgIAACoBAAAAAAAAAADwvzABAAA6AAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
               "WhenOpened": "2026-06-26T04:59:32.253Z",
               "EditorCaption": ""
@@ -63,8 +63,7 @@
               "RelativeToolTip": "CheckModelForm.cs",
               "ViewState": "AgIAALEBAAAAAAAAAADwv9gBAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-26T04:59:17.862Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-26T04:59:17.862Z"
             },
             {
               "$type": "Document",
@@ -76,8 +75,7 @@
               "RelativeToolTip": "TopDisplacementExtractor.cs",
               "ViewState": "AgIAAJUAAAAAAAAAAADwv7wAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-26T04:58:47.733Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-26T04:58:47.733Z"
             },
             {
               "$type": "Document",
@@ -89,8 +87,7 @@
               "RelativeToolTip": "PDeltaExtractor.cs",
               "ViewState": "AgIAAIQAAAAAAAAAAADwv6sAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-26T04:58:39.923Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-26T04:58:39.923Z"
             },
             {
               "$type": "Document",
@@ -102,8 +99,7 @@
               "RelativeToolTip": "EtabsTableReader.cs",
               "ViewState": "AgIAAMIAAAAAAAAAAADwv+kAAAABAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-26T04:58:27.18Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-26T04:58:27.18Z"
             },
             {
               "$type": "Document",
@@ -115,8 +111,7 @@
               "RelativeToolTip": "Etabshelper.cs",
               "ViewState": "AgIAAD4AAAAAAAAAAAAswFAAAABXAAAAAAAAAA==",
               "Icon": "ae27a6b0-e345-4288-96df-5eaf394ee369.000738|",
-              "WhenOpened": "2026-06-26T04:57:28.811Z",
-              "EditorCaption": ""
+              "WhenOpened": "2026-06-26T04:57:28.811Z"
             },
             {
               "$type": "Bookmark",
