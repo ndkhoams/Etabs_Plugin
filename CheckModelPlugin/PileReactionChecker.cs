@@ -1,11 +1,12 @@
 using ETABSv1;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace Etabs_Ultimate_Tools
 {
-    /// <summary>Khả năng chịu tải của một loại cọc (point spring property).</summary>
+    /// <summary>Khả năng chịu tải của một loại cọc (point spring).</summary>
     public class PileSpringType
     {
         public string Name { get; set; } = "";
@@ -16,7 +17,7 @@ namespace Etabs_Ultimate_Tools
     /// <summary>Một dòng kết quả kiểm tra phản lực cọc.</summary>
     public class PileReactionRow
     {
-        public string PileType { get; set; } = "";   // Loại cọc (= point spring property)
+        public string PileType { get; set; } = "";   // Loại cọc
         public string PileId { get; set; } = "";      // Số hiệu cọc (label điểm)
         public string Combo { get; set; } = "";        // Tổ hợp
         public double Reaction { get; set; }           // Phản lực đầu cọc (kN): + nén / - kéo
@@ -35,8 +36,8 @@ namespace Etabs_Ultimate_Tools
     }
 
     /// <summary>
-    /// Liệt kê các loại point spring (cọc), đọc phản lực đầu cọc (F3) theo từng tổ hợp
-    /// và so sánh với SCT chịu kéo/nén. Tách khỏi UI để tái sử dụng.
+    /// Phát hiện các điểm có gán point spring (= cọc), đọc phản lực đầu cọc (F3)
+    /// theo từng tổ hợp và so sánh với SCT chịu kéo/nén.
     /// Port net48 (không dùng record/init/MaxBy/range operator).
     /// </summary>
     public static class PileReactionChecker
@@ -45,7 +46,7 @@ namespace Etabs_Ultimate_Tools
         {
             public string Name = "";
             public string Label = "";
-            public string SpringType = "";
+            public double Kz = 0.0;   // độ cứng lò xo phương đứng (U3)
         }
 
         // ── Liệt kê các loại point spring khai báo trong model (= loại cọc) ──────
@@ -64,6 +65,17 @@ namespace Etabs_Ultimate_Tools
                         .ToList();
         }
 
+        // ── Các "loại cọc" thực sự phát hiện được trên model (để đồng bộ bảng SCT) ─
+        public static List<string> GetPileTypeKeys(cSapModel sap)
+        {
+            var piles = GetPilePoints(sap);
+            var defined = GetSpringTypes(sap);
+            return piles.Select(p => ResolveType(p, defined))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .OrderBy(s => s, StringComparer.OrdinalIgnoreCase)
+                        .ToList();
+        }
+
         // ── Tính phản lực + kết luận cho 1 tổ hợp tải ────────────────────────────
         public static List<PileReactionRow> Compute(cSapModel sap, string combo,
             Dictionary<string, PileSpringType> caps)
@@ -76,6 +88,7 @@ namespace Etabs_Ultimate_Tools
             var piles = GetPilePoints(sap);
             if (piles.Count == 0) return rows;
 
+            var defined = GetSpringTypes(sap);
             EtabsHelper.SelectCaseOrCombo(sap, combo);
 
             foreach (var pile in piles)
@@ -84,11 +97,13 @@ namespace Etabs_Ultimate_Tools
                 if (!TryGetReactionRange(sap, pile.Name, out pmax, out pmin))
                     continue;
 
+                string type = ResolveType(pile, defined);
+
                 double tensCap = 0, compCap = 0;
                 if (caps != null)
                 {
                     PileSpringType cap;
-                    if (caps.TryGetValue(pile.SpringType, out cap))
+                    if (caps.TryGetValue(type, out cap))
                     {
                         tensCap = cap.TensionCap;
                         compCap = cap.CompressionCap;
@@ -109,14 +124,13 @@ namespace Etabs_Ultimate_Tools
                 else
                     result = (okComp && okTens) ? "Đạt" : "Không Đạt";
 
-                // Phản lực hiển thị = cực trị có mức huy động cao hơn.
                 double compUtil = hasComp ? comp / compCap : 0.0;
                 double tensUtil = hasTens ? tens / tensCap : 0.0;
                 double reaction = compUtil >= tensUtil ? pmax : pmin;
 
                 rows.Add(new PileReactionRow
                 {
-                    PileType = pile.SpringType,
+                    PileType = type,
                     PileId = pile.Label,
                     Combo = combo,
                     Reaction = reaction,
@@ -132,22 +146,35 @@ namespace Etabs_Ultimate_Tools
                 .ToList();
         }
 
-        // ── Lấy danh sách điểm có gán point spring property (= cọc) ──────────────
+        // Loại cọc: nếu chỉ có 1 loại point spring khai báo -> dùng tên đó cho mọi cọc;
+        // nếu chưa khai báo -> "Cọc"; nếu nhiều loại -> nhóm theo độ cứng đứng Kz.
+        private static string ResolveType(PilePoint p, List<string> defined)
+        {
+            if (defined != null && defined.Count == 1) return defined[0];
+            if (defined == null || defined.Count == 0) return "Cọc";
+            return "Kz=" + p.Kz.ToString("0", CultureInfo.InvariantCulture);
+        }
+
+        // ── Lấy danh sách điểm có gán point spring (= cọc) ──────────────────────
         private static List<PilePoint> GetPilePoints(cSapModel sap)
         {
             var list = new List<PilePoint>();
 
             int n = 0;
             string[] names = null;
-            if (sap.PointObj.GetNameList(ref n, ref names) != 0 || names == null)
-                return list;
+            try
+            {
+                if (sap.PointObj.GetNameList(ref n, ref names) != 0 || names == null)
+                    return list;
+            }
+            catch { return list; }
 
             foreach (string pt in names)
             {
                 if (string.IsNullOrWhiteSpace(pt)) continue;
 
-                string prop = GetSpringProp(sap, pt);
-                if (string.IsNullOrWhiteSpace(prop)) continue;
+                double kz;
+                if (!HasSpring(sap, pt, out kz)) continue;
 
                 string label = pt, story = "";
                 try { sap.PointObj.GetLabelFromName(pt, ref label, ref story); }
@@ -157,30 +184,33 @@ namespace Etabs_Ultimate_Tools
                 {
                     Name = pt,
                     Label = string.IsNullOrWhiteSpace(label) ? pt : label.Trim(),
-                    SpringType = prop.Trim()
+                    Kz = kz
                 });
             }
 
             return list;
         }
 
-        // Lấy tên point spring property gán cho 1 điểm (reflection để tránh lệ thuộc
-        // chữ ký hàm chính xác giữa các phiên bản ETABS API).
-        private static string GetSpringProp(cSapModel sap, string pointName)
+        // GetSpring trả về 0 KHI VÀ CHỈ KHI điểm có lò xo (tổng hợp mọi spring gán
+        // cho điểm, kể cả gán qua point spring property). K là 6 số hạng đường chéo.
+        private static bool HasSpring(cSapModel sap, string pointName, out double kz)
         {
+            kz = 0.0;
             try
             {
-                object po = sap.PointObj;
-                var method = po.GetType().GetMethod("GetSpringAssignment",
-                    new[] { typeof(string), typeof(string).MakeByRefType() });
-                if (method == null) return "";
+                double[] k = new double[6];
+                int ret = sap.PointObj.GetSpring(pointName, ref k);
+                if (ret != 0 || k == null || k.Length < 3) return false;
 
-                object[] args = new object[] { pointName, "" };
-                object result = method.Invoke(po, args);
-                int ret = Convert.ToInt32(result);
-                return ret == 0 ? ((args[1] as string) ?? "") : "";
+                bool any = false;
+                for (int i = 0; i < k.Length; i++)
+                    if (Math.Abs(k[i]) > 1e-12) { any = true; break; }
+                if (!any) return false;
+
+                kz = Math.Abs(k[2]);   // U3 (phương đứng)
+                return true;
             }
-            catch { return ""; }
+            catch { return false; }
         }
 
         // ── Đọc phản lực F3 (phương đứng) của 1 điểm: max & min trên mọi step ────
