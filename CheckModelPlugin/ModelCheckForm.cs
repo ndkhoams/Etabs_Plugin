@@ -78,7 +78,7 @@ namespace Etabs_Ultimate_Tools
 
         private void InitializeComponent()
         {
-            Text = "Etabs Ultimate Tools";
+            Text = "Etabs Ultimate Tools  ©2026v1 by KhoaND13";
             Width = 1480;
             Height = 780;
             MinimumSize = new Size(1360, 700);
