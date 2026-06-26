@@ -50,6 +50,13 @@ namespace Etabs_Ultimate_Tools
         private List<ForceRow> _colRows = new List<ForceRow>();
         private int _lastColIndex = -1;
 
+        // Pile Reactions (kiểm tra phản lực cọc)
+        private ComboBox cboPileVert, cboPileWind, cboPileEq;
+        private DataGridView dgvPileCaps, dgvPilePreview;
+        private Button btnPilePreview, btnPileExport;
+        private Label lblPileInfo;
+        private List<PileReactionCase> _pileCases = new List<PileReactionCase>();
+
         // Property Modifiers (mỗi nhóm cấu kiện là 1 ModGroup tái sử dụng)
         private ModGroup _modBeam, _modCol, _modSlab, _modWall;
         private Button btnModApply, btnModRollback;
@@ -97,6 +104,7 @@ namespace Etabs_Ultimate_Tools
             var tabPDelta = new TabPage("P-Delta");
             var tabAxial = new TabPage("Axial Force");
             var tabColExport = new TabPage("Column Force Exporter");
+            var tabPile = new TabPage("Pile Reactions");
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
@@ -105,6 +113,7 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
+            tabs.TabPages.Add(tabPile);
 
             BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
@@ -113,6 +122,7 @@ namespace Etabs_Ultimate_Tools
             BuildPDeltaTab(tabPDelta);
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
+            BuildPileTab(tabPile);
         }
 
         // ---------- Hộp thoại dùng chung ----------
@@ -380,6 +390,313 @@ namespace Etabs_Ultimate_Tools
                 }
 
                 Info("Đã xuất: " + sfd.FileName, ColTitle);
+            }
+        }
+
+        // ---------- Tab kiểm tra phản lực cọc ----------
+
+        private const string PileTitle = "Phản lực cọc";
+
+        private void BuildPileTab(TabPage tab)
+        {
+            var root = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3, Padding = new Padding(12)
+            };
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
+            root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            tab.Controls.Add(root);
+
+            root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊỌU TẢI CỦA CỌC"), 0, 0);
+            root.Controls.Add(MakeSubtitle("(So sánh phản lực đầu cọc theo phương đứng với SCT chịu kéo/nén, đơn vị kN)"), 0, 1);
+
+            var main = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
+            };
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 460));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.Controls.Add(main, 0, 2);
+
+            var left = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, Margin = new Padding(0, 0, 10, 0)
+            };
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 118));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));
+            main.Controls.Add(left, 0, 0);
+
+            var comboPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3
+            };
+            comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
+            comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            for (int i = 0; i < 3; i++) comboPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            left.Controls.Add(comboPanel, 0, 0);
+
+            comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải đứng:"), 0, 0);
+            cboPileVert = MakePileCombo(); comboPanel.Controls.Add(cboPileVert, 1, 0);
+            comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải gió:"), 0, 1);
+            cboPileWind = MakePileCombo(); comboPanel.Controls.Add(cboPileWind, 1, 1);
+            comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải động đất:"), 0, 2);
+            cboPileEq = MakePileCombo(); comboPanel.Controls.Add(cboPileEq, 1, 2);
+
+            left.Controls.Add(new Label
+            {
+                Text = "Khả năng chịu tải theo loại cọc (point spring) — nhập SCT kéo/nén:",
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 1);
+
+            dgvPileCaps = CreateEditableGrid();
+            left.Controls.Add(dgvPileCaps, 0, 2);
+            AddPileCapsColumns();
+
+            var btnRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
+                Margin = new Padding(0, 6, 0, 0)
+            };
+            left.Controls.Add(btnRow, 0, 3);
+
+            btnPilePreview = new Button { Text = "Xem trước", Width = 130, Height = 38, Margin = new Padding(0, 0, 12, 0) };
+            btnPilePreview.Click += (s, e) => PreviewPileReactions();
+            btnRow.Controls.Add(btnPilePreview);
+
+            btnPileExport = new Button { Text = "Xuất Excel (3 sheet)", Width = 190, Height = 38, Enabled = false, Margin = new Padding(0, 0, 0, 0) };
+            btnPileExport.Click += (s, e) => ExportPileReactions();
+            btnRow.Controls.Add(btnPileExport);
+
+            lblPileInfo = new Label
+            {
+                Dock = DockStyle.Fill, ForeColor = Color.DimGray, TextAlign = ContentAlignment.MiddleLeft
+            };
+            left.Controls.Add(lblPileInfo, 0, 4);
+
+            var right = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
+            };
+            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            main.Controls.Add(right, 1, 0);
+
+            right.Controls.Add(new Label
+            {
+                Text = "Preview (gộp cả 3 trường hợp tải):",
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 0);
+
+            dgvPilePreview = CreateGrid();
+            right.Controls.Add(dgvPilePreview, 0, 1);
+            AddPileGridColumns();
+
+            lblPileInfo.Text = "Nhập SCT kéo/nén cho từng loại cọc, chọn 3 tổ hợp rồi bấm Xem trước.";
+        }
+
+        private static Label MakePileLabel(string text) => new Label
+        {
+            Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+        };
+
+        private static ComboBox MakePileCombo() => new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(0, 4, 0, 4)
+        };
+
+        private DataGridView CreateEditableGrid()
+        {
+            return new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                AutoGenerateColumns = false,
+                AllowUserToAddRows = false,
+                BackgroundColor = SystemColors.ControlLightLight,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
+                RowHeadersVisible = false,
+                SelectionMode = DataGridViewSelectionMode.CellSelect,
+                BorderStyle = BorderStyle.FixedSingle,
+                Margin = new Padding(0, 8, 0, 0)
+            };
+        }
+
+        private void AddPileCapsColumns()
+        {
+            dgvPileCaps.Columns.Clear();
+            var c0 = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "Loại cọc", ReadOnly = true, FillWeight = 120,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            };
+            var c1 = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "SCT kéo (kN)", FillWeight = 100,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            };
+            var c2 = new DataGridViewTextBoxColumn
+            {
+                HeaderText = "SCT nén (kN)", FillWeight = 100,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
+                SortMode = DataGridViewColumnSortMode.NotSortable
+            };
+            dgvPileCaps.Columns.Add(c0);
+            dgvPileCaps.Columns.Add(c1);
+            dgvPileCaps.Columns.Add(c2);
+        }
+
+        private void AddPileGridColumns()
+        {
+            dgvPilePreview.Columns.Clear();
+            dgvPilePreview.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
+            AddColumn(dgvPilePreview, "LoadType", "Trường hợp", 140, null, true);
+            AddColumn(dgvPilePreview, "PileType", "Loại cọc", 80, null, true);
+            AddColumn(dgvPilePreview, "PileId", "Số hiệu cọc", 90, null, true);
+            AddColumn(dgvPilePreview, "Combo", "Tổ hợp", 120, null, true);
+            AddColumn(dgvPilePreview, "Reaction", "Phản lực (kN)", 100, "0.#", true);
+            AddColumn(dgvPilePreview, "TensionCap", "SCT kéo (kN)", 95, "0.#", true);
+            AddColumn(dgvPilePreview, "CompressionCap", "SCT nén (kN)", 95, "0.#", true);
+            AddColumn(dgvPilePreview, "Result", "Kết Luận", 90, null, true);
+        }
+
+        private void LoadPileSpringTypes()
+        {
+            if (dgvPileCaps == null) return;
+            dgvPileCaps.Rows.Clear();
+            foreach (var name in PileReactionChecker.GetSpringTypes(_sap))
+                dgvPileCaps.Rows.Add(name, "", "");
+
+            if (dgvPileCaps.Rows.Count == 0 && lblPileInfo != null)
+                lblPileInfo.Text = "Model chưa khai báo loại point spring nào. Hãy gán point spring cho cọc trước.";
+        }
+
+        private Dictionary<string, PileSpringType> ReadPileCaps()
+        {
+            var dict = new Dictionary<string, PileSpringType>(StringComparer.OrdinalIgnoreCase);
+            foreach (DataGridViewRow row in dgvPileCaps.Rows)
+            {
+                if (row.IsNewRow) continue;
+                string name = Convert.ToString(row.Cells[0].Value);
+                if (string.IsNullOrWhiteSpace(name)) continue;
+                dict[name.Trim()] = new PileSpringType
+                {
+                    Name = name.Trim(),
+                    TensionCap = ParseCap(row.Cells[1].Value),
+                    CompressionCap = ParseCap(row.Cells[2].Value)
+                };
+            }
+            return dict;
+        }
+
+        private static double ParseCap(object value)
+        {
+            if (value == null) return 0.0;
+            string s = value.ToString().Trim().Replace(",", ".");
+            double d;
+            return double.TryParse(s, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out d) ? d : 0.0;
+        }
+
+        private List<PileReactionCase> BuildPileCases()
+        {
+            var caps = ReadPileCaps();
+            var cases = new List<PileReactionCase>();
+            AddPileCase(cases, "TỔ HỢP TẢI ĐỨNG", "TAI DUNG", cboPileVert.Text.Trim(), caps);
+            AddPileCase(cases, "TỔ HỢP TẢI GIÓ", "TAI GIO", cboPileWind.Text.Trim(), caps);
+            AddPileCase(cases, "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT", cboPileEq.Text.Trim(), caps);
+            return cases;
+        }
+
+        private void AddPileCase(List<PileReactionCase> cases, string title, string sheet,
+            string combo, Dictionary<string, PileSpringType> caps)
+        {
+            if (string.IsNullOrWhiteSpace(combo)) return;
+            var rows = PileReactionChecker.Compute(_sap, combo, caps);
+            cases.Add(new PileReactionCase { Title = title, SheetName = sheet, Combo = combo, Rows = rows });
+        }
+
+        private void PreviewPileReactions()
+        {
+            List<PileReactionCase> cases;
+            try
+            {
+                _sap.SetPresentUnits(eUnits.kN_m_C);
+                cases = BuildPileCases();
+            }
+            catch (Exception ex)
+            {
+                Warn(ex.Message, PileTitle);
+                return;
+            }
+
+            if (cases.Count == 0)
+            {
+                Warn("Chưa chọn tổ hợp tải nào (cần chọn ít nhất 1 trong 3 trường hợp).", PileTitle);
+                return;
+            }
+
+            _pileCases = cases;
+
+            var preview = new List<PilePreviewRow>();
+            foreach (var c in cases)
+                foreach (var row in c.Rows)
+                    preview.Add(new PilePreviewRow
+                    {
+                        LoadType = c.Title,
+                        PileType = row.PileType,
+                        PileId = row.PileId,
+                        Combo = row.Combo,
+                        Reaction = row.Reaction,
+                        TensionCap = row.TensionCap,
+                        CompressionCap = row.CompressionCap,
+                        Result = row.Result
+                    });
+
+            dgvPilePreview.DataSource = null;
+            dgvPilePreview.DataSource = preview;
+
+            int fail = preview.Count(p => !string.IsNullOrEmpty(p.Result)
+                && p.Result.IndexOf("Không", StringComparison.OrdinalIgnoreCase) >= 0);
+
+            lblPileInfo.Text = "Số trường hợp: " + cases.Count + "  |  Tổng dòng: " + preview.Count + "  |  Không đạt: " + fail;
+
+            btnPileExport.Enabled = preview.Count > 0;
+
+            if (preview.Count == 0)
+                Warn("Không tìm thấy cọc (point spring) nào có phản lực. Hãy kiểm tra model đã gán point spring và đã Run Analysis chưa.", PileTitle);
+        }
+
+        private void ExportPileReactions()
+        {
+            if (_pileCases == null || _pileCases.Count == 0 || _pileCases.All(c => c.Rows == null || c.Rows.Count == 0))
+            {
+                Warn("Chưa có dữ liệu. Hãy bấm Xem trước trước khi xuất.", PileTitle);
+                return;
+            }
+
+            using (var sfd = new SaveFileDialog())
+            {
+                sfd.Filter = "Excel Workbook (*.xlsx)|*.xlsx";
+                sfd.FileName = "KiemTra_PhanLucCoc.xlsx";
+                if (sfd.ShowDialog() != DialogResult.OK) return;
+
+                try
+                {
+                    PileReactionExporter.Export(sfd.FileName, _pileCases);
+                }
+                catch (Exception ex)
+                {
+                    Warn(ex.Message, PileTitle);
+                    return;
+                }
+
+                Info("Đã xuất: " + sfd.FileName, PileTitle);
             }
         }
 
@@ -941,7 +1258,7 @@ namespace Etabs_Ultimate_Tools
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo })
+            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo, cboPileVert, cboPileWind, cboPileEq })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
@@ -951,6 +1268,11 @@ namespace Etabs_Ultimate_Tools
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboSeisCombo, "EQ-SRSS", "Vtot", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
+
+            SelectByKeyword(cboPileVert, "ULS1", "ENV_ULS", "ULS", "COMB", "TT", "BAO");
+            SelectByKeyword(cboPileWind, "ENV_ULS_W", "ENV_W", "WIND", "GIO", "WX", "WY");
+            SelectByKeyword(cboPileEq, "ENV_EQ", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
+            LoadPileSpringTypes();
 
             if (cboAxialCombo.Items.Count > 0 && cboAxialCombo.SelectedIndex < 0) cboAxialCombo.SelectedIndex = 0;
 
@@ -1034,298 +1356,4 @@ namespace Etabs_Ultimate_Tools
             dgvWindDrift.DataSource = displayRows;
 
             if (_windDriftRows.Count > 0 && _windDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
-                Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp gió và model đã Run Analysis chưa.", "Chuyển vị lệch tầng");
-
-            btnWindDriftExport.Enabled = _windDriftRows.Count > 0;
-        }
-
-        private void RunSeismicDriftCheck()
-        {
-            if (!RequireCombo(cboSeisCombo, "Chuyển vị lệch tầng (động đất)", "Chưa chọn tổ hợp động đất.", out var combo)) return;
-            if (!double.TryParse(txtSeisQ.Text, out var q) || q <= 0) q = 1.0;
-            if (!double.TryParse(txtSeisNu.Text, out var nu) || nu <= 0) nu = 1.0;
-            double limitRatio = GetSeismicLimit();
-
-            _sap.SetPresentUnits(eUnits.kN_m_C);
-            _seismicDriftRows = SeismicDriftExtractor.Calculate(_sap, combo, combo, q, nu, limitRatio);
-
-            var displayRows = BuildSeismicDisplayRows(_seismicDriftRows, q, nu, limitRatio);
-
-            dgvSeis.DataSource = null;
-            dgvSeis.DataSource = displayRows;
-
-            if (_seismicDriftRows.Count > 0 && _seismicDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
-                Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp động đất và model đã Run Analysis chưa.", "Chuyển vị lệch tầng (động đất)");
-
-            btnSeisExport.Enabled = _seismicDriftRows.Count > 0;
-        }
-
-        private double GetSeismicLimit()
-        {
-            switch (cboSeisLimit.SelectedIndex)
-            {
-                case 1: return 0.0075;
-                case 2: return 0.010;
-                default: return 0.005;
-            }
-        }
-
-        private void RunAxialCheck()
-        {
-            if (!RequireCombo(cboAxialCombo, "Check lực dọc", "Chưa chọn combo kiểm tra.", out var combo)) return;
-
-            double fckCube = ParseConcreteGrade(cboAxialConcrete.Text);
-            if (fckCube <= 0)
-            {
-                Warn("Cấp bền bê tông không hợp lệ.", "Check lực dọc");
-                return;
-            }
-
-            try
-            {
-                _sap.SetPresentUnits(eUnits.kN_m_C);
-                var calc = new AxialCheckCalculator(_sap, fckCube, AxialAlphaCc, AxialGammaC, AxialColumnLimit, AxialWallLimit);
-                _axialRows = calc.Build(combo);
-            }
-            catch (Exception ex)
-            {
-                Warn(ex.Message, "Check lực dọc");
-                return;
-            }
-
-            dgvAxial.DataSource = null;
-            dgvAxial.DataSource = _axialRows;
-
-            int ok = _axialRows.Count(r => string.Equals(r.Result, "Thỏa mãn", StringComparison.OrdinalIgnoreCase));
-            int ng = _axialRows.Count - ok;
-            lblAxialInfo.Text = "Tổng: " + _axialRows.Count + "  |  Thỏa: " + ok + "  |  Không: " + ng;
-
-            btnAxialExport.Enabled = _axialRows.Count > 0;
-        }
-
-        private static double ParseConcreteGrade(string text)
-        {
-            if (string.IsNullOrWhiteSpace(text)) return 0;
-            var m = System.Text.RegularExpressions.Regex.Match(text, @"(\d+(?:[\.,]\d+)?)");
-            if (!m.Success) return 0;
-            string num = m.Groups[1].Value.Replace(',', '.');
-            double v;
-            return double.TryParse(num, System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out v) ? v : 0;
-        }
-
-        // ---------- Gom dòng theo tầng (dùng chung cho Wind / WindDrift / Seismic) ----------
-
-        private static List<TOut> BuildStoryRows<TIn, TOut>(
-            IEnumerable<TIn> rows,
-            Func<TIn, string> storyFn,
-            Func<TIn, double> elevFn,
-            Func<TIn, string> dirFn,
-            Func<TIn, double> magFn,
-            Func<TIn, TIn, TOut> build) where TIn : class
-        {
-            var result = new List<TOut>();
-            var groups = rows
-                .Where(r => !EtabsHelper.IsBaseLevel(storyFn(r)))
-                .GroupBy(storyFn, StringComparer.OrdinalIgnoreCase)
-                .OrderByDescending(g => g.Max(elevFn));
-
-            foreach (var g in groups)
-            {
-                var x = g.Where(r => dirFn(r).Equals("X", StringComparison.OrdinalIgnoreCase))
-                         .OrderByDescending(r => Math.Abs(magFn(r))).FirstOrDefault();
-                var y = g.Where(r => dirFn(r).Equals("Y", StringComparison.OrdinalIgnoreCase))
-                         .OrderByDescending(r => Math.Abs(magFn(r))).FirstOrDefault();
-                if (x == null && y == null) continue;
-                result.Add(build(x, y));
-            }
-            return result;
-        }
-
-        private List<WindGridRow> BuildWindDisplayRows(List<TopDisplacementRow> rows)
-        {
-            return BuildStoryRows(rows,
-                r => r.TopStory, r => r.TopElevation, r => r.Direction, r => r.TopDisplacement,
-                (x, y) =>
-                {
-                    var refRow = x ?? y;
-                    double h = refRow.TopElevation;
-                    double dx = x != null ? x.TopDisplacementMm : 0.0;
-                    double dy = y != null ? y.TopDisplacementMm : 0.0;
-                    double limitMm = h * 1000.0 / 500.0;
-                    return new WindGridRow
-                    {
-                        Story = refRow.TopStory,
-                        StoryElevation = refRow.StoryElevation,
-                        Height = h,
-                        DeltaX = dx,
-                        DeltaY = dy,
-                        LimitMm = limitMm,
-                        Check = Math.Max(dx, dy) <= limitMm ? "OK" : "NG"
-                    };
-                });
-        }
-
-        private List<WindDriftGridRow> BuildWindDriftDisplayRows(List<WindDriftRow> rows, double limitDen)
-        {
-            double limit = limitDen > 0 ? 1.0 / limitDen : 0.0;
-            return BuildStoryRows(rows,
-                r => r.Story, r => r.Elevation, r => r.Direction, r => r.Drift,
-                (x, y) =>
-                {
-                    var refRow = x ?? y;
-                    double driftX = x != null ? x.Drift : 0.0;
-                    double driftY = y != null ? y.Drift : 0.0;
-                    return new WindDriftGridRow
-                    {
-                        Story = refRow.Story,
-                        Elevation = refRow.Elevation,
-                        Height = refRow.Height,
-                        DriftX = driftX,
-                        DriftY = driftY,
-                        Limit = limit,
-                        Check = Math.Max(driftX, driftY) <= limit ? "OK" : "NG"
-                    };
-                });
-        }
-
-        private List<SeisGridRow> BuildSeismicDisplayRows(List<SeismicDriftRow> rows, double q, double nu, double limit)
-        {
-            double allow = (q * nu) > 0 ? limit / (q * nu) : 0.0;
-            return BuildStoryRows(rows,
-                r => r.Story, r => r.Elevation, r => r.Direction, r => r.Drift,
-                (x, y) =>
-                {
-                    var refRow = x ?? y;
-                    double driftX = x != null ? x.Drift : 0.0;
-                    double driftY = y != null ? y.Drift : 0.0;
-                    double driftMax = Math.Max(driftX, driftY);
-                    return new SeisGridRow
-                    {
-                        Story = refRow.Story,
-                        Elevation = refRow.Elevation,
-                        Height = refRow.Height,
-                        DriftX = driftX,
-                        DriftY = driftY,
-                        DriftMax = driftMax,
-                        AllowLimit = allow,
-                        Check = allow > 0 && driftMax <= allow ? "OK" : "NG"
-                    };
-                });
-        }
-
-        // ---------- Lớp dữ liệu hiển thị / nhóm modifier ----------
-
-        private class ModGroup
-        {
-            public string Title;
-            public readonly List<TextBox> Boxes = new List<TextBox>();
-
-            public double[] ReadValues()
-            {
-                var arr = new double[Boxes.Count];
-                for (int i = 0; i < Boxes.Count; i++) arr[i] = ReadModValue(Boxes[i]);
-                return arr;
-            }
-        }
-
-        private class WindGridRow
-        {
-            public string Story { get; set; }
-            public double StoryElevation { get; set; }
-            public double Height { get; set; }
-            public double DeltaX { get; set; }
-            public double DeltaY { get; set; }
-            public double LimitMm { get; set; }
-            public string Check { get; set; }
-        }
-
-        private class WindDriftGridRow
-        {
-            public string Story { get; set; }
-            public double Elevation { get; set; }
-            public double Height { get; set; }
-            public double DriftX { get; set; }
-            public double DriftY { get; set; }
-            public double Limit { get; set; }
-            public string Check { get; set; }
-        }
-
-        private class SeisGridRow
-        {
-            public string Story { get; set; }
-            public double Elevation { get; set; }
-            public double Height { get; set; }
-            public double DriftX { get; set; }
-            public double DriftY { get; set; }
-            public double DriftMax { get; set; }
-            public double AllowLimit { get; set; }
-            public string Check { get; set; }
-        }
-
-        // ---------- Xuất Excel ----------
-
-        private void RunExport(Action<string> writer, string suggestedName)
-        {
-            using (var sfd = new SaveFileDialog())
-            {
-                sfd.Filter = "Excel Workbook (*.xlsx)|*.xlsx";
-                sfd.FileName = suggestedName;
-                if (sfd.ShowDialog() != DialogResult.OK) return;
-
-                writer(sfd.FileName);
-                Info("Đã xuất: " + sfd.FileName, "Xuất Excel");
-            }
-        }
-
-        private void ExportPDelta()
-        {
-            if (_rows == null || _rows.Count == 0)
-            {
-                Warn("Chưa có dữ liệu P-Delta để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel");
-                return;
-            }
-            RunExport(file => ExcelExporter.Export(file, _rows, _qFactor), "P-Delta.xlsx");
-        }
-
-        private void ExportWind()
-        {
-            if (_windRows == null || _windRows.Count == 0)
-            {
-                Warn("Chưa có dữ liệu chuyển vị đỉnh để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel");
-                return;
-            }
-            RunExport(file => ExcelExporter.Export(file, null, _qFactor, _windRows), "ChuyenViDinh_Gio.xlsx");
-        }
-
-        private void ExportWindDrift()
-        {
-            if (_windDriftRows == null || _windDriftRows.Count == 0)
-            {
-                Warn("Chưa có dữ liệu chuyển vị lệch tầng do gió để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel");
-                return;
-            }
-            RunExport(file => ExcelExporter.Export(file, null, _qFactor, null, _windDriftRows), "ChuyenViLechTang_Gio.xlsx");
-        }
-
-        private void ExportSeismic()
-        {
-            if (_seismicDriftRows == null || _seismicDriftRows.Count == 0)
-            {
-                Warn("Chưa có dữ liệu chuyển vị lệch tầng do động đất để xuất. Hãy bấm Tính kiểm tra trước.", "Xuất Excel");
-                return;
-            }
-            RunExport(file => ExcelExporter.Export(file, null, _qFactor, null, null, _seismicDriftRows), "ChuyenViLechTang_DongDat.xlsx");
-        }
-
-        private void ExportAxial()
-        {
-            if (_axialRows == null || _axialRows.Count == 0)
-            {
-                Warn("Chưa có dữ liệu lực dọc để xuất. Hãy bấm Kiểm tra trước.", "Xuất Excel");
-                return;
-            }
-            RunExport(file => AxialCheckExporter.Export(_axialRows, file, AxialAlphaCc, AxialGammaC, AxialColumnLimit, AxialWallLimit), "KiemTra_LucDoc.xlsx");
-        }
-    }
-}
+                
