@@ -6,9 +6,9 @@ using System.Linq;
 namespace CheckModelPlugin
 {
     /// <summary>
-    /// Kiểm tra chuyển vị lệch tầng do tải trọng động đất theo TCVN 9386:2025.
+    /// Kiểm tra chuyển vị lệch tầng do tải trọng động đất theo TCVN 9386-1:2025.
     /// Điều kiện hạn chế hư hỏng: dr · ν ≤ limit · h  ⇔  q × drift × ν ≤ limit
-    /// với drift = de/h lấy trực tiếp từ ETABS Story Drifts (combo động đất, đàn hồi),
+    /// với drift = de/h lấy trực tiếp từ ETABS Story Drifts (tổ hợp động đất thuần 1.0EX + 0.3EY, đàn hồi),
     /// lấy max trị tuyệt đối theo từng tầng & từng phương.
     /// </summary>
     public static class SeismicDriftExtractor
