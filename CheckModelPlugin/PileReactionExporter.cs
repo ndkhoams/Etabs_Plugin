@@ -40,6 +40,7 @@ namespace Etabs_Ultimate_Tools
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
             ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Rows("A1").Height = 24;
 
             // Dải phụ = tên trường hợp tải
             ws.Cell("A2").Value = c.Title;
@@ -47,6 +48,11 @@ namespace Etabs_Ultimate_Tools
             ws.Cell("A2").Style.Font.Bold = true;
             ws.Cell("A2").Style.Fill.BackgroundColor = HeadFill;
             ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Rows("A2").Height = 18;
+            var subTitleRange = ws.Range("A2:G2");
+
+            subTitleRange.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            subTitleRange.Style.Border.OutsideBorderColor = XLColor.Black;
 
             int headerRow = 3;
             string[] heads = { "Loại cọc", "Số hiệu cọc", "Tổ hợp", "Phản lực đầu cọc (kN)",
@@ -109,7 +115,7 @@ namespace Etabs_Ultimate_Tools
             body.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
             body.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
             body.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         }
     }
 }
