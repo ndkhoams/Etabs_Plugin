@@ -48,7 +48,7 @@ namespace CheckModelPlugin
 
         private void InitializeComponent()
         {
-            Text = "Check Model";
+            Text = "Etabs Model Ultimate Tool";
             Width = 1320;
             Height = 780;
             MinimumSize = new Size(1180, 700);
@@ -58,10 +58,10 @@ namespace CheckModelPlugin
             var tabs = new TabControl { Dock = DockStyle.Fill, Font = new Font("Arial", 9F) };
             Controls.Add(tabs);
 
-            var tabPDelta = new TabPage("Check P-Delta");
-            var tabWind = new TabPage("Chuyển vị đỉnh do gió");
-            var tabWindDrift = new TabPage("Chuyển vị lệch tầng do gió");
-            var tabSeis = new TabPage("Chuyển vị lệch tầng do động đất");
+            var tabPDelta = new TabPage("P-Delta");
+            var tabWind = new TabPage("Chuyển vị đỉnh");
+            var tabWindDrift = new TabPage("CV lệch tầng do gió");
+            var tabSeis = new TabPage("CV lệch tầng do động đất");
             tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabWind);
             tabs.TabPages.Add(tabWindDrift);
@@ -96,7 +96,7 @@ namespace CheckModelPlugin
 
             var box = new GroupBox
             {
-                Dock = DockStyle.Fill, Text = "Tổ hợp kiểm tra", Padding = new Padding(10, 4, 10, 6)
+                Dock = DockStyle.Fill, Text = "Tổ hợp kiểm tra", Padding = new Padding(10, 4, 10, 10)
             };
             root.Controls.Add(box, 0, 3);
 
@@ -122,8 +122,8 @@ namespace CheckModelPlugin
             dgv = BuildScaffold(tab,
                 "KIỂM TRA ĐIỀU KIỆN P-DELTA",
                 "(Theo TCVN 9386-1:2025)",
-                "θ = q × drift × Ptot / Vtot  |  drift = Δ/h từ ETABS Story Drift",
-                "Tổ hợp dùng chung để lấy drift = Δ/h và Vtot theo cả hai phương X, Y. Ptot tự động lấy từ Mass Summary by Story: Mass × 9.80665 và cộng dồn từ mái xuống.",
+                "θ = dr / h × Ptot / Vtot =  q × drift × Ptot / Vtot (mục 4.4.2.2 eq. 4.28)",
+                "drift = Δ/h được xác định từ hệ quả của tác động động đất thiết kế (mục 4.3.4); Vtot là tổng lực cắt tầng do động đất gây ra; 2 thành phần này đều lấy từ tổ hợp các thành phần phương ngang của động đất SRSS(EX^2+EY^2) (mục 4.3.3.5.1.2b). Ptot tự động lấy từ Mass Summary by Story.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp:", 68));
@@ -144,7 +144,7 @@ namespace CheckModelPlugin
                 "KIỂM TRA CHUYỂN VỊ ĐỈNH CÔNG TRÌNH",
                 "(Theo TCVN 2737:2023)",
                 "Điều kiện kiểm tra: f ≤ fu  |  Chuyển vị ngang tổng thể giới hạn H/500",
-                "Giới hạn chuyển vị ngang tổng thể mặc định là H/500. H được tính là khoảng cách từ mặt móng đến trục của xà đỡ mái.",
+                "Giới hạn chuyển vị ngang tổng thể là H/500. H được tính là khoảng cách từ mặt móng đến mái.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp gió:", 78));
@@ -162,7 +162,7 @@ namespace CheckModelPlugin
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG GIÓ",
                 "(Theo TCVN 2737:2023)",
                 "Điều kiện: drift = Δ/h ≤ 1/500 cho từng tầng",
-                "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió. Δ = drift × chiều cao tầng. Giới hạn cố định h/500 theo TCVN 2737:2023.",
+                "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió. Giới hạn h/500 theo TCVN 2737:2023.",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp gió:", 78));
@@ -179,8 +179,8 @@ namespace CheckModelPlugin
             dgvSeis = BuildScaffold(tab,
                 "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
                 "(Theo TCVN 9386-1:2025)",
-                "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  drift ≤ limit/(ν·q)",
-                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. Tổ hợp drift là động đất thuần theo quy tắc phương 1.0EX + 0.3EY (KHÔNG dùng tổ hợp trọng lực G+Q+E — tổ hợp đó chỉ dùng cho nội lực & P-Delta). dr = q × de là chuyển vị lệch tầng thiết kế. ν: hệ số chiết giảm (0.4 – 0.5). limit: 0.005 (giòn) / 0.0075 (dẻo) / 0.010 (không cản trở).",
+                "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  drift ≤ limit/(ν·q) (mục 4.4.3.2)",
+                "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2).",
                 out var bar);
 
             bar.Controls.Add(MakeFieldLabel("Tổ hợp động đất:", 110));
@@ -345,10 +345,10 @@ namespace CheckModelPlugin
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
             }
 
-            SelectByKeyword(cboCombo, "Vtot", "ENV_DD", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
+            SelectByKeyword(cboCombo, "EQ-SRSS", "Vtot", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
-            SelectByKeyword(cboSeisCombo, "ENV_DD", "EQ", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
+            SelectByKeyword(cboSeisCombo, "EQ-SRSS", "Vtot", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
         }
 
         private static void SelectByKeyword(ComboBox cbo, params string[] keys)
@@ -388,7 +388,7 @@ namespace CheckModelPlugin
 
             dgv.DataSource = null;
             dgv.DataSource = _rows;
-            UpdateTitleSummary();
+            
 
             if (_rows.Count > 0 && _rows.All(r => Math.Abs(r.Ptot) < 1e-9))
                 MessageBox.Show("Ptot vẫn bằng 0. Hãy kiểm tra Mass Summary by Story và model đã Run Analysis chưa.", "Check Model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -414,7 +414,7 @@ namespace CheckModelPlugin
 
             dgvWind.DataSource = null;
             dgvWind.DataSource = displayRows;
-            UpdateTitleSummary();
+           
 
             if (_windRows.Count > 0 && _windRows.All(r => Math.Abs(r.TopDisplacement) < 1e-12))
                 MessageBox.Show("Chuyển vị các tầng đang bằng 0. Hãy kiểm tra combo gió và bảng Diaphragm Center of Mass Displacements đã có dữ liệu chưa.", "Chuyển vị đỉnh", MessageBoxButtons.OK, MessageBoxIcon.Warning);
@@ -626,20 +626,13 @@ namespace CheckModelPlugin
             public double AllowLimit { get; set; }
             public string Check { get; set; }
         }
-
-        private void UpdateTitleSummary()
-        {
-            double qx = _rows.Where(r => r.Direction.Equals("X", StringComparison.OrdinalIgnoreCase)).Select(r => r.Theta).DefaultIfEmpty(0).Max();
-            double qy = _rows.Where(r => r.Direction.Equals("Y", StringComparison.OrdinalIgnoreCase)).Select(r => r.Theta).DefaultIfEmpty(0).Max();
-            Text = string.Format("Check Model | θmax X = {0:0.0000}; θmax Y = {1:0.0000}", qx, qy);
-        }
-
+                
         private void ExportExcel()
         {
             using (var sfd = new SaveFileDialog())
             {
                 sfd.Filter = "Excel Workbook (*.xlsx)|*.xlsx";
-                sfd.FileName = "Kiem_tra_chuyen_vi_TCVN.xlsx";
+                sfd.FileName = "Etabs_Model_Ultimate_Tool.xlsx";
                 if (sfd.ShowDialog() != DialogResult.OK) return;
 
                 PDeltaExcelExporter.Export(sfd.FileName, _rows, _qFactor, _windRows, _windDriftRows, _seismicDriftRows);

@@ -29,7 +29,8 @@ namespace CheckModelPlugin
                     "3. Kiểm tra theo phương Y", qFactor, ref row);
 
                 ws.Column(1).Width = 3;
-                for (int c = 2; c <= 9; c++) ws.Column(c).Width = 12;
+                for (int c = 2; c <= 8; c++) ws.Column(c).Width = 12;
+                ws.Column(9).Width = 20;
                 ws.Rows().Height = 18;
                 ws.Row(1).Height = 21;
                 ws.Row(2).Height = 18;
@@ -86,7 +87,7 @@ namespace CheckModelPlugin
             ws.Cell("A3").Value = "1. Chú thích";
             ws.Cell("A3").Style.Font.Bold = true;
 
-            ws.Cell("B4").Value = "θ - hệ số độ nhạy của chuyển vị tương đối giữa các tầng";
+            ws.Cell("B4").Value = "Kiểm tra hiệu ứng P-Delta được thực hiện thông qua hệ số độ nhạy chuyển vị ngang tương đối giữa các tầng, θ";
             ws.Cell("B5").Value = "θ = q × drift × Ptot / Vtot";
             ws.Range("B5:I5").Merge();
             ws.Cell("B5").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -95,8 +96,8 @@ namespace CheckModelPlugin
             ws.Cell("B6").Value = "Ptot - Tổng tải trọng đứng (trọng lực) tại tầng đang xét và tất cả các tầng bên trên nó";
             ws.Range("B6:I6").Merge();
             ws.Cell("B7").Value = "trong tình huống thiết kế động đất";
-            ws.Cell("B8").Value = "Vtot - tổng lực cắt tầng do động đất gây ra";
-            ws.Cell("B9").Value = "drift - tỷ số lệch tầng đàn hồi, lấy từ ETABS Story Drift";
+            ws.Cell("B8").Value = "Vtot - tổng lực cắt tầng, xác định từ hệ quả của tác động động đất đang xét";
+            ws.Cell("B9").Value = "drift - tỷ số lệch tầng đàn hồi";
             ws.Cell("B10").Value = "q × drift - tỷ số lệch tầng thiết kế";
             ws.Cell("B11").Value = "q - hệ số ứng xử";
             ws.Range("B11:I11").Merge();
@@ -374,7 +375,7 @@ namespace CheckModelPlugin
             ws.Range("B6:I6").Merge();
             ws.Cell("B7").Value = "Điều kiện kiểm tra: drift = Δ/h ≤ 1/" + limitText + " cho từng tầng.";
             ws.Range("B7:I7").Merge();
-            ws.Cell("B8").Value = "Trong đó Δ là chuyển vị lệch tầng, h là chiều cao tầng. drift lấy trực tiếp từ ETABS Story Drifts.";
+            ws.Cell("B8").Value = "Trong đó Δ là chuyển vị lệch tầng, h là chiều cao tầng.";
             ws.Range("B8:I8").Merge();
 
             ws.Cell("A10").Value = "2. Kiểm tra chuyển vị lệch tầng";
@@ -387,7 +388,7 @@ namespace CheckModelPlugin
             ws.Cell("C12").Value = anyNg
                 ? "Có tầng không đảm bảo điều kiện chuyển vị lệch tầng."
                 : "Tất cả các tầng đảm bảo điều kiện chuyển vị lệch tầng.";
-            ws.Range("C12:I12").Merge();
+            ws.Range("C12:G12").Merge();
             ws.Cell("C12").Style.Font.Bold = true;
             ws.Cell("C12").Style.Font.Italic = true;
             ws.Cell("C12").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
@@ -501,11 +502,11 @@ namespace CheckModelPlugin
             ws.Range("B6:J6").Merge();
             ws.Cell("B7").Value = "Trong đó dr = q · de là chuyển vị lệch tầng thiết kế; de là chuyển vị lệch tầng đàn hồi.";
             ws.Range("B7:J7").Merge();
-            ws.Cell("B8").Value = "Quy về dạng so sánh trực tiếp: drift ≤ limit/(ν·q), với drift = de/h lấy từ ETABS Story Drifts.";
+            ws.Cell("B8").Value = "drift ≤ limit/(ν·q), với drift = de/h";
             ws.Range("B8:J8").Merge();
             ws.Cell("B9").Value = "ν - hệ số chiết giảm; limit - giới hạn (0.005 giòn / 0.0075 dẻo / 0.010 không cản trở).";
             ws.Range("B9:J9").Merge();
-            ws.Cell("B10").Value = "Tổ hợp tính drift: động đất thuần theo quy tắc phương 1.0EX + 0.3EY (và 0.3EX + 1.0EY); KHÔNG dùng tổ hợp trọng lực G+Q+E (tổ hợp đó chỉ dùng cho nội lực & kiểm tra P-Delta).";
+            ws.Cell("B10").Value = "Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2)";
             ws.Range("B10:J10").Merge();
 
             ws.Cell("A12").Value = "2. Kiểm tra chuyển vị lệch tầng";
@@ -521,7 +522,7 @@ namespace CheckModelPlugin
             ws.Cell("C15").Value = anyNg
                 ? "Có tầng không đảm bảo điều kiện chuyển vị lệch tầng do động đất."
                 : "Tất cả các tầng đảm bảo điều kiện chuyển vị lệch tầng do động đất.";
-            ws.Range("C15:J15").Merge();
+            ws.Range("C15:H15").Merge();
             ws.Cell("C15").Style.Font.Bold = true;
             ws.Cell("C15").Style.Font.Italic = true;
             ws.Cell("C15").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
@@ -558,8 +559,8 @@ namespace CheckModelPlugin
 
             ws.Column(1).Width = 3;
             ws.Column(2).Width = 12;
-            for (int col = 3; col <= 6; col++) ws.Column(col).Width = 13;
-            ws.Column(7).Width = 18;
+            for (int col = 3; col <= 6; col++) ws.Column(col).Width = 12;
+            ws.Column(7).Width = 12;
             ws.Column(8).Width = 12;
         }
 
