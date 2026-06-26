@@ -38,6 +38,7 @@ namespace Etabs_Ultimate_Tools
     /// <summary>
     /// Phát hiện các điểm có gán point spring (= cọc), đọc phản lực đầu cọc (F3)
     /// theo từng tổ hợp và so sánh với SCT chịu kéo/nén.
+    /// Tổ hợp bao (có Max/Min) được tách thành 2 trường hợp tải riêng.
     /// Port net48 (không dùng record/init/MaxBy/range operator).
     /// </summary>
     public static class PileReactionChecker
@@ -77,32 +78,39 @@ namespace Etabs_Ultimate_Tools
         }
 
         // ── Tính phản lực + kết luận cho 1 tổ hợp tải ────────────────────────────
-        public static List<PileReactionRow> Compute(cSapModel sap, string combo,
-            Dictionary<string, PileSpringType> caps)
+        // Trả về 1 hoặc 2 trường hợp (case):
+        //  - Tổ hợp bao (Max/Min) -> 2 case: "(Max - nén)" và "(Min - kéo)".
+        //  - Tổ hợp 1 giá trị     -> 1 case (so cả kéo lẫn nén).
+        public static List<PileReactionCase> ComputeCases(cSapModel sap, string combo,
+            string baseTitle, string baseSheet, Dictionary<string, PileSpringType> caps)
         {
-            var rows = new List<PileReactionRow>();
-            if (string.IsNullOrWhiteSpace(combo)) return rows;
+            var result = new List<PileReactionCase>();
+            if (string.IsNullOrWhiteSpace(combo)) return result;
 
             sap.SetPresentUnits(eUnits.kN_m_C);
 
-            // Bật chế độ bao (Envelopes): tổ hợp bao trả về CẢ Max và Min cho mỗi điểm,
-            // đảm bảo không mất giá trị kéo (min) hoặc nén (max).
+            // Bật chế độ bao (Envelopes): tổ hợp bao trả về CẢ Max và Min cho mỗi điểm.
             try { sap.Results.Setup.SetOptionMultiValuedCombo(1); } catch { }
 
             var piles = GetPilePoints(sap);
-            if (piles.Count == 0) return rows;
+            if (piles.Count == 0) return result;
 
             var defined = GetSpringTypes(sap);
             EtabsHelper.SelectCaseOrCombo(sap, combo);
 
+            var maxRows = new List<PileReactionRow>();
+            var minRows = new List<PileReactionRow>();
+            var singleRows = new List<PileReactionRow>();
+            bool isEnvelope = false;
+
             foreach (var pile in piles)
             {
                 double pmax, pmin;
-                if (!TryGetReactionRange(sap, pile.Name, out pmax, out pmin))
+                bool multi;
+                if (!TryGetReactionRange(sap, pile.Name, out pmax, out pmin, out multi))
                     continue;
 
                 string type = ResolveType(pile, defined);
-
                 double tensCap = 0, compCap = 0;
                 if (caps != null)
                 {
@@ -114,40 +122,90 @@ namespace Etabs_Ultimate_Tools
                     }
                 }
 
-                double comp = pmax > 0 ? pmax : 0.0;   // phần nén  (phản lực dương)
-                double tens = pmin < 0 ? -pmin : 0.0;  // phần kéo  (phản lực âm)
-
-                bool hasComp = compCap > 0;
-                bool hasTens = tensCap > 0;
-                bool okComp = !hasComp || comp <= compCap;
-                bool okTens = !hasTens || tens <= tensCap;
-
-                string result;
-                if (!hasComp && !hasTens)
-                    result = "Chưa nhập SCT";
-                else
-                    result = (okComp && okTens) ? "Đạt" : "Không Đạt";
-
-                double compUtil = hasComp ? comp / compCap : 0.0;
-                double tensUtil = hasTens ? tens / tensCap : 0.0;
-                double reaction = compUtil >= tensUtil ? pmax : pmin;
-
-                rows.Add(new PileReactionRow
+                if (multi)
                 {
-                    PileType = type,
-                    PileId = pile.Label,
-                    Combo = combo,
-                    Reaction = reaction,
-                    TensionCap = tensCap,
-                    CompressionCap = compCap,
-                    Result = result
-                });
+                    isEnvelope = true;
+                    maxRows.Add(BuildCompRow(type, pile.Label, combo, pmax, tensCap, compCap));
+                    minRows.Add(BuildTensRow(type, pile.Label, combo, pmin, tensCap, compCap));
+                }
+                else
+                {
+                    singleRows.Add(BuildSingleRow(type, pile.Label, combo, pmax, tensCap, compCap));
+                }
             }
 
-            return rows
+            if (isEnvelope)
+            {
+                if (maxRows.Count > 0)
+                    result.Add(MakeCase(baseTitle + " (Max - nén)", baseSheet + " MAX", combo, maxRows));
+                if (minRows.Count > 0)
+                    result.Add(MakeCase(baseTitle + " (Min - kéo)", baseSheet + " MIN", combo, minRows));
+            }
+            else if (singleRows.Count > 0)
+            {
+                result.Add(MakeCase(baseTitle, baseSheet, combo, singleRows));
+            }
+
+            return result;
+        }
+
+        // Dòng kiểm tra NÉN (dùng Max): phản lực dương lớn nhất so với SCT nén.
+        private static PileReactionRow BuildCompRow(string type, string id, string combo,
+            double pmax, double tensCap, double compCap)
+        {
+            double comp = pmax > 0 ? pmax : 0.0;
+            string result;
+            if (compCap <= 0) result = "Chưa nhập SCT";
+            else result = comp <= compCap ? "Đạt" : "Không Đạt";
+            return new PileReactionRow
+            {
+                PileType = type, PileId = id, Combo = combo, Reaction = pmax,
+                TensionCap = tensCap, CompressionCap = compCap, Result = result
+            };
+        }
+
+        // Dòng kiểm tra KÉO (dùng Min): phản lực âm nhỏ nhất so với SCT kéo.
+        private static PileReactionRow BuildTensRow(string type, string id, string combo,
+            double pmin, double tensCap, double compCap)
+        {
+            double tens = pmin < 0 ? -pmin : 0.0;
+            string result;
+            if (tensCap <= 0) result = "Chưa nhập SCT";
+            else result = tens <= tensCap ? "Đạt" : "Không Đạt";
+            return new PileReactionRow
+            {
+                PileType = type, PileId = id, Combo = combo, Reaction = pmin,
+                TensionCap = tensCap, CompressionCap = compCap, Result = result
+            };
+        }
+
+        // Dòng tổ hợp 1 giá trị: so cả kéo lẫn nén trên cùng 1 dòng.
+        private static PileReactionRow BuildSingleRow(string type, string id, string combo,
+            double v, double tensCap, double compCap)
+        {
+            double comp = v > 0 ? v : 0.0;
+            double tens = v < 0 ? -v : 0.0;
+            bool hasComp = compCap > 0, hasTens = tensCap > 0;
+            bool okComp = !hasComp || comp <= compCap;
+            bool okTens = !hasTens || tens <= tensCap;
+            string result = (!hasComp && !hasTens)
+                ? "Chưa nhập SCT"
+                : ((okComp && okTens) ? "Đạt" : "Không Đạt");
+            return new PileReactionRow
+            {
+                PileType = type, PileId = id, Combo = combo, Reaction = v,
+                TensionCap = tensCap, CompressionCap = compCap, Result = result
+            };
+        }
+
+        private static PileReactionCase MakeCase(string title, string sheet, string combo,
+            List<PileReactionRow> rows)
+        {
+            var sorted = rows
                 .OrderBy(r => r.PileType, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(r => r.PileId, new NaturalComparer())
                 .ToList();
+            return new PileReactionCase { Title = title, SheetName = sheet, Combo = combo, Rows = sorted };
         }
 
         // Loại cọc: nếu chỉ có 1 loại point spring khai báo -> dùng tên đó cho mọi cọc;
@@ -218,11 +276,13 @@ namespace Etabs_Ultimate_Tools
         }
 
         // ── Đọc phản lực F3 (phương đứng) của 1 điểm: max & min trên mọi step ────
+        // multi = true nếu tổ hợp trả về > 1 giá trị (tổ hợp bao Max/Min).
         private static bool TryGetReactionRange(cSapModel sap, string pointName,
-            out double pmax, out double pmin)
+            out double pmax, out double pmin, out bool multi)
         {
             pmax = double.MinValue;
             pmin = double.MaxValue;
+            multi = false;
 
             int num = 0;
             string[] obj = new string[0], elm = new string[0];
@@ -250,6 +310,7 @@ namespace Etabs_Ultimate_Tools
                 if (f3[i] < pmin) pmin = f3[i];
             }
 
+            multi = count > 1;
             return pmax != double.MinValue && pmin != double.MaxValue;
         }
 
