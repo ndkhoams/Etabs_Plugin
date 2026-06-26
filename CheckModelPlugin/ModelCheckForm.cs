@@ -43,6 +43,13 @@ namespace Etabs_Ultimate_Tools
         private Label lblAxialInfo;
         private List<AxialCheckRow> _axialRows = new List<AxialCheckRow>();
 
+        private CheckedListBox clbColCombos;
+        private RadioButton rdoColText, rdoColExcel;
+        private Button btnColPreview, btnColExportFile;
+        private DataGridView dgvColPreview;
+        private Label lblColInfo;
+        private List<ForceRow> _colRows = new List<ForceRow>();
+
         private const double AxialAlphaCc = 1.0;
         private const double AxialGammaC = 1.2;
         private const double AxialColumnLimit = 0.65;
@@ -69,7 +76,7 @@ namespace Etabs_Ultimate_Tools
             var tabs = new TabControl
             {
                 Dock = DockStyle.Fill,
-                Font = new Font("Arial", 10.5F, FontStyle.Bold),
+                Font = new Font("Arial", 9F),
                 SizeMode = TabSizeMode.Fixed,
                 ItemSize = new Size(196, 38),
                 DrawMode = TabDrawMode.OwnerDrawFixed,
@@ -113,8 +120,9 @@ namespace Etabs_Ultimate_Tools
             using (var b = new SolidBrush(back))
                 e.Graphics.FillRectangle(b, tabRect);
 
-            TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, tc.Font, tabRect, fore,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            using (var tabFont = new Font("Arial", 10.5F, FontStyle.Bold))
+                TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, tabFont, tabRect, fore,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
             using (var pen = new Pen(selected ? Color.FromArgb(30, 64, 175) : Color.FromArgb(203, 213, 225), selected ? 2 : 1))
                 e.Graphics.DrawRectangle(pen, tabRect.X + 1, tabRect.Y + 1, tabRect.Width - 2, tabRect.Height - 2);
@@ -126,13 +134,11 @@ namespace Etabs_Ultimate_Tools
         {
             var root = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Padding = new Padding(12)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4, Padding = new Padding(12)
             };
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 22));
             root.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(root);
 
@@ -140,42 +146,197 @@ namespace Etabs_Ultimate_Tools
             root.Controls.Add(MakeSubtitle("(Xuất PU, MUXT, MUYT, MUXB, MUYB cho cột và vách Pier đã chọn)"), 0, 1);
             root.Controls.Add(MakeCondition("Quy đổi dấu theo mẫu nhập CSI Column — đơn vị kN, m"), 0, 2);
 
-            var box = new GroupBox
+            var main = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, Text = "Xuất dữ liệu", Padding = new Padding(10, 8, 16, 8)
+                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
             };
-            root.Controls.Add(box, 0, 3);
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            root.Controls.Add(main, 0, 3);
 
-            var bar = new FlowLayoutPanel
+            // ----- Cột trái: chọn tổ hợp + tùy chọn xuất -----
+            var left = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false, Margin = new Padding(0)
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = new Padding(0, 0, 10, 0)
             };
-            box.Controls.Add(bar);
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 38));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            main.Controls.Add(left, 0, 0);
 
-            var btnColExport = new Button
+            left.Controls.Add(new Label
             {
-                Text = "Chọn combo & Xuất...", Width = 220, Height = 34,
-                Margin = new Padding(0, 6, 10, 0), Font = new Font("Arial", 9.5F, FontStyle.Bold)
+                Text = "Chọn tổ hợp tải (Load Combination):",
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 0);
+
+            clbColCombos = new CheckedListBox
+            {
+                Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false,
+                BorderStyle = BorderStyle.FixedSingle
             };
-            btnColExport.Click += (s, e) => RunColumnExport();
-            bar.Controls.Add(btnColExport);
+            left.Controls.Add(clbColCombos, 0, 1);
 
-            root.Controls.Add(MakeNote("Chọn trực tiếp các cột (frame đứng) hoặc vách (area gán Pier) trong ETABS, bấm “Chọn combo & Xuất...” rồi chọn các tổ hợp cần xuất và định dạng TXT/Excel. Cần Run Analysis trước. Kết quả quy đổi dấu (PU, MUXT, MUYT, MUXB, MUYB) theo đúng mẫu nhập CSI Column."), 0, 4);
+            var selBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
+                Margin = new Padding(0, 6, 0, 0)
+            };
+            left.Controls.Add(selBar, 0, 2);
 
-            var spacer = new Panel { Dock = DockStyle.Fill };
-            root.Controls.Add(spacer, 0, 5);
+            var btnSelAll = new Button { Text = "Chọn tất cả", Width = 150, Height = 28, Margin = new Padding(0, 0, 8, 0) };
+            btnSelAll.Click += (s, e) => SetColCombosChecked(true);
+            selBar.Controls.Add(btnSelAll);
+
+            var btnDeselAll = new Button { Text = "Bỏ chọn", Width = 150, Height = 28 };
+            btnDeselAll.Click += (s, e) => SetColCombosChecked(false);
+            selBar.Controls.Add(btnDeselAll);
+
+            var grpFmt = new GroupBox { Text = "Định dạng xuất", Dock = DockStyle.Fill, Padding = new Padding(8, 4, 8, 4) };
+            left.Controls.Add(grpFmt, 0, 3);
+
+            var fmtBar = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+            grpFmt.Controls.Add(fmtBar);
+            rdoColText = new RadioButton { Text = "Text (.txt)", AutoSize = true, Checked = true, Margin = new Padding(4, 6, 24, 0) };
+            rdoColExcel = new RadioButton { Text = "Excel (.xlsx)", AutoSize = true, Margin = new Padding(4, 6, 0, 0) };
+            fmtBar.Controls.Add(rdoColText);
+            fmtBar.Controls.Add(rdoColExcel);
+
+            var actBar = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
+                Margin = new Padding(0, 6, 0, 0)
+            };
+            left.Controls.Add(actBar, 0, 4);
+
+            btnColPreview = new Button { Text = "Xem trước", Width = 150, Height = 32, Margin = new Padding(0, 0, 8, 0) };
+            btnColPreview.Click += (s, e) => PreviewColumnForces();
+            actBar.Controls.Add(btnColPreview);
+
+            btnColExportFile = new Button { Text = "Xuất", Width = 150, Height = 32, Enabled = false };
+            btnColExportFile.Click += (s, e) => ExportColumnForces();
+            actBar.Controls.Add(btnColExportFile);
+
+            lblColInfo = new Label
+            {
+                Dock = DockStyle.Fill, ForeColor = Color.DimGray, TextAlign = ContentAlignment.MiddleLeft
+            };
+            left.Controls.Add(lblColInfo, 0, 5);
+
+            // ----- Cột phải: xem trước nội lực -----
+            var right = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2
+            };
+            right.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
+            right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            main.Controls.Add(right, 1, 0);
+
+            right.Controls.Add(new Label
+            {
+                Text = "Xem trước nội lực (trước khi xuất):",
+                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 0);
+
+            dgvColPreview = CreateGrid();
+            right.Controls.Add(dgvColPreview, 0, 1);
+
+            AddColumnExportGridColumns();
+
+            lblColInfo.Text = "Chọn cột/vách trong ETABS, chọn tổ hợp rồi bấm Xem trước.";
         }
 
-        private void RunColumnExport()
+        private void SetColCombosChecked(bool state)
         {
+            for (int i = 0; i < clbColCombos.Items.Count; i++)
+                clbColCombos.SetItemChecked(i, state);
+        }
+
+        private void AddColumnExportGridColumns()
+        {
+            dgvColPreview.Columns.Clear();
+            AddColumn(dgvColPreview, "Name", "NAME", 240);
+            AddColumn(dgvColPreview, "PU", "PU", 90, "0.##");
+            AddColumn(dgvColPreview, "MUXT", "MUXT", 90, "0.##");
+            AddColumn(dgvColPreview, "MUYT", "MUYT", 90, "0.##");
+            AddColumn(dgvColPreview, "MUXB", "MUXB", 90, "0.##");
+            AddColumn(dgvColPreview, "MUYB", "MUYB", 90, "0.##");
+        }
+
+        private void PreviewColumnForces()
+        {
+            var combos = clbColCombos.CheckedItems.Cast<string>().ToList();
+            if (combos.Count == 0)
+            {
+                MessageBox.Show("Chưa chọn tổ hợp tải nào.", "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            int cols, piers;
             try
             {
-                ColumnForceExporter.Run(_sap);
+                _colRows = ColumnForceExporter.Compute(_sap, combos, out cols, out piers);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (cols == 0 && piers == 0)
+            {
+                _colRows = new List<ForceRow>();
+                dgvColPreview.DataSource = null;
+                lblColInfo.Text = "Chưa chọn cột hoặc vách (Pier) nào trong ETABS.";
+                btnColExportFile.Enabled = false;
+                MessageBox.Show("Chưa chọn cột hoặc vách (Pier) nào trong ETABS.", "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            dgvColPreview.DataSource = null;
+            dgvColPreview.DataSource = _colRows;
+
+            lblColInfo.Text = "Cột: " + cols + "  |  Vách: " + piers + "  |  Dòng: " + _colRows.Count;
+
+            if (_colRows.Count == 0)
+                MessageBox.Show("Không có nội lực để xuất. Hãy chạy Analyze trước.", "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+
+            btnColExportFile.Enabled = _colRows.Count > 0;
+        }
+
+        private void ExportColumnForces()
+        {
+            if (_colRows == null || _colRows.Count == 0)
+            {
+                MessageBox.Show("Chưa có dữ liệu. Hãy bấm Xem trước trước khi xuất.", "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            bool excel = rdoColExcel.Checked;
+
+            using (var sfd = new SaveFileDialog())
+            {
+                sfd.Filter = excel ? "Excel file (*.xlsx)|*.xlsx" : "Text File (*.txt)|*.txt";
+                sfd.FileName = excel ? "Column_Forces.xlsx" : "Column_Forces.txt";
+                if (sfd.ShowDialog() != DialogResult.OK) return;
+
+                try
+                {
+                    if (excel)
+                        ColumnForceExporter.WriteExcel(_colRows, sfd.FileName);
+                    else
+                        ColumnForceExporter.WriteText(_colRows, sfd.FileName);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                MessageBox.Show("Đã xuất: " + sfd.FileName, "Xuất nội lực cột", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
@@ -508,6 +669,13 @@ namespace Etabs_Ultimate_Tools
             SelectByKeyword(cboSeisCombo, "EQ-SRSS", "Vtot", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
 
             if (cboAxialCombo.Items.Count > 0 && cboAxialCombo.SelectedIndex < 0) cboAxialCombo.SelectedIndex = 0;
+
+            if (clbColCombos != null)
+            {
+                clbColCombos.Items.Clear();
+                foreach (var name in ColumnForceExporter.GetCombos(_sap))
+                    clbColCombos.Items.Add(name, true);
+            }
         }
 
         private static void SelectByKeyword(ComboBox cbo, params string[] keys)
