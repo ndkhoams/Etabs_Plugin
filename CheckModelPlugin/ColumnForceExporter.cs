@@ -2,10 +2,8 @@ using ETABSv1;
 using ClosedXML.Excel;
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Linq;
 using System.Text;
-using System.Windows.Forms;
 
 namespace Etabs_Ultimate_Tools
 {
@@ -27,55 +25,103 @@ namespace Etabs_Ultimate_Tools
 
     public static class ColumnForceExporter
     {
-        public static void Run(cSapModel sap)
+        // Lay danh sach Load Combination tu model.
+        public static List<string> GetCombos(cSapModel sap)
         {
-            // Ep ETABS ve don vi kN-m-C
+            int numberNames = 0;
+            string[] names = Array.Empty<string>();
+
+            sap.RespCombo.GetNameList(ref numberNames, ref names);
+
+            return names == null ? new List<string>() : names.ToList();
+        }
+
+        // Tinh noi luc cho cac cot/pier dang chon trong ETABS theo cac combo da chon.
+        // columnCount/pierCount tra ve so luong da chon de form hien thi / kiem tra.
+        public static List<ForceRow> Compute(cSapModel sap, IList<string> combos, out int columnCount, out int pierCount)
+        {
             sap.SetPresentUnits(eUnits.kN_m_C);
+
             List<string> selectedColumns = GetSelectedColumns(sap);
             Dictionary<string, HashSet<string>> selectedPiers = GetSelectedPiers(sap);
 
-            if (selectedColumns.Count == 0 && selectedPiers.Count == 0)
+            columnCount = selectedColumns.Count;
+            pierCount = selectedPiers.Count;
+
+            List<ForceRow> rows = new List<ForceRow>();
+
+            if (combos == null || combos.Count == 0)
+                return rows;
+
+            if (columnCount == 0 && pierCount == 0)
+                return rows;
+
+            sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
+
+            foreach (string combo in combos)
+                sap.Results.Setup.SetComboSelectedForOutput(combo);
+
+            foreach (string column in selectedColumns)
+                rows.AddRange(GetColumnForces(sap, column));
+
+            foreach (var pierItem in selectedPiers)
+                rows.AddRange(GetPierForces(sap, pierItem.Key, pierItem.Value));
+
+            return rows;
+        }
+
+        public static void WriteText(List<ForceRow> rows, string path)
+        {
+            List<string> lines = new List<string>();
+
+            foreach (ForceRow r in rows)
             {
-                MessageBox.Show("Chưa chọn cột hoặc pier nào trong ETABS.");
-                return;
+                string line =
+                    $"{r.Name}," +
+                    $"{r.PU:0.##}," +
+                    $"{r.MUXT:0.##}," +
+                    $"{r.MUYT:0.##}," +
+                    $"{r.MUXB:0.##}," +
+                    $"{r.MUYB:0.##}";
+
+                lines.Add(line);
             }
 
-            List<string> combos = GetCombos(sap);
+            string content = string.Join("\r\n", lines);
 
-            if (combos.Count == 0)
+            System.IO.File.WriteAllText(path, content, Encoding.ASCII);
+        }
+
+        public static void WriteExcel(List<ForceRow> rows, string path)
+        {
+            using (XLWorkbook wb = new XLWorkbook())
             {
-                MessageBox.Show("Không tìm thấy Load Combination.");
-                return;
-            }
+                IXLWorksheet ws = wb.Worksheets.Add("Results");
 
-            using (ComboSelectForm form = new ComboSelectForm(combos))
-            {
-                if (form.ShowDialog() != DialogResult.OK)
-                    return;
+                ws.Cell(1, 1).Value = "NAME";
+                ws.Cell(1, 2).Value = "PU";
+                ws.Cell(1, 3).Value = "MUXT";
+                ws.Cell(1, 4).Value = "MUYT";
+                ws.Cell(1, 5).Value = "MUXB";
+                ws.Cell(1, 6).Value = "MUYB";
 
-                sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
+                int row = 2;
 
-                foreach (string combo in form.SelectedCombos)
-                    sap.Results.Setup.SetComboSelectedForOutput(combo);
-
-                List<ForceRow> rows = new List<ForceRow>();
-
-                foreach (string column in selectedColumns)
-                    rows.AddRange(GetColumnForces(sap, column));
-
-                foreach (var pierItem in selectedPiers)
-                    rows.AddRange(GetPierForces(sap, pierItem.Key, pierItem.Value));
-
-                if (rows.Count == 0)
+                foreach (ForceRow r in rows)
                 {
-                    MessageBox.Show("Không có nội lực để xuất. Hãy chạy Analyze trước.");
-                    return;
+                    ws.Cell(row, 1).Value = r.Name;
+                    ws.Cell(row, 2).Value = Math.Round(r.PU, 2);
+                    ws.Cell(row, 3).Value = Math.Round(r.MUXT, 2);
+                    ws.Cell(row, 4).Value = Math.Round(r.MUYT, 2);
+                    ws.Cell(row, 5).Value = Math.Round(r.MUXB, 2);
+                    ws.Cell(row, 6).Value = Math.Round(r.MUYB, 2);
+
+                    row++;
                 }
 
-                if (form.ExportType == ExportFileType.Text)
-                    ExportText(rows);
-                else
-                    ExportExcel(rows);
+                ws.Columns().AdjustToContents();
+
+                wb.SaveAs(path);
             }
         }
 
@@ -192,16 +238,6 @@ namespace Etabs_Ultimate_Tools
             double dh = Math.Sqrt(Math.Pow(x2 - x1, 2) + Math.Pow(y2 - y1, 2));
 
             return dz > dh;
-        }
-
-        private static List<string> GetCombos(cSapModel sap)
-        {
-            int numberNames = 0;
-            string[] names = Array.Empty<string>();
-
-            sap.RespCombo.GetNameList(ref numberNames, ref names);
-
-            return names.ToList();
         }
 
         private static List<ForceRow> GetColumnForces(cSapModel sap, string columnName)
@@ -347,9 +383,6 @@ namespace Etabs_Ultimate_Tools
 
             foreach (var g in groups)
             {
-                // PierForce khong tra rieng mang StepType nhu FrameForce.
-                // Voi combo dang Envelope, ETABS thuong tra nhieu dong Top/Bottom cho cung Story-Pier-Combo.
-                // Vi vay tach ra theo cuc tri P tai Bottom de dat hau to Max/Min tuong tu phan cot.
                 List<int> bottomIndices = g
                     .Where(i => !IsTopLocation(location[i]))
                     .ToList();
@@ -392,7 +425,6 @@ namespace Etabs_Ultimate_Tools
 
                     rows.Add(CreatePierForceRow(baseName + "Max", bottomMaxIndex, topMaxIndex, p, m2, m3));
 
-                    // Tranh ghi trung 2 dong neu Max va Min cung mot ket qua.
                     if (bottomMinIndex != bottomMaxIndex || topMinIndex != topMaxIndex)
                         rows.Add(CreatePierForceRow(baseName + "Min", bottomMinIndex, topMinIndex, p, m2, m3));
                 }
@@ -475,86 +507,6 @@ namespace Etabs_Ultimate_Tools
             }
 
             return storyNames[nearest];
-        }
-
-        private static void ExportText(List<ForceRow> rows)
-        {
-            using (SaveFileDialog sfd = new SaveFileDialog
-            {
-                Filter = "Text File (*.txt)|*.txt",
-                FileName = "Column_Forces.txt"
-            })
-            {
-                if (sfd.ShowDialog() != DialogResult.OK)
-                    return;
-
-                List<string> lines = new List<string>();
-
-                foreach (ForceRow r in rows)
-                {
-                    string line =
-                        $"{r.Name}," +
-                        $"{r.PU:0.##}," +
-                        $"{r.MUXT:0.##}," +
-                        $"{r.MUYT:0.##}," +
-                        $"{r.MUXB:0.##}," +
-                        $"{r.MUYB:0.##}";
-
-                    lines.Add(line);
-                }
-
-                string content = string.Join("\r\n", lines);
-
-                System.IO.File.WriteAllText(sfd.FileName, content, Encoding.ASCII);
-
-                MessageBox.Show("Đã xuất TXT:\n" + sfd.FileName);
-            }
-        }
-
-        private static void ExportExcel(List<ForceRow> rows)
-        {
-            using (SaveFileDialog sfd = new SaveFileDialog
-            {
-                Filter = "Excel file (*.xlsx)|*.xlsx",
-                FileName = "Column_Forces.xlsx"
-            })
-            {
-                if (sfd.ShowDialog() != DialogResult.OK)
-                    return;
-
-                using (XLWorkbook wb = new XLWorkbook())
-                {
-                    IXLWorksheet ws = wb.Worksheets.Add("Results");
-
-                    // Header CSI Column yeu cau
-                    ws.Cell(1, 1).Value = "NAME";
-                    ws.Cell(1, 2).Value = "PU";
-                    ws.Cell(1, 3).Value = "MUXT";
-                    ws.Cell(1, 4).Value = "MUYT";
-                    ws.Cell(1, 5).Value = "MUXB";
-                    ws.Cell(1, 6).Value = "MUYB";
-
-                    int row = 2;
-
-                    foreach (ForceRow r in rows)
-                    {
-                        ws.Cell(row, 1).Value = r.Name;
-                        ws.Cell(row, 2).Value = Math.Round(r.PU, 2);
-                        ws.Cell(row, 3).Value = Math.Round(r.MUXT, 2);
-                        ws.Cell(row, 4).Value = Math.Round(r.MUYT, 2);
-                        ws.Cell(row, 5).Value = Math.Round(r.MUXB, 2);
-                        ws.Cell(row, 6).Value = Math.Round(r.MUYB, 2);
-
-                        row++;
-                    }
-
-                    ws.Columns().AdjustToContents();
-
-                    wb.SaveAs(sfd.FileName);
-                }
-
-                MessageBox.Show("Đã xuất Excel:\n" + sfd.FileName);
-            }
         }
 
         private static bool IsTopLocation(string location)
