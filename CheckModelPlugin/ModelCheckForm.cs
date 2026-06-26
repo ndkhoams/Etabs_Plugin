@@ -78,7 +78,7 @@ namespace Etabs_Ultimate_Tools
 
         private void InitializeComponent()
         {
-            Text = "Etabs Ultimate Tools  ©2026v1 by KhoaND13@hotmail.com ";
+            Text = "Etabs Ultimate Tools";
             Width = 1480;
             Height = 780;
             MinimumSize = new Size(1360, 700);
@@ -277,7 +277,7 @@ namespace Etabs_Ultimate_Tools
 
             AddColumnExportGridColumns();
 
-            lblColInfo.Text = "Chọn cột/vách trong ETABS trước khi mở tool.";
+            lblColInfo.Text = "Chọn cột/vách trong ETABS trước khi mở tool, chọn tổ hợp rồi bấm Xem trước.";
         }
 
         private void ClbColCombos_MouseDown(object sender, MouseEventArgs e)
@@ -685,7 +685,7 @@ namespace Etabs_Ultimate_Tools
                 "drift = Δ/h được xác định từ hệ quả của tác động động đất thiết kế (mục 4.3.4); Vtot là tổng lực cắt tầng do động đất gây ra; 2 thành phần này đều lấy từ tổ hợp các thành phần phương ngang của động đất SRSS(EX;EY) (mục 4.3.3.5.1.2b). Ptot tự động lấy từ Mass Summary by Story.",
                 out var bar);
 
-            bar.Controls.Add(MakeFieldLabel("Tổ hợp xác định Vtot và drift:", 68));
+            bar.Controls.Add(MakeFieldLabel("Tổ hợp:", 68));
             cboCombo = MakeCombo(240); bar.Controls.Add(cboCombo);
             bar.Controls.Add(MakeFieldLabel("q:", 22));
             txtQ = MakeTextBox("1.5", 60); bar.Controls.Add(txtQ);
@@ -766,7 +766,7 @@ namespace Etabs_Ultimate_Tools
             dgvAxial = BuildScaffold(tab,
                 "KIỂM TRA HỆ SỐ LỰC DỌC QUY ĐỔI",
                 "(Theo TCVN 9386-1:2025)",
-                "ʋd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)",
+                "ʋd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc",
                 "Chọn cột hoặc vách (Pier) trong ETABS trước khi mở tool.",
                 out var bar);
 
