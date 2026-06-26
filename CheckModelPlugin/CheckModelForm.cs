@@ -14,7 +14,7 @@ namespace CheckModelPlugin
 
         private readonly cSapModel _sap;
 
-        private ComboBox cboComboX, cboComboY;
+        private ComboBox cboCombo;
         private TextBox txtQ;
         private Button btnRun, btnExport, btnClose;
         private DataGridView dgv;
@@ -123,13 +123,11 @@ namespace CheckModelPlugin
                 "KIỂM TRA ĐIỀU KIỆN P-DELTA",
                 "(Theo TCVN 9386-1:2025)",
                 "θ = q × drift × Ptot / Vtot  |  drift = Δ/h từ ETABS Story Drift",
-                "Combo X/Y dùng chung để lấy drift = Δ/h và Vtot theo phương tương ứng. Ptot tự động lấy từ Mass Summary by Story: Mass × 9.80665 và cộng dồn từ mái xuống.",
+                "Tổ hợp dùng chung để lấy drift = Δ/h và Vtot theo cả hai phương X, Y. Ptot tự động lấy từ Mass Summary by Story: Mass × 9.80665 và cộng dồn từ mái xuống.",
                 out var bar);
 
-            bar.Controls.Add(MakeFieldLabel("Combo X:", 68));
-            cboComboX = MakeCombo(220); bar.Controls.Add(cboComboX);
-            bar.Controls.Add(MakeFieldLabel("Combo Y:", 68));
-            cboComboY = MakeCombo(220); bar.Controls.Add(cboComboY);
+            bar.Controls.Add(MakeFieldLabel("Tổ hợp:", 68));
+            cboCombo = MakeCombo(240); bar.Controls.Add(cboCombo);
             bar.Controls.Add(MakeFieldLabel("q:", 22));
             txtQ = MakeTextBox("1.5", 60); bar.Controls.Add(txtQ);
 
@@ -343,14 +341,13 @@ namespace CheckModelPlugin
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboComboX, cboComboY, cboWindCombo, cboWindDriftCombo, cboSeisCombo })
+            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
             }
 
-            SelectByKeyword(cboComboX, "Vtot", "EX", "X");
-            SelectByKeyword(cboComboY, "Vtot", "EY", "Y");
+            SelectByKeyword(cboCombo, "Vtot", "ENV_DD", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboSeisCombo, "ENV_DD", "EQ", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
@@ -376,11 +373,10 @@ namespace CheckModelPlugin
             if (!double.TryParse(txtQ.Text, out var q)) q = 1.0;
             _qFactor = q;
 
-            string comboX = cboComboX.Text.Trim();
-            string comboY = cboComboY.Text.Trim();
-            if (string.IsNullOrWhiteSpace(comboX) || string.IsNullOrWhiteSpace(comboY))
+            string combo = cboCombo.Text.Trim();
+            if (string.IsNullOrWhiteSpace(combo))
             {
-                MessageBox.Show("Chưa chọn đủ Combo X/Y.", "Check Model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Chưa chọn tổ hợp kiểm tra.", "Check Model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -388,8 +384,8 @@ namespace CheckModelPlugin
             _sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
 
             _rows = new List<PDeltaCheckRow>();
-            _rows.AddRange(PDeltaExtractor.Calculate(_sap, comboX, comboX, "X", q));
-            _rows.AddRange(PDeltaExtractor.Calculate(_sap, comboY, comboY, "Y", q));
+            _rows.AddRange(PDeltaExtractor.Calculate(_sap, combo, combo, "X", q));
+            _rows.AddRange(PDeltaExtractor.Calculate(_sap, combo, combo, "Y", q));
             _rows = _rows.OrderBy(r => r.Direction).ThenByDescending(r => r.Elevation).ToList();
 
             dgv.DataSource = null;
