@@ -7,7 +7,7 @@ using System.Windows.Forms;
 
 namespace CheckModelPlugin
 {
-    public class PDeltaCheckForm : Form
+    public class ModelCheckForm : Form
     {
         private const int CtrlHeight = 26;
         private const int BarRowHeight = 34;
@@ -39,7 +39,7 @@ namespace CheckModelPlugin
 
         private const double WindDriftLimitDen = 500.0;
 
-        public PDeltaCheckForm(cSapModel sap)
+        public ModelCheckForm(cSapModel sap)
         {
             _sap = sap;
             InitializeComponent();
