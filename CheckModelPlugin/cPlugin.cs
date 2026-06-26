@@ -17,7 +17,7 @@ namespace CheckModelPlugin
             try
             {
                 Application.EnableVisualStyles();
-                using (var form = new PDeltaCheckForm(_sapModel))
+                using (var form = new ModelCheckForm(_sapModel))
                 {
                     form.ShowDialog();
                 }
