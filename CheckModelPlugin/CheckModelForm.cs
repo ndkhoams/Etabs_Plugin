@@ -49,9 +49,9 @@ namespace CheckModelPlugin
         private void InitializeComponent()
         {
             Text = "Etabs Model Ultimate Tool";
-            Width = 1320;
+            Width = 1360;
             Height = 780;
-            MinimumSize = new Size(1180, 700);
+            MinimumSize = new Size(1240, 700);
             StartPosition = FormStartPosition.CenterScreen;
             Font = new Font("Arial", 9F);
 
@@ -96,7 +96,7 @@ namespace CheckModelPlugin
 
             var box = new GroupBox
             {
-                Dock = DockStyle.Fill, Text = "Tổ hợp kiểm tra", Padding = new Padding(10, 4, 10, 10)
+                Dock = DockStyle.Fill, Text = "Tổ hợp kiểm tra", Padding = new Padding(10, 4, 16, 10)
             };
             root.Controls.Add(box, 0, 3);
 
@@ -237,17 +237,17 @@ namespace CheckModelPlugin
         private static ComboBox MakeCombo(int width) => new ComboBox
         {
             DropDownStyle = ComboBoxStyle.DropDownList, Width = width,
-            Margin = new Padding(0, 5, 26, 0)
+            Margin = new Padding(0, 5, 18, 0)
         };
 
         private static TextBox MakeTextBox(string value, int width) => new TextBox
         {
-            Text = value, Width = width, Margin = new Padding(0, 6, 26, 0)
+            Text = value, Width = width, Margin = new Padding(0, 6, 18, 0)
         };
 
         private static Button MakeButton(string text) => new Button
         {
-            Text = text, Width = 118, Height = CtrlHeight, Margin = new Padding(0, 4, 14, 0)
+            Text = text, Width = 112, Height = CtrlHeight, Margin = new Padding(0, 4, 10, 0)
         };
 
         private DataGridView CreateGrid()
