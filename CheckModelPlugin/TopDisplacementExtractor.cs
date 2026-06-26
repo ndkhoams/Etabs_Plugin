@@ -1,4 +1,4 @@
-﻿using ETABSv1;
+using ETABSv1;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,9 +7,6 @@ namespace CheckModelPlugin
 {
     public static class TopDisplacementExtractor
     {
-        // Ngưỡng đoán đơn vị: giá trị lớn hơn mức này (m) được coi là đang ở mm.
-        // Vì đã SetPresentUnits(kN_m_C) nên đầu ra thường đã là mét; ngưỡng chỉ là
-        // lớp phòng vệ khi bảng trả về mm. Điều chỉnh nếu công trình rất cao (>5 m chuyển vị).
         private const double MmGuessThresholdMeters = 5.0;
 
         public static List<TopDisplacementRow> Calculate(
@@ -44,7 +41,6 @@ namespace CheckModelPlugin
             double u = ReadDisplacement(sap, combo, dir, topStory,
                 EtabsTableReader.DiaphragmDisplacementTableNames);
 
-            // Dự phòng nếu bảng Diaphragm không có dữ liệu
             if (Math.Abs(u) < 1e-12)
                 u = ReadDisplacement(sap, combo, dir, topStory,
                     EtabsTableReader.StoryDisplacementTableNames);
@@ -80,7 +76,6 @@ namespace CheckModelPlugin
                 ? new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase)
                 : ReadDisplacementMap(sap, comboY, "Y", EtabsTableReader.DiaphragmDisplacementTableNames);
 
-            // Tìm tầng thấp nhất có chuyển vị ≈ 0 → đó là mặt ngàm
             foreach (var st in stories.OrderBy(s => s.Elevation))
             {
                 bool hasData = false, isFixed = true;
@@ -89,12 +84,10 @@ namespace CheckModelPlugin
                 if (hasData && isFixed) return st.Elevation;
             }
 
-            // Fallback 1: tầng thấp nhất có dữ liệu diaphragm
             foreach (var st in stories.OrderBy(s => s.Elevation))
                 if (xMap.ContainsKey(st.Name) || yMap.ContainsKey(st.Name))
                     return st.Elevation;
 
-            // Fallback 2: tầng thấp nhất trong model
             return stories.Min(s => s.Elevation);
         }
 

@@ -1,4 +1,4 @@
-﻿using ETABSv1;
+using ETABSv1;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -10,7 +10,6 @@ namespace CheckModelPlugin
     /// </summary>
     internal static class EtabsHelper
     {
-        // ─── Story ────────────────────────────────────────────────────────
         public class StoryInfo
         {
             public string Name { get; set; }

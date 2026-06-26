@@ -8,7 +8,6 @@ namespace CheckModelPlugin
 {
     public static class EtabsTableReader
     {
-        // ─── Tên bảng ETABS phổ biến ─────────────────────────────────────
         internal static readonly string[] MassSummaryTableNames =
         {
             "Mass Summary by Story",
@@ -35,7 +34,6 @@ namespace CheckModelPlugin
             "Story Max Over Avg Displacements"
         };
 
-        // ─── Đọc bảng ────────────────────────────────────────────────────
         public static List<Dictionary<string, string>> ReadTable(cSapModel sap, string tableKey, string outputCase)
         {
             TrySelectComboForDatabaseTables(sap, outputCase);
@@ -84,14 +82,11 @@ namespace CheckModelPlugin
             return new List<Dictionary<string, string>>();
         }
 
-        // ─── Helpers truy xuất field ─────────────────────────────────────
         public static string Get(Dictionary<string, string> row, params string[] keys)
         {
-            // Pass 1: khớp chính xác (row dùng comparer OrdinalIgnoreCase)
             foreach (var key in keys)
                 if (row.TryGetValue(key, out var v)) return v;
 
-            // Chuẩn hóa toàn bộ cột MỘT LẦN duy nhất (tránh tính lặp như bản cũ)
             var normMap = new Dictionary<string, string>(row.Count);
             foreach (var kv in row)
             {
@@ -99,7 +94,6 @@ namespace CheckModelPlugin
                 if (fk.Length > 0 && !normMap.ContainsKey(fk)) normMap[fk] = kv.Value;
             }
 
-            // Pass 2: khớp sau chuẩn hóa + alias đơn vị
             foreach (var key in keys)
             {
                 string nk = NormalizeKey(key);
@@ -114,7 +108,6 @@ namespace CheckModelPlugin
                                    normMap.TryGetValue("vykip", out v))) return v;
             }
 
-            // Pass 3: khớp gần đúng (Contains), chỉ với key >= 2 ký tự
             foreach (var key in keys)
             {
                 string nk = NormalizeKey(key);
@@ -154,9 +147,6 @@ namespace CheckModelPlugin
             return "";
         }
 
-        // ─── Private helpers ─────────────────────────────────────────────
-
-        // Cache method theo (Type + tên) để tránh quét reflection lặp lại.
         private static readonly Dictionary<string, MethodInfo[]> _methodCache =
             new Dictionary<string, MethodInfo[]>();
 

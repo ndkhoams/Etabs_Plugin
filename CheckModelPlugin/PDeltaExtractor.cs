@@ -27,11 +27,10 @@ namespace CheckModelPlugin
                 double dr = q * driftElastic;
                 double vtot = GetOrZero(shears, st.Name);
 
-                // Bỏ tầng có Vtot gần 0 (ngàm đáy) để tránh θ → ∞
                 if (vtot <= 1.0) continue;
 
                 double ptot = GetOrZero(pTot, st.Name);
-                double theta = ptot * dr / vtot; // θ = Ptot × (Δd/h) / Vtot
+                double theta = ptot * dr / vtot;
 
                 rows.Add(new PDeltaCheckRow
                 {
@@ -93,7 +92,6 @@ namespace CheckModelPlugin
             var storyWeight = storyMass.ToDictionary(
                 kv => kv.Key, kv => kv.Value * g, StringComparer.OrdinalIgnoreCase);
 
-            // Ptot(i) = Σ trọng lượng từ mái xuống tầng i (cộng dồn từ trên xuống)
             var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             double cumulative = 0.0;
             foreach (var st in stories.OrderByDescending(s => s.Elevation))
