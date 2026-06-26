@@ -12,6 +12,12 @@ namespace Etabs_Ultimate_Tools
     {
         private const string PileTitle = "Phản lực cọc";
 
+        // Chỉ số cột SCT theo từng trường hợp tải trong dgvPileCaps.
+        // 0 = Loại cọc; (kéo, nén) cho Đứng / Gió / Động đất.
+        private const int CapTensVert = 1, CapCompVert = 2;
+        private const int CapTensWind = 3, CapCompWind = 4;
+        private const int CapTensEq = 5, CapCompEq = 6;
+
         private void BuildPileTab(TabPage tab)
         {
             var root = new TableLayoutPanel
@@ -23,14 +29,14 @@ namespace Etabs_Ultimate_Tools
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(root);
 
-            root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊ TẢI CỦA CỌC"), 0, 0);
-            root.Controls.Add(MakeSubtitle("(So sánh phản lực đầu cọc theo phương đứng với SCT chịu kéo/nén, đơn vị kN)"), 0, 1);
+            root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC"), 0, 0);
+            root.Controls.Add(MakeSubtitle("(So sánh phản lực đầu cọc theo phương đứng với SCT chịu kéo/nén của từng tổ hợp, đơn vị kN)"), 0, 1);
 
             var main = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1, Margin = new Padding(0, 6, 0, 0)
             };
-            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 460));
+            main.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 700));
             main.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             root.Controls.Add(main, 0, 2);
 
@@ -63,7 +69,7 @@ namespace Etabs_Ultimate_Tools
 
             left.Controls.Add(new Label
             {
-                Text = "Khả năng chịu tải theo loại cọc (point spring) — nhập SCT kéo/nén:",
+                Text = "Khả năng chịu tải theo loại cọc & từng tổ hợp (nhập SCT kéo/nén, kN):",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 1);
 
@@ -110,7 +116,7 @@ namespace Etabs_Ultimate_Tools
             right.Controls.Add(dgvPilePreview, 0, 1);
             AddPileGridColumns();
 
-            lblPileInfo.Text = "Nhập SCT kéo/nén cho từng loại cọc, chọn 3 tổ hợp rồi bấm Xem trước.";
+            lblPileInfo.Text = "Nhập SCT kéo/nén cho từng loại cọc theo mỗi tổ hợp, chọn 3 tổ hợp rồi bấm Xem trước.";
         }
 
         private static Label MakePileLabel(string text) => new Label
@@ -143,27 +149,23 @@ namespace Etabs_Ultimate_Tools
         private void AddPileCapsColumns()
         {
             dgvPileCaps.Columns.Clear();
-            var c0 = new DataGridViewTextBoxColumn
+            dgvPileCaps.Columns.Add(MakeCapCol("Loại cọc", 110, true));
+            dgvPileCaps.Columns.Add(MakeCapCol("Kéo-Đứng (kN)", 95, false));
+            dgvPileCaps.Columns.Add(MakeCapCol("Nén-Đứng (kN)", 95, false));
+            dgvPileCaps.Columns.Add(MakeCapCol("Kéo-Gió (kN)", 95, false));
+            dgvPileCaps.Columns.Add(MakeCapCol("Nén-Gió (kN)", 95, false));
+            dgvPileCaps.Columns.Add(MakeCapCol("Kéo-ĐĐ (kN)", 95, false));
+            dgvPileCaps.Columns.Add(MakeCapCol("Nén-ĐĐ (kN)", 95, false));
+        }
+
+        private static DataGridViewTextBoxColumn MakeCapCol(string header, int weight, bool readOnly)
+        {
+            return new DataGridViewTextBoxColumn
             {
-                HeaderText = "Loại cọc", ReadOnly = true, FillWeight = 120,
+                HeaderText = header, ReadOnly = readOnly, FillWeight = weight,
                 AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
                 SortMode = DataGridViewColumnSortMode.NotSortable
             };
-            var c1 = new DataGridViewTextBoxColumn
-            {
-                HeaderText = "SCT kéo (kN)", FillWeight = 100,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                SortMode = DataGridViewColumnSortMode.NotSortable
-            };
-            var c2 = new DataGridViewTextBoxColumn
-            {
-                HeaderText = "SCT nén (kN)", FillWeight = 100,
-                AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill,
-                SortMode = DataGridViewColumnSortMode.NotSortable
-            };
-            dgvPileCaps.Columns.Add(c0);
-            dgvPileCaps.Columns.Add(c1);
-            dgvPileCaps.Columns.Add(c2);
         }
 
         private void AddPileGridColumns()
@@ -185,7 +187,7 @@ namespace Etabs_Ultimate_Tools
             if (dgvPileCaps == null) return;
             dgvPileCaps.Rows.Clear();
             foreach (var name in PileReactionChecker.GetSpringTypes(_sap))
-                dgvPileCaps.Rows.Add(name, "", "");
+                dgvPileCaps.Rows.Add(name, "", "", "", "", "", "");
 
             if (dgvPileCaps.Rows.Count == 0 && lblPileInfo != null)
                 lblPileInfo.Text = "Model chưa khai báo loại point spring nào. Hãy gán point spring cho cọc trước.";
@@ -212,12 +214,13 @@ namespace Etabs_Ultimate_Tools
             foreach (var key in keys)
                 if (!string.IsNullOrWhiteSpace(key) && !existing.Contains(key))
                 {
-                    dgvPileCaps.Rows.Add(key, "", "");
+                    dgvPileCaps.Rows.Add(key, "", "", "", "", "", "");
                     existing.Add(key);
                 }
         }
 
-        private Dictionary<string, PileSpringType> ReadPileCaps()
+        // Đọc SCT cho 1 trường hợp tải (theo cặp cột kéo/nén tương ứng).
+        private Dictionary<string, PileSpringType> ReadPileCaps(int tensCol, int compCol)
         {
             var dict = new Dictionary<string, PileSpringType>(StringComparer.OrdinalIgnoreCase);
             foreach (DataGridViewRow row in dgvPileCaps.Rows)
@@ -228,8 +231,8 @@ namespace Etabs_Ultimate_Tools
                 dict[name.Trim()] = new PileSpringType
                 {
                     Name = name.Trim(),
-                    TensionCap = ParseCap(row.Cells[1].Value),
-                    CompressionCap = ParseCap(row.Cells[2].Value)
+                    TensionCap = ParseCap(row.Cells[tensCol].Value),
+                    CompressionCap = ParseCap(row.Cells[compCol].Value)
                 };
             }
             return dict;
@@ -246,11 +249,13 @@ namespace Etabs_Ultimate_Tools
 
         private List<PileReactionCase> BuildPileCases()
         {
-            var caps = ReadPileCaps();
             var cases = new List<PileReactionCase>();
-            AddPileCase(cases, "TỔ HỢP TẢI ĐỨNG", "TAI DUNG", cboPileVert.Text.Trim(), caps);
-            AddPileCase(cases, "TỔ HỢP TẢI GIÓ", "TAI GIO", cboPileWind.Text.Trim(), caps);
-            AddPileCase(cases, "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT", cboPileEq.Text.Trim(), caps);
+            AddPileCase(cases, "TỔ HỢP TẢI ĐỨNG", "TAI DUNG", cboPileVert.Text.Trim(),
+                ReadPileCaps(CapTensVert, CapCompVert));
+            AddPileCase(cases, "TỔ HỢP TẢI GIÓ", "TAI GIO", cboPileWind.Text.Trim(),
+                ReadPileCaps(CapTensWind, CapCompWind));
+            AddPileCase(cases, "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT", cboPileEq.Text.Trim(),
+                ReadPileCaps(CapTensEq, CapCompEq));
             return cases;
         }
 
