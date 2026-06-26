@@ -8,7 +8,8 @@ namespace CheckModelPlugin
     public static class PDeltaExcelExporter
     {
         public static void Export(string filePath, List<PDeltaCheckRow> rows, double qFactor,
-            List<TopDisplacementRow> windRows = null, List<WindDriftRow> windDriftRows = null)
+            List<TopDisplacementRow> windRows = null, List<WindDriftRow> windDriftRows = null,
+            List<SeismicDriftRow> seismicDriftRows = null)
         {
             using (var wb = new XLWorkbook())
             {
@@ -42,6 +43,9 @@ namespace CheckModelPlugin
 
                 if (windDriftRows != null && windDriftRows.Count > 0)
                     WriteWindDriftSheet(wb, windDriftRows);
+
+                if (seismicDriftRows != null && seismicDriftRows.Count > 0)
+                    WriteSeismicDriftSheet(wb, seismicDriftRows);
 
                 wb.SaveAs(filePath);
             }
@@ -431,6 +435,142 @@ namespace CheckModelPlugin
             List<WindDriftRow> rows, string dir)
         {
             var map = new Dictionary<string, WindDriftRow>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows.Where(x => x.Direction.Equals(dir, StringComparison.OrdinalIgnoreCase)))
+            {
+                if (!map.TryGetValue(row.Story, out var cur) ||
+                    Math.Abs(row.Drift) > Math.Abs(cur.Drift))
+                    map[row.Story] = row;
+            }
+            return map;
+        }
+
+        private static void WriteSeismicDriftSheet(XLWorkbook wb, List<SeismicDriftRow> rows)
+        {
+            var ws = wb.Worksheets.Add("CHUYEN VI LECH TANG DD");
+            EtabsHelper.ApplyA4PageSetup(ws);
+
+            var validRows = (rows ?? new List<SeismicDriftRow>())
+                .Where(x => x.Height > 1e-9 && !EtabsHelper.IsBaseLevel(x.Story))
+                .ToList();
+
+            var xRows = BuildMaxSeismicByStory(validRows, "X");
+            var yRows = BuildMaxSeismicByStory(validRows, "Y");
+
+            var storyRows = validRows
+                .GroupBy(x => x.Story, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.OrderByDescending(r => r.Elevation).First())
+                .OrderByDescending(x => x.Elevation)
+                .ToList();
+
+            double q = validRows.Count > 0 ? validRows[0].Q : 1.0;
+            double nu = validRows.Count > 0 ? validRows[0].Nu : 1.0;
+            double limit = validRows.Count > 0 ? validRows[0].LimitRatio : 0.005;
+            if (q <= 0) q = 1.0;
+            if (nu <= 0) nu = 1.0;
+            if (limit <= 0) limit = 0.005;
+            string limitText = limit.ToString("0.####");
+
+            string comboX = xRows.Count > 0 ? xRows.Values.First().Combo : "";
+            string comboY = yRows.Count > 0 ? yRows.Values.First().Combo : "";
+            string comboText = string.Equals(comboX, comboY, StringComparison.OrdinalIgnoreCase)
+                ? comboX
+                : "X: " + comboX + "; Y: " + comboY;
+
+            var computed = storyRows.Select(st =>
+            {
+                xRows.TryGetValue(st.Story, out var xr);
+                yRows.TryGetValue(st.Story, out var yr);
+                double dx = xr != null ? xr.Drift : 0.0;
+                double dy = yr != null ? yr.Drift : 0.0;
+                double reducedMax = q * Math.Max(dx, dy) * nu;
+                return new { Story = st, DriftX = dx, DriftY = dy, ReducedMax = reducedMax, Ok = reducedMax <= limit };
+            }).ToList();
+
+            bool anyNg = computed.Any(c => !c.Ok);
+
+            ws.Cell("A2").Value = "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT";
+            ws.Range("A2:J2").Merge();
+            ws.Cell("A2").Style.Font.Bold = true;
+            ws.Cell("A2").Style.Font.FontSize = 14;
+            ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell("A3").Value = "(Theo TCVN 9386:2025)";
+            ws.Range("A3:J3").Merge();
+            ws.Cell("A3").Style.Font.Italic = true;
+            ws.Cell("A3").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+            ws.Cell("A5").Value = "1. Cơ sở lý thuyết";
+            ws.Cell("A5").Style.Font.Bold = true;
+            ws.Cell("B6").Value = "Điều kiện hạn chế hư hỏng (damage limitation): dr · ν ≤ limit · h.";
+            ws.Range("B6:J6").Merge();
+            ws.Cell("B7").Value = "Trong đó dr = q · de là chuyển vị lệch tầng thiết kế; de là chuyển vị lệch tầng đàn hồi.";
+            ws.Range("B7:J7").Merge();
+            ws.Cell("B8").Value = "Quy về tỷ số: q × drift × ν ≤ limit, với drift = de/h lấy từ ETABS Story Drifts.";
+            ws.Range("B8:J8").Merge();
+            ws.Cell("B9").Value = "ν - hệ số chiết giảm; limit - giới hạn (0.005 giòn / 0.0075 dẻo / 0.010 không cản trở).";
+            ws.Range("B9:J9").Merge();
+
+            ws.Cell("A11").Value = "2. Kiểm tra chuyển vị lệch tầng";
+            ws.Cell("A11").Style.Font.Bold = true;
+            ws.Cell("B12").Value = "Tổ hợp kiểm tra:";
+            ws.Cell("D12").Value = comboText;
+            ws.Range("D12:J12").Merge();
+            ws.Cell("B13").Value = "Tham số:";
+            ws.Cell("D13").Value = "q = " + q.ToString("0.###") + " ; ν = " + nu.ToString("0.###") + " ; limit = " + limitText;
+            ws.Range("D13:J13").Merge();
+
+            ws.Cell("B14").Value = "Kết luận:";
+            ws.Cell("C14").Value = anyNg
+                ? "Có tầng không đảm bảo điều kiện chuyển vị lệch tầng do động đất."
+                : "Tất cả các tầng đảm bảo điều kiện chuyển vị lệch tầng do động đất.";
+            ws.Range("C14:J14").Merge();
+            ws.Cell("C14").Style.Font.Bold = true;
+            ws.Cell("C14").Style.Font.Italic = true;
+            ws.Cell("C14").Style.Font.FontColor = anyNg ? XLColor.Red : XLColor.Green;
+
+            int headerRow = 16;
+            string[] heads = { "Tầng", "Cao độ (m)", "h (m)", "drift X", "drift Y", "q", "ν", "q×drift×ν", "Giới hạn", "Kiểm tra" };
+            for (int i = 0; i < heads.Length; i++)
+                ws.Cell(headerRow, 2 + i).Value = heads[i];
+            StyleHeaderRange(ws.Range(headerRow, 2, headerRow, 11));
+
+            int r = headerRow + 1;
+            int firstData = r;
+            foreach (var c in computed)
+            {
+                ws.Cell(r, 2).Value = c.Story.Story;
+                ws.Cell(r, 3).Value = c.Story.Elevation;
+                ws.Cell(r, 4).Value = c.Story.Height;
+                ws.Cell(r, 5).Value = c.DriftX;
+                ws.Cell(r, 6).Value = c.DriftY;
+                ws.Cell(r, 7).Value = q;
+                ws.Cell(r, 8).Value = nu;
+                ws.Cell(r, 9).Value = c.ReducedMax;
+                ws.Cell(r, 10).Value = limit;
+                ws.Cell(r, 11).Value = c.Ok ? "OK" : "NG";
+                if (!c.Ok) ws.Cell(r, 11).Style.Font.FontColor = XLColor.Red;
+                r++;
+            }
+
+            int lastData = Math.Max(firstData, r - 1);
+            StyleBodyBox(ws.Range(firstData, 2, lastData, 11));
+            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 11, lastData, 11).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
+            ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
+            ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0.000000";
+            ws.Range(firstData, 7, lastData, 8).Style.NumberFormat.Format = "0.###";
+            ws.Range(firstData, 9, lastData, 10).Style.NumberFormat.Format = "0.000000";
+
+            ws.Column(1).Width = 3;
+            ws.Column(2).Width = 12;
+            for (int col = 3; col <= 11; col++) ws.Column(col).Width = 12;
+        }
+
+        private static Dictionary<string, SeismicDriftRow> BuildMaxSeismicByStory(
+            List<SeismicDriftRow> rows, string dir)
+        {
+            var map = new Dictionary<string, SeismicDriftRow>(StringComparer.OrdinalIgnoreCase);
             foreach (var row in rows.Where(x => x.Direction.Equals(dir, StringComparison.OrdinalIgnoreCase)))
             {
                 if (!map.TryGetValue(row.Story, out var cur) ||
