@@ -531,7 +531,7 @@ namespace Etabs_Ultimate_Tools
             AdjustPileHCapsHeight();
         }
 
-        // Điền SCT tạm = Kz×0.01 vào các ô KÉO/NÉN còn trống; cột NGANG để trống cho người dùng tự nhập.
+        // Điền SCT tạm = Kz×0.01 vào các ô KÉO/NÉN còn trống; cột NGANG lấy tạm = 1/10 SCT nén.
         private static void FillRowHDefaults(DataGridViewRow row, double defaultCap)
         {
             if (row == null || defaultCap <= 0) return;
@@ -542,6 +542,16 @@ namespace Etabs_Ultimate_Tools
                 object cur = row.Cells[c].Value;
                 if (cur == null || string.IsNullOrWhiteSpace(cur.ToString()))
                     row.Cells[c].Value = val;
+            }
+
+            // Lực ngang lấy tạm = 1/10 SCT nén; chỉ điền vào ô NGANG còn trống.
+            string horizVal = Math.Round(defaultCap / 10.0, 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            int[] horizCols = { CapHHorizVert, CapHHorizWind, CapHHorizEq };
+            foreach (int c in horizCols)
+            {
+                object cur = row.Cells[c].Value;
+                if (cur == null || string.IsNullOrWhiteSpace(cur.ToString()))
+                    row.Cells[c].Value = horizVal;
             }
         }
 
