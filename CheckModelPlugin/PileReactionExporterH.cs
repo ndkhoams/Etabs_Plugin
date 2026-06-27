@@ -7,19 +7,19 @@ namespace Etabs_Ultimate_Tools
 {
     /// <summary>
     /// Xuất kết quả kiểm tra phản lực cọc CÓ LỰC NGANG ra Excel:
-    /// mỗi trường hợp tải = 1 sheet, có thêm cột |FX|, |FY|, H và SCT ngang.
+    /// mỗi trường hợp tải = 1 sheet. Nếu considerH = false thì bỏ các cột |FX|, |FY|, H, SCT ngang.
     /// </summary>
     public static class PileReactionExporterH
     {
         private static readonly XLColor HeadFill = XLColor.FromArgb(197, 217, 241);
 
-        public static void Export(string filePath, List<PileReactionCase> cases)
+        public static void Export(string filePath, List<PileReactionCase> cases, bool considerH)
         {
             using (var wb = new XLWorkbook())
             {
                 if (cases != null)
                     foreach (var c in cases)
-                        WriteCaseSheet(wb, c);
+                        WriteCaseSheet(wb, c, considerH);
 
                 if (!wb.Worksheets.Any())
                     wb.Worksheets.Add("EMPTY");
@@ -28,31 +28,36 @@ namespace Etabs_Ultimate_Tools
             }
         }
 
-        private static void WriteCaseSheet(XLWorkbook wb, PileReactionCase c)
+        private static void WriteCaseSheet(XLWorkbook wb, PileReactionCase c, bool considerH)
         {
             string sheetName = string.IsNullOrWhiteSpace(c.SheetName) ? "Sheet" : c.SheetName;
             var ws = wb.Worksheets.Add(sheetName);
             EtabsHelper.ApplyA4PageSetup(ws);
 
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC (CÓ LỰC NGANG)";
-            ws.Range("A1:L1").Merge();
+            int lastCol = considerH ? 12 : 7;
+
+            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊ8U TẢI CỦA CỌC" + (considerH ? " (CÓ LỰC NGANG)" : "");
+            ws.Range(1, 1, 1, lastCol).Merge();
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
             ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Cell("A2").Value = c.Title;
-            ws.Range("A2:L2").Merge();
+            ws.Range(2, 1, 2, lastCol).Merge();
             ws.Cell("A2").Style.Font.Bold = true;
             ws.Cell("A2").Style.Fill.BackgroundColor = HeadFill;
             ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             int headerRow = 3;
-            string[] heads = { "Loại cọc", "Số hiệu cọc", "Tổ hợp", "Phản lực đứng (kN)",
-                "SCT kéo (kN)", "SCT nén (kN)", "KL đứng",
-                "|FX| (kN)", "|FY| (kN)", "H (kN)", "SCT ngang (kN)", "KL ngang" };
-            for (int i = 0; i < heads.Length; i++)
-                ws.Cell(headerRow, 1 + i).Value = heads[i];
-            StyleHeaderRange(ws.Range(headerRow, 1, headerRow, 12));
+            string[] headsBase = { "Loại cọc", "Số hiệu cọc", "Tổ hợp", "Phản lực đứng (kN)",
+                "SCT kéo (kN)", "SCT nén (kN)", "KL đứng" };
+            string[] headsH = { "|FX| (kN)", "|FY| (kN)", "H (kN)", "SCT ngang (kN)", "KL ngang" };
+            for (int i = 0; i < headsBase.Length; i++)
+                ws.Cell(headerRow, 1 + i).Value = headsBase[i];
+            if (considerH)
+                for (int i = 0; i < headsH.Length; i++)
+                    ws.Cell(headerRow, 8 + i).Value = headsH[i];
+            StyleHeaderRange(ws.Range(headerRow, 1, headerRow, lastCol));
 
             int firstData = headerRow + 1;
             int r = firstData;
@@ -66,24 +71,30 @@ namespace Etabs_Ultimate_Tools
                 ws.Cell(r, 5).Value = Math.Round(row.TensionCap, 1);
                 ws.Cell(r, 6).Value = Math.Round(row.CompressionCap, 1);
                 ws.Cell(r, 7).Value = row.Result;
-                ws.Cell(r, 8).Value = Math.Round(row.Fx, 1);
-                ws.Cell(r, 9).Value = Math.Round(row.Fy, 1);
-                ws.Cell(r, 10).Value = Math.Round(row.Horizontal, 1);
-                ws.Cell(r, 11).Value = Math.Round(row.HorizontalCap, 1);
-                ws.Cell(r, 12).Value = row.HResult;
-
                 if (IsFail(row.Result)) ws.Cell(r, 7).Style.Font.FontColor = XLColor.Red;
-                if (IsFail(row.HResult)) ws.Cell(r, 12).Style.Font.FontColor = XLColor.Red;
+
+                if (considerH)
+                {
+                    ws.Cell(r, 8).Value = Math.Round(row.Fx, 1);
+                    ws.Cell(r, 9).Value = Math.Round(row.Fy, 1);
+                    ws.Cell(r, 10).Value = Math.Round(row.Horizontal, 1);
+                    ws.Cell(r, 11).Value = Math.Round(row.HorizontalCap, 1);
+                    ws.Cell(r, 12).Value = row.HResult;
+                    if (IsFail(row.HResult)) ws.Cell(r, 12).Style.Font.FontColor = XLColor.Red;
+                }
                 r++;
             }
 
             int lastData = Math.Max(firstData, r - 1);
-            StyleBodyBox(ws.Range(firstData, 1, lastData, 12));
+            StyleBodyBox(ws.Range(firstData, 1, lastData, lastCol));
             ws.Range(firstData, 1, lastData, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 7, lastData, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            ws.Range(firstData, 12, lastData, 12).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 4, lastData, 6).Style.NumberFormat.Format = "0";
-            ws.Range(firstData, 8, lastData, 11).Style.NumberFormat.Format = "0";
+            if (considerH)
+            {
+                ws.Range(firstData, 12, lastData, 12).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                ws.Range(firstData, 8, lastData, 11).Style.NumberFormat.Format = "0";
+            }
 
             ws.Column(1).Width = 11;
             ws.Column(2).Width = 12;
@@ -92,11 +103,14 @@ namespace Etabs_Ultimate_Tools
             ws.Column(5).Width = 13;
             ws.Column(6).Width = 13;
             ws.Column(7).Width = 11;
-            ws.Column(8).Width = 12;
-            ws.Column(9).Width = 12;
-            ws.Column(10).Width = 12;
-            ws.Column(11).Width = 14;
-            ws.Column(12).Width = 11;
+            if (considerH)
+            {
+                ws.Column(8).Width = 12;
+                ws.Column(9).Width = 12;
+                ws.Column(10).Width = 12;
+                ws.Column(11).Width = 14;
+                ws.Column(12).Width = 11;
+            }
 
             var used = ws.RangeUsed();
             if (used != null)
