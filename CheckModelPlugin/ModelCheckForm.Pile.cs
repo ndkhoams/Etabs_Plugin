@@ -73,7 +73,7 @@ namespace Etabs_Ultimate_Tools
 
             left.Controls.Add(new Label
             {
-                Text = "SCT chịu kéo/nén theo loại cọc & từng tổ hợp (kN) — tự điền Kz×0.01:",
+                Text = "SCT chịu kéo/nén theo loại cọc & từng tổ hợp (kN):",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 1);
 
@@ -137,7 +137,7 @@ namespace Etabs_Ultimate_Tools
             right.Controls.Add(dgvPilePreview, 0, 1);
             AddPileGridColumns();
 
-            lblPileInfo.Text = "SCT tạm được tự điền = Kz×0.01; chỉnh lại nếu cần, chọn 3 tổ hợp rồi bấm Xem trước.";
+            lblPileInfo.Text = "Điền SCT cọc vào bảng.";
         }
 
         // Header gộp 2 dòng: dòng trên = trường hợp tải, dòng dưới = Kéo/Nén.

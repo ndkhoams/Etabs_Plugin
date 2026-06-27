@@ -515,7 +515,7 @@ namespace Etabs_Ultimate_Tools
             ws.Range("B8:H8").Merge();
             ws.Cell("B9").Value = "ν - hệ số chiết giảm; limit - giới hạn (0.005 giòn / 0.0075 dẻo / 0.010 không cản trở).";
             ws.Range("B9:H9").Merge();
-            ws.Cell("B10").Value = "Drift lấy từ tổ hợp các thành phần phương ngang của động đất SQRT(EX^2+EY^2)";
+            ws.Cell("B10").Value = "Drift lấy từ tổ hợp các thành phần phương ngang của động đất SRSS(EX;EY)";
             ws.Range("B10:H10").Merge();
 
             ws.Cell("A12").Value = "2. Kiểm tra chuyển vị lệch tầng";
