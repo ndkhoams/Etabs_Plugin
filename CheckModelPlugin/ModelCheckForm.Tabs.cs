@@ -53,7 +53,7 @@ namespace Etabs_Ultimate_Tools
         private void BuildWindDriftTab(TabPage tab)
         {
             dgvWindDrift = BuildScaffold(tab,
-                "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỊNG GIÓ",
+                "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG GIÓ",
                 "(Theo TCVN 2737:2023)",
                 "Điều kiện: drift = Δ/h ≤ 1/500 cho từng tầng",
                 "Drift lấy trực tiếp từ ETABS Story Drifts theo tổ hợp gió.",
@@ -71,7 +71,7 @@ namespace Etabs_Ultimate_Tools
         private void BuildSeismicDriftTab(TabPage tab)
         {
             dgvSeis = BuildScaffold(tab,
-                "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỊNG ĐỘNG ĐẤT",
+                "KIỂM TRA CHUYỂN VỊ LỆCH TẦNG DO TẢI TRỌNG ĐỘNG ĐẤT",
                 "(Theo TCVN 9386-1:2025)",
                 "Điều kiện hạn chế hư hỏng: dr·ν ≤ limit·h  ⇔  drift ≤ limit/(ν·q) (mục 4.4.3.2)",
                 "drift = de/h (đàn hồi) lấy từ ETABS Story Drifts. dr = q × de là chuyển vị ngang thiết kế tương đối giữa các tầng. Drift lấy từ tổ hợp các thành phần phương ngang của động đất SRSS(EX;EY)." +
