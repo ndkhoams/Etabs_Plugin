@@ -164,7 +164,7 @@ namespace Etabs_Ultimate_Tools
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(root);
 
-            root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊ8U TẢI CỦA CỌC"), 0, 0);
+            root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC"), 0, 0);
             root.Controls.Add(MakeSubtitle("(Phản lực đứng so với SCT kéo/nén; hợp lực ngang H=√(FX²+FY²) so với SCT ngang, đơn vị kN)"), 0, 1);
 
             var main = new TableLayoutPanel
