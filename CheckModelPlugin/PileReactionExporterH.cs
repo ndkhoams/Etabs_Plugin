@@ -36,7 +36,7 @@ namespace Etabs_Ultimate_Tools
 
             int lastCol = considerH ? 12 : 7;
 
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊ8U TẢI CỦA CỌC" + (considerH ? " (CÓ LỰC NGANG)" : "");
+            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC";
             ws.Range(1, 1, 1, lastCol).Merge();
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
