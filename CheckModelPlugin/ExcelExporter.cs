@@ -77,7 +77,7 @@ namespace Etabs_Ultimate_Tools
             body.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
             body.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
             body.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         }
 
         private static void WriteHeaderAndNotes(IXLWorksheet ws)
@@ -181,9 +181,9 @@ namespace Etabs_Ultimate_Tools
 
             int lastData = Math.Max(firstData, r - 1);
             StyleBodyBox(ws.Range(firstData, 2, lastData, 9));
-            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 7, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            ws.Range(firstData, 9, lastData, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 9, lastData, 9).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             ws.Range(firstData, 3, lastData, 4).Style.NumberFormat.Format = "0.00000";
             ws.Range(firstData, 5, lastData, 6).Style.NumberFormat.Format = "0";
@@ -297,7 +297,7 @@ namespace Etabs_Ultimate_Tools
 
             int lastData = Math.Max(firstData, r - 1);
             StyleBodyBox(ws.Range(firstData, 2, lastData, 8));
-            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 8, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
             ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
@@ -425,7 +425,7 @@ namespace Etabs_Ultimate_Tools
 
             int lastData = Math.Max(firstData, r - 1);
             StyleBodyBox(ws.Range(firstData, 2, lastData, 7));
-            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 7, lastData, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
             ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
@@ -522,7 +522,7 @@ namespace Etabs_Ultimate_Tools
             ws.Cell("A12").Style.Font.Bold = true;
             ws.Cell("B13").Value = "Tổ hợp kiểm tra:";
             ws.Cell("D13").Value = comboText;
-            ws.Range("D13:JH3").Merge();
+            ws.Range("D13:H13").Merge();
             ws.Cell("B14").Value = "Tham số:";
             ws.Cell("D14").Value = "q = " + q.ToString("0.###") + " ; ν = " + nu.ToString("0.###") + " ; limit = " + limitText + " ; [drift] = limit/(ν·q) = " + allow.ToString("0.000000");
             ws.Range("D14:H14").Merge();
@@ -559,7 +559,7 @@ namespace Etabs_Ultimate_Tools
 
             int lastData = Math.Max(firstData, r - 1);
             StyleBodyBox(ws.Range(firstData, 2, lastData, 8));
-            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+            ws.Range(firstData, 2, lastData, 2).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 8, lastData, 8).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Range(firstData, 3, lastData, 3).Style.NumberFormat.Format = "+0.000;-0.000;0.000";
             ws.Range(firstData, 4, lastData, 4).Style.NumberFormat.Format = "0.000";
