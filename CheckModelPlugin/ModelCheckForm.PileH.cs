@@ -21,7 +21,8 @@ namespace Etabs_Ultimate_Tools
         private const int CapHNameW = 80;
         private const int CapHValW = 46;
 
-        private ComboBox cboPileHVert, cboPileHWind, cboPileHEq;
+        // Mỗi trường hợp tải cho chọn NHIỀU tổ hợp; plug-in xét tất cả và lấy combo nguy hiểm nhất.
+        private CheckedListBox clbPileHVert, clbPileHWind, clbPileHEq;
         private DataGridView dgvPileHCaps, dgvPileHPreview;
         private Button btnPileHPreview, btnPileHExport;
         private Label lblPileHInfo;
@@ -56,9 +57,10 @@ namespace Etabs_Ultimate_Tools
             Text = text, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
         };
 
-        private static ComboBox MakePileCombo() => new ComboBox
+        private static CheckedListBox MakePileCheckList() => new CheckedListBox
         {
-            DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Fill, Margin = new Padding(0, 4, 0, 4)
+            Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false,
+            BorderStyle = BorderStyle.FixedSingle, Margin = new Padding(0, 0, 6, 0)
         };
 
         private DataGridView CreateEditableGrid()
@@ -122,7 +124,7 @@ namespace Etabs_Ultimate_Tools
             {
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = new Padding(0, 0, 10, 0)
             };
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 118)); // combo
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 150)); // 3 danh sách chọn tổ hợp
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));  // hàng tùy chọn (2 checkbox)
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));  // nhãn SCT
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // bảng SCT
@@ -130,21 +132,24 @@ namespace Etabs_Ultimate_Tools
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // thông tin
             main.Controls.Add(left, 0, 0);
 
+            // Mỗi cột là 1 danh sách tích chọn nhiều tổ hợp cho 1 trường hợp tải.
             var comboPanel = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 3
+                Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2
             };
-            comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 160));
-            comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            for (int i = 0; i < 3; i++) comboPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 34));
+            comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+            comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
+            comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34f));
+            comboPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
+            comboPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             left.Controls.Add(comboPanel, 0, 0);
 
             comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải đứng:"), 0, 0);
-            cboPileHVert = MakePileCombo(); comboPanel.Controls.Add(cboPileHVert, 1, 0);
-            comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải gió:"), 0, 1);
-            cboPileHWind = MakePileCombo(); comboPanel.Controls.Add(cboPileHWind, 1, 1);
-            comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải động đất:"), 0, 2);
-            cboPileHEq = MakePileCombo(); comboPanel.Controls.Add(cboPileHEq, 1, 2);
+            comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải gió:"), 1, 0);
+            comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải động đất:"), 2, 0);
+            clbPileHVert = MakePileCheckList(); comboPanel.Controls.Add(clbPileHVert, 0, 1);
+            clbPileHWind = MakePileCheckList(); comboPanel.Controls.Add(clbPileHWind, 1, 1);
+            clbPileHEq = MakePileCheckList(); comboPanel.Controls.Add(clbPileHEq, 2, 1);
 
             // Hàng tùy chọn: 2 checkbox cạnh nhau (xét tải ngang / xét SCT chịu kéo).
             var optRow = new FlowLayoutPanel
@@ -180,9 +185,11 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 2);
 
+            // Dùng Anchor (không Dock.Left) để panel co/giãn đúng bề rộng khi bật/tắt cột.
             _pileHCapsPanel = new TableLayoutPanel
             {
-                Dock = DockStyle.Left, ColumnCount = 1, RowCount = 2,
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left,
+                ColumnCount = 1, RowCount = 2,
                 Width = CapHNameW + 9 * CapHValW + 4, Margin = new Padding(0, 8, 0, 0)
             };
             _pileHCapsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
@@ -296,7 +303,7 @@ namespace Etabs_Ultimate_Tools
             AddColumn(dgvPileHPreview, "LoadType", "Trường hợp", 120, null, true);
             AddColumn(dgvPileHPreview, "PileType", "Loại cọc", 70, null, true);
             AddColumn(dgvPileHPreview, "PileId", "Số hiệu", 70, null, true);
-            AddColumn(dgvPileHPreview, "Combo", "Tổ hợp", 110, null, true);
+            AddColumn(dgvPileHPreview, "Combo", "Tổ hợp", 120, null, true);
             AddColumn(dgvPileHPreview, "Reaction", "Phản lực đứng (kN)", 90, "0.#", true);
             AddColumn(dgvPileHPreview, "TensionCap", "SCT kéo", 70, "0.#", true);
             AddColumn(dgvPileHPreview, "CompressionCap", "SCT nén", 70, "0.#", true);
@@ -340,10 +347,7 @@ namespace Etabs_Ultimate_Tools
                 int perGroup = 1 + (considerT ? 1 : 0) + (considerH ? 1 : 0);
                 int valCols = perGroup * 3;
                 int capsWidth = CapHNameW + valCols * CapHValW + 4;
-                // Ghim cứng bề rộng để panel co/giãn đúng khi bật/tắt cột;
-                // Dock.Left trong TableLayoutPanel không tự cập nhật Width khi gán lại.
-                _pileHCapsPanel.MinimumSize = new Size(capsWidth, 0);
-                _pileHCapsPanel.MaximumSize = new Size(capsWidth, 0);
+                // Panel dùng Anchor (Dock=None) nên gán Width sẽ co/giãn đúng.
                 _pileHCapsPanel.Width = capsWidth;
                 _pileHCapsPanel.ResumeLayout(true);
                 if (_pileHCapsPanel.Parent != null) _pileHCapsPanel.Parent.PerformLayout();
@@ -454,19 +458,33 @@ namespace Etabs_Ultimate_Tools
         private List<PileReactionCase> BuildPileHCases()
         {
             var cases = new List<PileReactionCase>();
-            AddPileHCase(cases, cboPileHVert.Text.Trim(), "TỔ HỢP TẢI ĐỨNG", "TAI DUNG",
+            AddPileHCase(cases, GetCheckedCombos(clbPileHVert), "TỔ HỢP TẢI ĐỨNG", "TAI DUNG",
                 ReadPileHCaps(CapHTensVert, CapHCompVert, CapHHorizVert));
-            AddPileHCase(cases, cboPileHWind.Text.Trim(), "TỔ HỢP TẢI GIÓ", "TAI GIO",
+            AddPileHCase(cases, GetCheckedCombos(clbPileHWind), "TỔ HỢP TẢI GIÓ", "TAI GIO",
                 ReadPileHCaps(CapHTensWind, CapHCompWind, CapHHorizWind));
-            AddPileHCase(cases, cboPileHEq.Text.Trim(), "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT",
+            AddPileHCase(cases, GetCheckedCombos(clbPileHEq), "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT",
                 ReadPileHCaps(CapHTensEq, CapHCompEq, CapHHorizEq));
             return cases;
         }
 
-        private void AddPileHCase(List<PileReactionCase> cases, string combo, string title,
+        // Lấy danh sách tổ hợp được tích chọn trong 1 CheckedListBox.
+        private static List<string> GetCheckedCombos(CheckedListBox clb)
+        {
+            var list = new List<string>();
+            if (clb == null) return list;
+            foreach (var item in clb.CheckedItems)
+            {
+                string s = Convert.ToString(item);
+                if (!string.IsNullOrWhiteSpace(s)) list.Add(s.Trim());
+            }
+            return list;
+        }
+
+        private void AddPileHCase(List<PileReactionCase> cases, List<string> combos, string title,
             string sheet, Dictionary<string, PileSpringType> caps)
         {
-            var c = PileReactionChecker.ComputeCaseH(_sap, combo, title, sheet, caps, ConsiderPileTension);
+            if (combos == null || combos.Count == 0) return;
+            var c = PileReactionChecker.ComputeCaseHMulti(_sap, combos, title, sheet, caps, ConsiderPileTension);
             if (c != null) cases.Add(c);
         }
 
@@ -487,7 +505,7 @@ namespace Etabs_Ultimate_Tools
 
             if (cases.Count == 0)
             {
-                Warn("Chưa chọn tổ hợp tải nào (cần chọn ít nhất 1 trong 3 trường hợp).", PileHTitle);
+                Warn("Chưa chọn tổ hợp tải nào (cần tích ít nhất 1 tổ hợp trong 1 trong 3 trường hợp).", PileHTitle);
                 return;
             }
 
