@@ -208,7 +208,7 @@ namespace Etabs_Ultimate_Tools
             body.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
             body.Style.Border.InsideBorder = XLBorderStyleValues.Thin;
             body.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
-            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Right;
+            body.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         }
     }
 }
