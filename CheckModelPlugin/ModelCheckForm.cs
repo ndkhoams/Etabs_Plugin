@@ -759,7 +759,7 @@ namespace Etabs_Ultimate_Tools
             dgvAxial = BuildScaffold(tab,
                 "KIỂM TRA HỆ SỐ LỰC DỌC QUY ĐỔI",
                 "(Theo TCVN 9386-1:2025)",
-                "ʉd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc",
+                "ʊd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc",
                 "Chọn cột hoặc vách (Pier) trong ETABS trước khi mở tool.",
                 out var bar);
 
@@ -934,8 +934,8 @@ namespace Etabs_Ultimate_Tools
             AddColumn(dgvAxial, "T2", "t2 (m)", 70, "0.000");
             AddColumn(dgvAxial, "Ac", "Ac (m²)", 80, "0.000");
             AddColumn(dgvAxial, "AcFcd", "Ac·fcd (kN)", 100, "0");
-            AddColumn(dgvAxial, "NuD", "ʉd", 70, "0.000");
-            AddColumn(dgvAxial, "VdLimit", "ʉd limit", 70, "0.00");
+            AddColumn(dgvAxial, "NuD", "ʊd", 70, "0.000");
+            AddColumn(dgvAxial, "VdLimit", "ʊd limit", 70, "0.00");
             AddColumn(dgvAxial, "Result", "Kết luận", 150, null, true);
         }
 
@@ -944,7 +944,7 @@ namespace Etabs_Ultimate_Tools
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo, cboPileHVert, cboPileHWind, cboPileHEq })
+            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
@@ -955,9 +955,17 @@ namespace Etabs_Ultimate_Tools
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboSeisCombo, "EQ-SRSS", "Vtot", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
 
-            SelectByKeyword(cboPileHVert, "ULS1", "ENV_ULS", "ULS", "COMB", "TT", "BAO");
-            SelectByKeyword(cboPileHWind, "ENV_ULS_W", "ENV_W", "WIND", "GIO", "WX", "WY");
-            SelectByKeyword(cboPileHEq, "ENV_EQ", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
+            // Tab Pile Reactions: mỗi trường hợp tải là 1 CheckedListBox cho chọn NHIỀU tổ hợp.
+            foreach (var clb in new[] { clbPileHVert, clbPileHWind, clbPileHEq })
+            {
+                if (clb == null) continue;
+                clb.Items.Clear();
+                foreach (var name in combos)
+                    clb.Items.Add(name, false);
+            }
+            CheckCombosByKeyword(clbPileHVert, "ULS1", "ULS2", "ULS", "COMB", "TT", "TINHTAI", "HT", "LL", "DL");
+            CheckCombosByKeyword(clbPileHWind, "WIND", "GIO", "_W", "ENV_W", "WX", "WY");
+            CheckCombosByKeyword(clbPileHEq, "EQ", "DD", "DONGDAT", "SPEC", "RS");
             LoadPileHSpringTypes();
 
             if (cboAxialCombo.Items.Count > 0 && cboAxialCombo.SelectedIndex < 0) cboAxialCombo.SelectedIndex = 0;
@@ -981,6 +989,24 @@ namespace Etabs_Ultimate_Tools
                     if (cbo.Items[i].ToString().IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) { cbo.SelectedIndex = i; return; }
 
             if (cbo.Items.Count > 0 && cbo.SelectedIndex < 0) cbo.SelectedIndex = 0;
+        }
+
+        // Tích sẵn các tổ hợp có chứa từ khóa (không phân biệt hoa thường) trong CheckedListBox.
+        private static void CheckCombosByKeyword(CheckedListBox clb, params string[] keys)
+        {
+            if (clb == null) return;
+            for (int i = 0; i < clb.Items.Count; i++)
+            {
+                string name = clb.Items[i].ToString();
+                foreach (var key in keys)
+                {
+                    if (name.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0)
+                    {
+                        clb.SetItemChecked(i, true);
+                        break;
+                    }
+                }
+            }
         }
 
         // ---------- Tính toán ----------
