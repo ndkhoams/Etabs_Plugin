@@ -52,7 +52,6 @@ namespace Etabs_Ultimate_Tools
     /// <summary>
     /// Phát hiện các điểm có gán point spring (= cọc), đọc phản lực đầu cọc (F3)
     /// theo từng tổ hợp và so sánh với SCT chịu kéo/nén.
-    /// Tổ hợp bao (Max/Min) -> 2 dòng/cọc trong cùng 1 bảng (tên tổ hợp kèm _max/_min).
     /// Port net48 (không dùng record/init/MaxBy/range operator).
     /// </summary>
     public static class PileReactionChecker
@@ -64,6 +63,21 @@ namespace Etabs_Ultimate_Tools
             public string Name = "";
             public string Label = "";
             public double Kz = 0.0;   // độ cứng lò xo phương đứng (U3)
+        }
+
+        // Góp kết quả của 1 cọc trên nhiều tổ hợp (bao nén/kéo + H lớn nhất).
+        private class PileAgg
+        {
+            public PilePoint Pile;
+            public bool HasData = false;
+            public double Pmax = double.MinValue;   // nén lớn nhất (bao)
+            public double Pmin = double.MaxValue;   // kéo lớn nhất (bao)
+            public string ComboMax = "";
+            public string ComboMin = "";
+            public double MaxH = -1.0;              // H lớn nhất trên mọi tổ hợp
+            public double Fx = 0.0;
+            public double Fy = 0.0;
+            public string ComboH = "";
         }
 
         // ── Liệt kê các loại point spring khai báo trong model (= loại cọc) ──────
@@ -240,6 +254,100 @@ namespace Etabs_Ultimate_Tools
                 .ToList();
 
             return new PileReactionCase { Title = title, SheetName = sheet, Combo = combo, Rows = sorted };
+        }
+
+        // ── Như ComputeCaseH nhưng duyệt NHIỀU tổ hợp được chọn ───────────────────
+        // Với mỗi cọc: phản lực nén lớn nhất & kéo lớn nhất lấy bao trên tất cả tổ hợp;
+        // FX, FY lấy theo ĐÚNG tổ hợp thành phần cho H lớn nhất (tương quan, không bị
+        // cộng dồn sai như tổ hợp bao envelope).
+        public static PileReactionCase ComputeCaseHMulti(cSapModel sap, List<string> combos,
+            string title, string sheet, Dictionary<string, PileSpringType> caps, bool considerTension)
+        {
+            if (combos == null) return null;
+            var valid = combos.Where(c => !string.IsNullOrWhiteSpace(c))
+                              .Select(c => c.Trim())
+                              .Distinct(StringComparer.OrdinalIgnoreCase)
+                              .ToList();
+            if (valid.Count == 0) return null;
+
+            sap.SetPresentUnits(eUnits.kN_m_C);
+            // 0 = trả về từng step để lấy cặp FX-FY tương quan cùng 1 bước.
+            try { sap.Results.Setup.SetOptionMultiValuedCombo(0); } catch { }
+
+            var piles = GetPilePoints(sap);
+            if (piles.Count == 0) return null;
+            var defined = GetSpringTypes(sap);
+
+            var agg = new Dictionary<string, PileAgg>(StringComparer.Ordinal);
+            foreach (var pile in piles)
+                if (!agg.ContainsKey(pile.Name)) agg[pile.Name] = new PileAgg { Pile = pile };
+
+            foreach (var combo in valid)
+            {
+                EtabsHelper.SelectCaseOrCombo(sap, combo);
+                foreach (var pile in piles)
+                {
+                    double pmax, pmin, fxAbs, fyAbs;
+                    bool multi;
+                    if (!TryGetReactionRangeH(sap, pile.Name, out pmax, out pmin, out fxAbs, out fyAbs, out multi))
+                        continue;
+
+                    var a = agg[pile.Name];
+                    a.HasData = true;
+                    if (pmax > a.Pmax) { a.Pmax = pmax; a.ComboMax = combo; }
+                    if (pmin < a.Pmin) { a.Pmin = pmin; a.ComboMin = combo; }
+
+                    double h = Math.Sqrt(fxAbs * fxAbs + fyAbs * fyAbs);
+                    if (h > a.MaxH) { a.MaxH = h; a.Fx = fxAbs; a.Fy = fyAbs; a.ComboH = combo; }
+                }
+            }
+
+            var rows = new List<PileReactionRow>();
+            foreach (var pile in piles)
+            {
+                var a = agg[pile.Name];
+                if (!a.HasData) continue;
+
+                string type = ResolveType(pile, defined);
+                double tensCap = 0, compCap = 0, horizCap = 0;
+                if (caps != null)
+                {
+                    PileSpringType cap;
+                    if (caps.TryGetValue(type, out cap))
+                    {
+                        tensCap = cap.TensionCap;
+                        compCap = cap.CompressionCap;
+                        horizCap = cap.HorizontalCap;
+                    }
+                }
+
+                double hVal = a.MaxH < 0 ? 0.0 : a.MaxH;
+                string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (hVal <= horizCap ? "Đạt" : "Không Đạt");
+
+                var rc = BuildCompRow(type, pile.Label, a.ComboMax + "_max", a.Pmax, tensCap, compCap);
+                FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
+                rows.Add(rc);
+
+                if (considerTension)
+                {
+                    var rt = BuildTensRow(type, pile.Label, a.ComboMin + "_min", a.Pmin, tensCap, compCap);
+                    FillH(rt, a.Fx, a.Fy, hVal, horizCap, hResult);
+                    rows.Add(rt);
+                }
+            }
+
+            if (rows.Count == 0) return null;
+
+            var sorted = rows
+                .OrderBy(r => r.PileType, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.PileId, new NaturalComparer())
+                .ThenBy(r => r.Combo, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return new PileReactionCase
+            {
+                Title = title, SheetName = sheet, Combo = string.Join(", ", valid), Rows = sorted
+            };
         }
 
         private static void FillH(PileReactionRow r, double fxAbs, double fyAbs, double h,
