@@ -50,7 +50,7 @@ namespace Etabs_Ultimate_Tools
         private List<ForceRow> _colRows = new List<ForceRow>();
         private int _lastColIndex = -1;
 
-        // Pile Reactions (kiểm tra phản lực cọc)
+        // Pile Reactions (các field dùng chung cho tab phản lực cọc)
         private ComboBox cboPileVert, cboPileWind, cboPileEq;
         private DataGridView dgvPileCaps, dgvPilePreview;
         private Button btnPilePreview, btnPileExport;
@@ -104,8 +104,7 @@ namespace Etabs_Ultimate_Tools
             var tabPDelta = new TabPage("P-Delta");
             var tabAxial = new TabPage("Axial Force");
             var tabColExport = new TabPage("Column Force Exporter");
-            var tabPile = new TabPage("Pile Reactions");
-            var tabPileH = new TabPage("Pile Reactions H");
+            var tabPileH = new TabPage("Pile Reactions");
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
@@ -114,7 +113,6 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabPDelta);
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
-            tabs.TabPages.Add(tabPile);
             tabs.TabPages.Add(tabPileH);
 
             BuildModifierTab(tabModifier);
@@ -124,7 +122,6 @@ namespace Etabs_Ultimate_Tools
             BuildPDeltaTab(tabPDelta);
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
-            BuildPileTab(tabPile);
             BuildPileHTab(tabPileH);
         }
 
@@ -769,7 +766,7 @@ namespace Etabs_Ultimate_Tools
             dgvAxial = BuildScaffold(tab,
                 "KIỂM TRA HỆ SỐ LỰC DỌC QUY ĐỔI",
                 "(Theo TCVN 9386-1:2025)",
-                "ʋd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc",
+                "ʉd = Ned/(Ac·fcd) ≤ 0.65 (cột) / 0.40 (vách)  |  fcd = αcc·fck/γc",
                 "Chọn cột hoặc vách (Pier) trong ETABS trước khi mở tool.",
                 out var bar);
 
@@ -944,8 +941,8 @@ namespace Etabs_Ultimate_Tools
             AddColumn(dgvAxial, "T2", "t2 (m)", 70, "0.000");
             AddColumn(dgvAxial, "Ac", "Ac (m²)", 80, "0.000");
             AddColumn(dgvAxial, "AcFcd", "Ac·fcd (kN)", 100, "0");
-            AddColumn(dgvAxial, "NuD", "ʋd", 70, "0.000");
-            AddColumn(dgvAxial, "VdLimit", "ʋd limit", 70, "0.00");
+            AddColumn(dgvAxial, "NuD", "ʉd", 70, "0.000");
+            AddColumn(dgvAxial, "VdLimit", "ʉd limit", 70, "0.00");
             AddColumn(dgvAxial, "Result", "Kết luận", 150, null, true);
         }
 
@@ -954,7 +951,7 @@ namespace Etabs_Ultimate_Tools
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo, cboPileVert, cboPileWind, cboPileEq, cboPileHVert, cboPileHWind, cboPileHEq })
+            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo, cboPileHVert, cboPileHWind, cboPileHEq })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
@@ -964,11 +961,6 @@ namespace Etabs_Ultimate_Tools
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboSeisCombo, "EQ-SRSS", "Vtot", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
-
-            SelectByKeyword(cboPileVert, "ULS1", "ENV_ULS", "ULS", "COMB", "TT", "BAO");
-            SelectByKeyword(cboPileWind, "ENV_ULS_W", "ENV_W", "WIND", "GIO", "WX", "WY");
-            SelectByKeyword(cboPileEq, "ENV_EQ", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
-            LoadPileSpringTypes();
 
             SelectByKeyword(cboPileHVert, "ULS1", "ENV_ULS", "ULS", "COMB", "TT", "BAO");
             SelectByKeyword(cboPileHWind, "ENV_ULS_W", "ENV_W", "WIND", "GIO", "WX", "WY");
