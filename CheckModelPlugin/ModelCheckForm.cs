@@ -90,7 +90,7 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill,
                 Font = new Font("Arial", 9F),
                 SizeMode = TabSizeMode.Fixed,
-                ItemSize = new Size(165, 38),
+                ItemSize = new Size(150, 38),
                 DrawMode = TabDrawMode.OwnerDrawFixed,
                 Padding = new Point(10, 4)
             };
@@ -105,6 +105,7 @@ namespace Etabs_Ultimate_Tools
             var tabAxial = new TabPage("Axial Force");
             var tabColExport = new TabPage("Column Force Exporter");
             var tabPile = new TabPage("Pile Reactions");
+            var tabPileH = new TabPage("Pile Reactions H");
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
@@ -114,6 +115,7 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
             tabs.TabPages.Add(tabPile);
+            tabs.TabPages.Add(tabPileH);
 
             BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
@@ -123,6 +125,7 @@ namespace Etabs_Ultimate_Tools
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
             BuildPileTab(tabPile);
+            BuildPileHTab(tabPileH);
         }
 
         // ---------- Hộp thoại dùng chung ----------
@@ -951,7 +954,7 @@ namespace Etabs_Ultimate_Tools
         private void LoadCombos()
         {
             var combos = PDeltaExtractor.GetLoadCombinations(_sap);
-            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo, cboPileVert, cboPileWind, cboPileEq })
+            foreach (var cbo in new[] { cboCombo, cboWindCombo, cboWindDriftCombo, cboSeisCombo, cboAxialCombo, cboPileVert, cboPileWind, cboPileEq, cboPileHVert, cboPileHWind, cboPileHEq })
             {
                 cbo.Items.Clear();
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
@@ -966,6 +969,11 @@ namespace Etabs_Ultimate_Tools
             SelectByKeyword(cboPileWind, "ENV_ULS_W", "ENV_W", "WIND", "GIO", "WX", "WY");
             SelectByKeyword(cboPileEq, "ENV_EQ", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
             LoadPileSpringTypes();
+
+            SelectByKeyword(cboPileHVert, "ULS1", "ENV_ULS", "ULS", "COMB", "TT", "BAO");
+            SelectByKeyword(cboPileHWind, "ENV_ULS_W", "ENV_W", "WIND", "GIO", "WX", "WY");
+            SelectByKeyword(cboPileHEq, "ENV_EQ", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
+            LoadPileHSpringTypes();
 
             if (cboAxialCombo.Items.Count > 0 && cboAxialCombo.SelectedIndex < 0) cboAxialCombo.SelectedIndex = 0;
 
