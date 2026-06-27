@@ -297,9 +297,10 @@ namespace Etabs_Ultimate_Tools
                 dgvPileHCaps.Columns[CapHHorizEq].Visible = considerH;
             }
 
-            // 2) Dựng lại header bảng SCT cho khớp số cột hiển thị.
+            // 2) Dựng lại header bảng SCT cho khớp số cột hiển thị + ép lại bề rộng panel.
             if (_pileHCapsPanel != null)
             {
+                _pileHCapsPanel.SuspendLayout();
                 if (_pileHCapsHeader != null)
                 {
                     _pileHCapsPanel.Controls.Remove(_pileHCapsHeader);
@@ -307,8 +308,16 @@ namespace Etabs_Ultimate_Tools
                 }
                 _pileHCapsHeader = BuildCapsHeaderH(considerH);
                 _pileHCapsPanel.Controls.Add(_pileHCapsHeader, 0, 0);
+
                 int valCols = considerH ? 9 : 6;
-                _pileHCapsPanel.Width = CapHNameW + valCols * CapHValW + 4;
+                int capsWidth = CapHNameW + valCols * CapHValW + 4;
+                // Ghim cứng bề rộng để panel co/giãn đúng khi bật/tắt cột Ngang;
+                // Dock.Left trong TableLayoutPanel không tự cập nhật Width khi gán lại.
+                _pileHCapsPanel.MinimumSize = new Size(capsWidth, 0);
+                _pileHCapsPanel.MaximumSize = new Size(capsWidth, 0);
+                _pileHCapsPanel.Width = capsWidth;
+                _pileHCapsPanel.ResumeLayout(true);
+                if (_pileHCapsPanel.Parent != null) _pileHCapsPanel.Parent.PerformLayout();
             }
 
             // 3) Bảng preview: ẩn/hiện các cột |FX|, |FY|, H, SCT ngang, KL ngang.
