@@ -130,14 +130,14 @@ namespace Etabs_Ultimate_Tools
             var keys = BuildKeys(considerTension, considerCompression, considerH);
             int lastCol = keys.Count;
 
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊ8U TẢI CỦA CỌC";
+            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC";
             ws.Range(1, 1, 1, lastCol).Merge();
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
             ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
             ws.Row(1).Height = 24;
 
-            ws.Cell("A2").Value = c.Title;
+            ws.Cell("A2").Value = $"TỔ HỢP {c.Title}";
             ws.Range(2, 1, 2, lastCol).Merge();
             ws.Cell("A2").Style.Font.Bold = true;
             ws.Cell("A2").Style.Fill.BackgroundColor = HeadFill;

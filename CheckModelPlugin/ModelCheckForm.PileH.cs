@@ -220,7 +220,7 @@ namespace Etabs_Ultimate_Tools
 
             chkPileHConsiderCompression = new CheckBox
             {
-                Text = "Kiểm tra cọc nén",
+                Text = "Kiểm tra cọc chịu nén",
                 Checked = true,
                 AutoSize = true,
                 Margin = new Padding(0, 4, 16, 0)
@@ -282,7 +282,7 @@ namespace Etabs_Ultimate_Tools
             };
             left.Controls.Add(btnRow, 0, 4);
 
-            btnPileHPreview = new Button { Text = "Preview", Width = 130, Height = 38, Margin = new Padding(0, 0, 12, 0) };
+            btnPileHPreview = new Button { Text = "Kiểm tra", Width = 130, Height = 38, Margin = new Padding(0, 0, 12, 0) };
             btnPileHPreview.Click += (s, e) => PreviewPileHReactions();
             btnRow.Controls.Add(btnPileHPreview);
 
