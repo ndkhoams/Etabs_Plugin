@@ -260,6 +260,9 @@ namespace Etabs_Ultimate_Tools
         // Với mỗi cọc: phản lực nén lớn nhất & kéo lớn nhất lấy bao trên tất cả tổ hợp;
         // FX, FY lấy theo ĐÚNG tổ hợp thành phần cho H lớn nhất (tương quan, không bị
         // cộng dồn sai như tổ hợp bao envelope).
+        // - Cọc chỉ chịu nén  -> 1 dòng (tên tổ hợp, không hậu tố).
+        // - Cọc chỉ chịu kéo  -> 1 dòng (tên tổ hợp, không hậu tố).
+        // - Cọc vừa nén vừa kéo -> 2 dòng kèm hậu tố _max (nén) / _min (kéo).
         public static PileReactionCase ComputeCaseHMulti(cSapModel sap, List<string> combos,
             string title, string sheet, Dictionary<string, PileSpringType> caps, bool considerTension)
         {
@@ -324,15 +327,34 @@ namespace Etabs_Ultimate_Tools
                 double hVal = a.MaxH < 0 ? 0.0 : a.MaxH;
                 string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (hVal <= horizCap ? "Đạt" : "Không Đạt");
 
-                var rc = BuildCompRow(type, pile.Label, a.ComboMax + "_max", a.Pmax, tensCap, compCap);
-                FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
-                rows.Add(rc);
+                // Cọc có thực sự chịu nén (Pmax > 0) và/hoặc chịu kéo (Pmin < 0)?
+                bool hasComp = a.Pmax > 0;
+                bool hasTens = considerTension && a.Pmin < 0;
 
-                if (considerTension)
+                if (hasComp && hasTens)
                 {
+                    // Vừa nén vừa kéo -> 2 dòng, kèm hậu tố _max/_min để phân biệt.
+                    var rc = BuildCompRow(type, pile.Label, a.ComboMax + "_max", a.Pmax, tensCap, compCap);
+                    FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
+                    rows.Add(rc);
+
                     var rt = BuildTensRow(type, pile.Label, a.ComboMin + "_min", a.Pmin, tensCap, compCap);
                     FillH(rt, a.Fx, a.Fy, hVal, horizCap, hResult);
                     rows.Add(rt);
+                }
+                else if (hasTens)
+                {
+                    // Chỉ chịu kéo -> 1 dòng, không hậu tố.
+                    var rt = BuildTensRow(type, pile.Label, a.ComboMin, a.Pmin, tensCap, compCap);
+                    FillH(rt, a.Fx, a.Fy, hVal, horizCap, hResult);
+                    rows.Add(rt);
+                }
+                else
+                {
+                    // Chỉ chịu nén (mặc định) -> 1 dòng, không hậu tố _max/_min.
+                    var rc = BuildCompRow(type, pile.Label, a.ComboMax, a.Pmax, tensCap, compCap);
+                    FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
+                    rows.Add(rc);
                 }
             }
 
