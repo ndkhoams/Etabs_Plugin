@@ -50,13 +50,6 @@ namespace Etabs_Ultimate_Tools
         private List<ForceRow> _colRows = new List<ForceRow>();
         private int _lastColIndex = -1;
 
-        // Pile Reactions (các field dùng chung cho tab phản lực cọc)
-        private ComboBox cboPileVert, cboPileWind, cboPileEq;
-        private DataGridView dgvPileCaps, dgvPilePreview;
-        private Button btnPilePreview, btnPileExport;
-        private Label lblPileInfo;
-        private List<PileReactionCase> _pileCases = new List<PileReactionCase>();
-
         // Property Modifiers (mỗi nhóm cấu kiện là 1 ModGroup tái sử dụng)
         private ModGroup _modBeam, _modCol, _modSlab, _modWall;
         private Button btnModApply, btnModRollback;
