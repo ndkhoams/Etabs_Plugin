@@ -31,6 +31,9 @@ namespace Etabs_Ultimate_Tools
         private Control _pileHCapsHeader;
         private List<PileReactionCase> _pileHCases = new List<PileReactionCase>();
 
+        // Lưu chỉ số click gần nhất của từng danh sách để hỗ trợ giữ SHIFT chọn dải.
+        private readonly Dictionary<CheckedListBox, int> _pileHLastClick = new Dictionary<CheckedListBox, int>();
+
         // Có xét tải ngang hay không (mặc định có).
         private bool ConsiderPileH
         {
@@ -62,6 +65,50 @@ namespace Etabs_Ultimate_Tools
             Dock = DockStyle.Fill, CheckOnClick = true, IntegralHeight = false,
             BorderStyle = BorderStyle.FixedSingle, Margin = new Padding(0, 0, 6, 0)
         };
+
+        // Nút "Bỏ chọn" cho 1 danh sách tổ hợp.
+        private Button MakePileClearButton(CheckedListBox clb)
+        {
+            var b = new Button
+            {
+                Text = "Bỏ chọn", Dock = DockStyle.Fill, Height = 24,
+                Margin = new Padding(0, 2, 6, 0)
+            };
+            b.Click += (s, e) => SetPileListChecked(clb, false);
+            return b;
+        }
+
+        private static void SetPileListChecked(CheckedListBox clb, bool state)
+        {
+            if (clb == null) return;
+            for (int i = 0; i < clb.Items.Count; i++) clb.SetItemChecked(i, state);
+        }
+
+        // Giữ SHIFT + click để tích/bỏ tích một dải tổ hợp liên tiếp (giống tab Column Force).
+        private void EnablePileHShiftSelect(CheckedListBox clb)
+        {
+            if (clb == null) return;
+            _pileHLastClick[clb] = -1;
+            clb.MouseDown += (s, e) =>
+            {
+                int index = clb.IndexFromPoint(e.Location);
+                if (index < 0) return;
+                int last;
+                if (!_pileHLastClick.TryGetValue(clb, out last)) last = -1;
+                if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift && last >= 0 && last != index)
+                {
+                    bool target = !clb.GetItemChecked(index);
+                    int start = Math.Min(last, index);
+                    int end = Math.Max(last, index);
+                    for (int i = start; i <= end; i++)
+                    {
+                        if (i == index) continue;
+                        clb.SetItemChecked(i, target);
+                    }
+                }
+                _pileHLastClick[clb] = index;
+            };
+        }
 
         private DataGridView CreateEditableGrid()
         {
@@ -124,7 +171,7 @@ namespace Etabs_Ultimate_Tools
             {
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = new Padding(0, 0, 10, 0)
             };
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 150)); // 3 danh sách chọn tổ hợp
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 178)); // 3 danh sách chọn tổ hợp + nút Bỏ chọn
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));  // hàng tùy chọn (2 checkbox)
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));  // nhãn SCT
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // bảng SCT
@@ -132,24 +179,28 @@ namespace Etabs_Ultimate_Tools
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 40));  // thông tin
             main.Controls.Add(left, 0, 0);
 
-            // Mỗi cột là 1 danh sách tích chọn nhiều tổ hợp cho 1 trường hợp tải.
+            // Mỗi cột là 1 danh sách tích chọn nhiều tổ hợp cho 1 trường hợp tải + nút Bỏ chọn.
             var comboPanel = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 2
+                Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 3
             };
             comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
             comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33f));
             comboPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.34f));
             comboPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 20));
             comboPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            comboPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 26));
             left.Controls.Add(comboPanel, 0, 0);
 
             comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải đứng:"), 0, 0);
             comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải gió:"), 1, 0);
             comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải động đất:"), 2, 0);
-            clbPileHVert = MakePileCheckList(); comboPanel.Controls.Add(clbPileHVert, 0, 1);
-            clbPileHWind = MakePileCheckList(); comboPanel.Controls.Add(clbPileHWind, 1, 1);
-            clbPileHEq = MakePileCheckList(); comboPanel.Controls.Add(clbPileHEq, 2, 1);
+            clbPileHVert = MakePileCheckList(); EnablePileHShiftSelect(clbPileHVert); comboPanel.Controls.Add(clbPileHVert, 0, 1);
+            clbPileHWind = MakePileCheckList(); EnablePileHShiftSelect(clbPileHWind); comboPanel.Controls.Add(clbPileHWind, 1, 1);
+            clbPileHEq = MakePileCheckList(); EnablePileHShiftSelect(clbPileHEq); comboPanel.Controls.Add(clbPileHEq, 2, 1);
+            comboPanel.Controls.Add(MakePileClearButton(clbPileHVert), 0, 2);
+            comboPanel.Controls.Add(MakePileClearButton(clbPileHWind), 1, 2);
+            comboPanel.Controls.Add(MakePileClearButton(clbPileHEq), 2, 2);
 
             // Hàng tùy chọn: 2 checkbox cạnh nhau (xét tải ngang / xét SCT chịu kéo).
             var optRow = new FlowLayoutPanel
@@ -185,10 +236,11 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 2);
 
-            // Dùng Anchor (không Dock.Left) để panel co/giãn đúng bề rộng khi bật/tắt cột.
+            // Dùng Anchor Top|Left (không Dock.Left, không neo Bottom) để panel co/giãn đúng bề
+            // rộng khi bật/tắt cột VÀ co khít chiều cao theo số dòng (không để vùng trắng thừa).
             _pileHCapsPanel = new TableLayoutPanel
             {
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left,
                 ColumnCount = 1, RowCount = 2,
                 Width = CapHNameW + 9 * CapHValW + 4, Margin = new Padding(0, 8, 0, 0)
             };
@@ -201,6 +253,7 @@ namespace Etabs_Ultimate_Tools
             dgvPileHCaps.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None;
             dgvPileHCaps.AllowUserToResizeColumns = false;
             dgvPileHCaps.AllowUserToResizeRows = false;
+            dgvPileHCaps.ScrollBars = ScrollBars.None;
             dgvPileHCaps.Margin = new Padding(0);
             _pileHCapsPanel.Controls.Add(dgvPileHCaps, 0, 1);
             AddPileHCapsColumns();
@@ -364,6 +417,30 @@ namespace Etabs_Ultimate_Tools
                     if (ci < dgvPileHPreview.Columns.Count)
                         dgvPileHPreview.Columns[ci].Visible = considerH;
             }
+
+            // 4) Co khít chiều cao panel SCT theo số dòng hiện có.
+            AdjustPileHCapsHeight();
+        }
+
+        // Co chiều cao panel SCT vừa khít nội dung (tránh vùng trắng thừa bên dưới).
+        private void AdjustPileHCapsHeight()
+        {
+            if (_pileHCapsPanel == null || dgvPileHCaps == null) return;
+            int gridH = 4;
+            foreach (DataGridViewRow r in dgvPileHCaps.Rows)
+                if (!r.IsNewRow) gridH += r.Height;
+            if (gridH < 28) gridH = 28;
+            const int maxH = 360;
+            if (gridH > maxH)
+            {
+                gridH = maxH;
+                dgvPileHCaps.ScrollBars = ScrollBars.Vertical;
+            }
+            else
+            {
+                dgvPileHCaps.ScrollBars = ScrollBars.None;
+            }
+            _pileHCapsPanel.Height = 46 + gridH + 2;
         }
 
         private void LoadPileHSpringTypes()
@@ -391,6 +468,8 @@ namespace Etabs_Ultimate_Tools
 
             if (dgvPileHCaps.Rows.Count == 0 && lblPileHInfo != null)
                 lblPileHInfo.Text = "Model chưa khai báo loại point spring nào. Hãy gán point spring cho cọc trước.";
+
+            AdjustPileHCapsHeight();
         }
 
         private void SyncPileHCapsGrid()
@@ -420,6 +499,8 @@ namespace Etabs_Ultimate_Tools
                 }
                 FillRowHDefaults(row, info.DefaultCap);
             }
+
+            AdjustPileHCapsHeight();
         }
 
         // Điền SCT tạm = Kz×0.01 vào các ô KÉO/NÉN còn trống; cột NGANG để trống cho người dùng tự nhập.
