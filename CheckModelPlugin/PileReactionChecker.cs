@@ -12,6 +12,7 @@ namespace Etabs_Ultimate_Tools
         public string Name { get; set; } = "";
         public double TensionCap { get; set; }      // SCT chịu kéo (kN)
         public double CompressionCap { get; set; }  // SCT chịu nén (kN)
+        public double HorizontalCap { get; set; }   // SCT chịu ngang (kN)
     }
 
     /// <summary>Thông tin 1 loại cọc phát hiện trên model (để đồng bộ + gợi ý SCT).</summary>
@@ -31,7 +32,12 @@ namespace Etabs_Ultimate_Tools
         public double Reaction { get; set; }           // Phản lực đầu cọc (kN): + nén / - kéo
         public double TensionCap { get; set; }         // SCT chịu kéo (kN)
         public double CompressionCap { get; set; }     // SCT chịu nén (kN)
-        public string Result { get; set; } = "";       // Kết luận
+        public string Result { get; set; } = "";       // Kết luận (đứng)
+        public double Fx { get; set; }                 // |FX| max trên các step (kN)
+        public double Fy { get; set; }                 // |FY| max trên các step (kN)
+        public double Horizontal { get; set; }         // Hợp lực ngang H = sqrt(FX^2+FY^2) (kN)
+        public double HorizontalCap { get; set; }      // SCT chịu ngang (kN)
+        public string HResult { get; set; } = "";      // Kết luận ngang
     }
 
     /// <summary>Một trường hợp tải -> một sheet trong file Excel.</summary>
@@ -76,7 +82,7 @@ namespace Etabs_Ultimate_Tools
                         .ToList();
         }
 
-        // ── Các loại cọc thực phát hiện trên model + SCT gợi ý (Kz * 0.01) ─────────
+        // ── Các loại cọc thực phát hiện trên model + SCT gợi ý (Kz * 0.01) ─────
         public static List<PileTypeInfo> GetPileTypeInfos(cSapModel sap)
         {
             var piles = GetPilePoints(sap);
@@ -159,6 +165,85 @@ namespace Etabs_Ultimate_Tools
                 .ToList();
 
             return new PileReactionCase { Title = title, SheetName = sheet, Combo = combo, Rows = sorted };
+        }
+
+        // ── Tính phản lực đứng (F3) + hợp lực ngang H = sqrt(FX^2+FY^2) cho 1 tổ hợp ─────
+        // H lấy theo bao thành phần (|FX|max, |FY|max) → giá trị thiên về an toàn.
+        public static PileReactionCase ComputeCaseH(cSapModel sap, string combo,
+            string title, string sheet, Dictionary<string, PileSpringType> caps)
+        {
+            if (string.IsNullOrWhiteSpace(combo)) return null;
+
+            sap.SetPresentUnits(eUnits.kN_m_C);
+            try { sap.Results.Setup.SetOptionMultiValuedCombo(1); } catch { }
+
+            var piles = GetPilePoints(sap);
+            if (piles.Count == 0) return null;
+
+            var defined = GetSpringTypes(sap);
+            EtabsHelper.SelectCaseOrCombo(sap, combo);
+
+            var rows = new List<PileReactionRow>();
+            foreach (var pile in piles)
+            {
+                double pmax, pmin, fxAbs, fyAbs;
+                bool multi;
+                if (!TryGetReactionRangeH(sap, pile.Name, out pmax, out pmin, out fxAbs, out fyAbs, out multi))
+                    continue;
+
+                double h = Math.Sqrt(fxAbs * fxAbs + fyAbs * fyAbs);
+
+                string type = ResolveType(pile, defined);
+                double tensCap = 0, compCap = 0, horizCap = 0;
+                if (caps != null)
+                {
+                    PileSpringType cap;
+                    if (caps.TryGetValue(type, out cap))
+                    {
+                        tensCap = cap.TensionCap;
+                        compCap = cap.CompressionCap;
+                        horizCap = cap.HorizontalCap;
+                    }
+                }
+
+                string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (h <= horizCap ? "Đạt" : "Không Đạt");
+
+                if (multi)
+                {
+                    var rc = BuildCompRow(type, pile.Label, combo + "_max", pmax, tensCap, compCap);
+                    FillH(rc, fxAbs, fyAbs, h, horizCap, hResult);
+                    rows.Add(rc);
+                    var rt = BuildTensRow(type, pile.Label, combo + "_min", pmin, tensCap, compCap);
+                    FillH(rt, fxAbs, fyAbs, h, horizCap, hResult);
+                    rows.Add(rt);
+                }
+                else
+                {
+                    var rs = BuildSingleRow(type, pile.Label, combo, pmax, tensCap, compCap);
+                    FillH(rs, fxAbs, fyAbs, h, horizCap, hResult);
+                    rows.Add(rs);
+                }
+            }
+
+            if (rows.Count == 0) return null;
+
+            var sorted = rows
+                .OrderBy(r => r.PileType, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(r => r.PileId, new NaturalComparer())
+                .ThenBy(r => r.Combo, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return new PileReactionCase { Title = title, SheetName = sheet, Combo = combo, Rows = sorted };
+        }
+
+        private static void FillH(PileReactionRow r, double fxAbs, double fyAbs, double h,
+            double horizCap, string hResult)
+        {
+            r.Fx = fxAbs;
+            r.Fy = fyAbs;
+            r.Horizontal = h;
+            r.HorizontalCap = horizCap;
+            r.HResult = hResult;
         }
 
         // Dòng kiểm tra NÉN (dùng Max): phản lực dương lớn nhất so với SCT nén.
@@ -310,6 +395,48 @@ namespace Etabs_Ultimate_Tools
             {
                 if (f3[i] > pmax) pmax = f3[i];
                 if (f3[i] < pmin) pmin = f3[i];
+            }
+
+            multi = count > 1;
+            return pmax != double.MinValue && pmin != double.MaxValue;
+        }
+
+        // ── Như TryGetReactionRange nhưng đọc thêm |FX|max, |FY|max (F1, F2) ──────────
+        private static bool TryGetReactionRangeH(cSapModel sap, string pointName,
+            out double pmax, out double pmin, out double fxAbs, out double fyAbs, out bool multi)
+        {
+            pmax = double.MinValue;
+            pmin = double.MaxValue;
+            fxAbs = 0.0;
+            fyAbs = 0.0;
+            multi = false;
+
+            int num = 0;
+            string[] obj = new string[0], elm = new string[0];
+            string[] lc = new string[0], stepType = new string[0];
+            double[] stepNum = new double[0];
+            double[] f1 = new double[0], f2 = new double[0], f3 = new double[0];
+            double[] m1 = new double[0], m2 = new double[0], m3 = new double[0];
+
+            int ret;
+            try
+            {
+                ret = sap.Results.JointReact(pointName, eItemTypeElm.ObjectElm,
+                    ref num, ref obj, ref elm, ref lc, ref stepType, ref stepNum,
+                    ref f1, ref f2, ref f3, ref m1, ref m2, ref m3);
+            }
+            catch { return false; }
+
+            if (ret != 0 || num == 0 || f3 == null || f3.Length == 0)
+                return false;
+
+            int count = Math.Min(num, f3.Length);
+            for (int i = 0; i < count; i++)
+            {
+                if (f3[i] > pmax) pmax = f3[i];
+                if (f3[i] < pmin) pmin = f3[i];
+                if (f1 != null && i < f1.Length) fxAbs = Math.Max(fxAbs, Math.Abs(f1[i]));
+                if (f2 != null && i < f2.Length) fyAbs = Math.Max(fyAbs, Math.Abs(f2[i]));
             }
 
             multi = count > 1;
