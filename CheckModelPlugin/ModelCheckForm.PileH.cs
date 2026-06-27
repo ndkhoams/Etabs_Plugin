@@ -25,7 +25,7 @@ namespace Etabs_Ultimate_Tools
         private DataGridView dgvPileHCaps, dgvPileHPreview;
         private Button btnPileHPreview, btnPileHExport;
         private Label lblPileHInfo;
-        private CheckBox chkPileHConsiderH;
+        private CheckBox chkPileHConsiderH, chkPileHConsiderTension;
         private TableLayoutPanel _pileHCapsPanel;
         private Control _pileHCapsHeader;
         private List<PileReactionCase> _pileHCases = new List<PileReactionCase>();
@@ -34,6 +34,12 @@ namespace Etabs_Ultimate_Tools
         private bool ConsiderPileH
         {
             get { return chkPileHConsiderH == null || chkPileHConsiderH.Checked; }
+        }
+
+        // Có xét SCT chịu kéo hay không (mặc định có).
+        private bool ConsiderPileTension
+        {
+            get { return chkPileHConsiderTension == null || chkPileHConsiderTension.Checked; }
         }
 
         // ---------- Helper UI dùng chung cho tab Pile Reactions (gộp từ PileShared) ----------
@@ -117,7 +123,7 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, Margin = new Padding(0, 0, 10, 0)
             };
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 118)); // combo
-            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));  // checkbox xét tải ngang
+            left.RowStyles.Add(new RowStyle(SizeType.Absolute, 28));  // hàng tùy chọn (2 checkbox)
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));  // nhãn SCT
             left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));  // bảng SCT
             left.RowStyles.Add(new RowStyle(SizeType.Absolute, 48));  // nút
@@ -140,16 +146,33 @@ namespace Etabs_Ultimate_Tools
             comboPanel.Controls.Add(MakePileLabel("Tổ hợp tải động đất:"), 0, 2);
             cboPileHEq = MakePileCombo(); comboPanel.Controls.Add(cboPileHEq, 1, 2);
 
+            // Hàng tùy chọn: 2 checkbox cạnh nhau (xét tải ngang / xét SCT chịu kéo).
+            var optRow = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight, WrapContents = false,
+                Margin = new Padding(0)
+            };
+            left.Controls.Add(optRow, 0, 1);
+
             chkPileHConsiderH = new CheckBox
             {
                 Text = "Xét tải ngang (FX, FY)",
                 Checked = true,
-                Dock = DockStyle.Fill,
-                AutoSize = false,
-                TextAlign = ContentAlignment.MiddleLeft
+                AutoSize = true,
+                Margin = new Padding(0, 4, 24, 0)
             };
             chkPileHConsiderH.CheckedChanged += (s, e) => ApplyPileHColumnVisibility();
-            left.Controls.Add(chkPileHConsiderH, 0, 1);
+            optRow.Controls.Add(chkPileHConsiderH);
+
+            chkPileHConsiderTension = new CheckBox
+            {
+                Text = "Xét SCT chịu kéo",
+                Checked = true,
+                AutoSize = true,
+                Margin = new Padding(0, 4, 0, 0)
+            };
+            chkPileHConsiderTension.CheckedChanged += (s, e) => ApplyPileHColumnVisibility();
+            optRow.Controls.Add(chkPileHConsiderTension);
 
             left.Controls.Add(new Label
             {
@@ -216,15 +239,15 @@ namespace Etabs_Ultimate_Tools
 
             lblPileHInfo.Text = "Điền SCT cọc (kéo/nén/ngang) vào bảng.";
 
-            // Dựng header bảng SCT + đồng bộ ẩn/hiện cột ngang theo trạng thái checkbox.
+            // Dựng header bảng SCT + đồng bộ ẩn/hiện cột theo trạng thái checkbox.
             ApplyPileHColumnVisibility();
         }
 
-        // Header gộp 2 dòng: dòng trên = trường hợp tải, dòng dưới = Kéo/Nén(/Ngang).
-        // considerH = true -> 3 cột/nhóm (Kéo/Nén/Ngang); false -> 2 cột/nhóm (Kéo/Nén).
-        private Control BuildCapsHeaderH(bool considerH)
+        // Header gộp 2 dòng: dòng trên = trường hợp tải, dòng dưới = (Kéo)/Nén/(Ngang).
+        // Cột Nén luôn hiện; Kéo hiện khi considerTension; Ngang hiện khi considerH.
+        private Control BuildCapsHeaderH(bool considerTension, bool considerH)
         {
-            int perGroup = considerH ? 3 : 2;
+            int perGroup = 1 + (considerTension ? 1 : 0) + (considerH ? 1 : 0);
             int valCols = perGroup * 3;
 
             var h = new TableLayoutPanel
@@ -248,9 +271,10 @@ namespace Etabs_Ultimate_Tools
                 h.Controls.Add(gc, col, 0);
                 h.SetColumnSpan(gc, perGroup);
 
-                h.Controls.Add(MakeHeadCell("Kéo"), col, 1);
-                h.Controls.Add(MakeHeadCell("Nén"), col + 1, 1);
-                if (considerH) h.Controls.Add(MakeHeadCell("Ngang"), col + 2, 1);
+                int sub = col;
+                if (considerTension) { h.Controls.Add(MakeHeadCell("Kéo"), sub, 1); sub++; }
+                h.Controls.Add(MakeHeadCell("Nén"), sub, 1); sub++;
+                if (considerH) { h.Controls.Add(MakeHeadCell("Ngang"), sub, 1); sub++; }
 
                 col += perGroup;
             }
@@ -284,14 +308,18 @@ namespace Etabs_Ultimate_Tools
             AddColumn(dgvPileHPreview, "HResult", "KL ngang", 75, null, true);
         }
 
-        // Ẩn/hiện toàn bộ cột liên quan tải ngang (bảng SCT, header, bảng preview) theo checkbox.
+        // Ẩn/hiện cột liên quan SCT kéo & tải ngang (bảng SCT, header, bảng preview) theo checkbox.
         private void ApplyPileHColumnVisibility()
         {
             bool considerH = ConsiderPileH;
+            bool considerT = ConsiderPileTension;
 
-            // 1) Bảng nhập SCT: ẩn/hiện 3 cột "Ngang" (3, 6, 9).
+            // 1) Bảng nhập SCT: ẩn/hiện 3 cột "Kéo" (1,4,7) và 3 cột "Ngang" (3,6,9).
             if (dgvPileHCaps != null && dgvPileHCaps.Columns.Count >= 10)
             {
+                dgvPileHCaps.Columns[CapHTensVert].Visible = considerT;
+                dgvPileHCaps.Columns[CapHTensWind].Visible = considerT;
+                dgvPileHCaps.Columns[CapHTensEq].Visible = considerT;
                 dgvPileHCaps.Columns[CapHHorizVert].Visible = considerH;
                 dgvPileHCaps.Columns[CapHHorizWind].Visible = considerH;
                 dgvPileHCaps.Columns[CapHHorizEq].Visible = considerH;
@@ -306,12 +334,13 @@ namespace Etabs_Ultimate_Tools
                     _pileHCapsPanel.Controls.Remove(_pileHCapsHeader);
                     _pileHCapsHeader.Dispose();
                 }
-                _pileHCapsHeader = BuildCapsHeaderH(considerH);
+                _pileHCapsHeader = BuildCapsHeaderH(considerT, considerH);
                 _pileHCapsPanel.Controls.Add(_pileHCapsHeader, 0, 0);
 
-                int valCols = considerH ? 9 : 6;
+                int perGroup = 1 + (considerT ? 1 : 0) + (considerH ? 1 : 0);
+                int valCols = perGroup * 3;
                 int capsWidth = CapHNameW + valCols * CapHValW + 4;
-                // Ghim cứng bề rộng để panel co/giãn đúng khi bật/tắt cột Ngang;
+                // Ghim cứng bề rộng để panel co/giãn đúng khi bật/tắt cột;
                 // Dock.Left trong TableLayoutPanel không tự cập nhật Width khi gán lại.
                 _pileHCapsPanel.MinimumSize = new Size(capsWidth, 0);
                 _pileHCapsPanel.MaximumSize = new Size(capsWidth, 0);
@@ -320,9 +349,12 @@ namespace Etabs_Ultimate_Tools
                 if (_pileHCapsPanel.Parent != null) _pileHCapsPanel.Parent.PerformLayout();
             }
 
-            // 3) Bảng preview: ẩn/hiện các cột |FX|, |FY|, H, SCT ngang, KL ngang.
+            // 3) Bảng preview: ẩn/hiện cột SCT kéo (5) và các cột ngang (8..12).
             if (dgvPileHPreview != null)
             {
+                if (5 < dgvPileHPreview.Columns.Count)
+                    dgvPileHPreview.Columns[5].Visible = considerT;
+
                 int[] hCols = { 8, 9, 10, 11, 12 };
                 foreach (int ci in hCols)
                     if (ci < dgvPileHPreview.Columns.Count)
@@ -411,7 +443,7 @@ namespace Etabs_Ultimate_Tools
                 dict[name.Trim()] = new PileSpringType
                 {
                     Name = name.Trim(),
-                    TensionCap = ParseCap(row.Cells[tensCol].Value),
+                    TensionCap = ConsiderPileTension ? ParseCap(row.Cells[tensCol].Value) : 0.0,
                     CompressionCap = ParseCap(row.Cells[compCol].Value),
                     HorizontalCap = ConsiderPileH ? ParseCap(row.Cells[horizCol].Value) : 0.0
                 };
@@ -434,7 +466,7 @@ namespace Etabs_Ultimate_Tools
         private void AddPileHCase(List<PileReactionCase> cases, string combo, string title,
             string sheet, Dictionary<string, PileSpringType> caps)
         {
-            var c = PileReactionChecker.ComputeCaseH(_sap, combo, title, sheet, caps);
+            var c = PileReactionChecker.ComputeCaseH(_sap, combo, title, sheet, caps, ConsiderPileTension);
             if (c != null) cases.Add(c);
         }
 
@@ -514,7 +546,7 @@ namespace Etabs_Ultimate_Tools
 
                 try
                 {
-                    PileReactionExporterH.Export(sfd.FileName, _pileHCases, ConsiderPileH);
+                    PileReactionExporterH.Export(sfd.FileName, _pileHCases, ConsiderPileTension, ConsiderPileH);
                 }
                 catch (Exception ex)
                 {
