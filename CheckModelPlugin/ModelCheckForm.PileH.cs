@@ -20,6 +20,8 @@ namespace Etabs_Ultimate_Tools
 
         private const int CapHNameW = 80;
         private const int CapHValW = 46;
+        // Bề rộng "chuẩn" của bảng SCT khi hiện đủ 9 cột — luôn giữ cố định để bảng lấp kín box.
+        private const int CapHFullW = CapHNameW + 9 * CapHValW + 4;
 
         // Mỗi trường hợp tải cho chọn NHIỀU tổ hợp; plug-in xét tất cả và lấy combo nguy hiểm nhất.
         private CheckedListBox clbPileHVert, clbPileHWind, clbPileHEq;
@@ -236,13 +238,14 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 2);
 
-            // Dùng Anchor Top|Left (không Dock.Left, không neo Bottom) để panel co/giãn đúng bề
-            // rộng khi bật/tắt cột VÀ co khít chiều cao theo số dòng (không để vùng trắng thừa).
+            // Panel bảng SCT: dùng Anchor Top|Left, GIỮ bề rộng cố định = CapHFullW (lấp kín box).
+            // Khi bật/tắt cột, ta KHÔNG đổi bề rộng panel mà chia lại bề rộng cho các cột đang hiện,
+            // đồng thời co khít chiều cao theo số dòng (không để vùng trắng thừa).
             _pileHCapsPanel = new TableLayoutPanel
             {
                 Anchor = AnchorStyles.Top | AnchorStyles.Left,
                 ColumnCount = 1, RowCount = 2,
-                Width = CapHNameW + 9 * CapHValW + 4, Margin = new Padding(0, 8, 0, 0)
+                Width = CapHFullW, Margin = new Padding(0, 8, 0, 0)
             };
             _pileHCapsPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             _pileHCapsPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -305,7 +308,8 @@ namespace Etabs_Ultimate_Tools
 
         // Header gộp 2 dòng: dòng trên = trường hợp tải, dòng dưới = (Kéo)/Nén/(Ngang).
         // Cột Nén luôn hiện; Kéo hiện khi considerTension; Ngang hiện khi considerH.
-        private Control BuildCapsHeaderH(bool considerTension, bool considerH)
+        // valWidths: bề rộng từng cột giá trị (đã chia để lấp kín bề rộng bảng).
+        private Control BuildCapsHeaderH(bool considerTension, bool considerH, int[] valWidths)
         {
             int perGroup = 1 + (considerTension ? 1 : 0) + (considerH ? 1 : 0);
             int valCols = perGroup * 3;
@@ -315,7 +319,7 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill, ColumnCount = 1 + valCols, RowCount = 2, Margin = new Padding(0)
             };
             h.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, CapHNameW));
-            for (int i = 0; i < valCols; i++) h.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, CapHValW));
+            for (int i = 0; i < valCols; i++) h.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, valWidths[i]));
             h.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
             h.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
 
@@ -385,7 +389,9 @@ namespace Etabs_Ultimate_Tools
                 dgvPileHCaps.Columns[CapHHorizEq].Visible = considerH;
             }
 
-            // 2) Dựng lại header bảng SCT cho khớp số cột hiển thị + ép lại bề rộng panel.
+            // 2) Dựng lại header bảng SCT cho khớp số cột hiển thị.
+            //    GIỮ NGUYÊN bề rộng bảng = bề rộng đầy đủ (CapHFullW) và CHIA ĐỀU cho các cột
+            //    đang hiển thị để bảng LUÔN lấp kín box, không bị co lại khi bỏ tick.
             if (_pileHCapsPanel != null)
             {
                 _pileHCapsPanel.SuspendLayout();
@@ -394,14 +400,36 @@ namespace Etabs_Ultimate_Tools
                     _pileHCapsPanel.Controls.Remove(_pileHCapsHeader);
                     _pileHCapsHeader.Dispose();
                 }
-                _pileHCapsHeader = BuildCapsHeaderH(considerT, considerH);
-                _pileHCapsPanel.Controls.Add(_pileHCapsHeader, 0, 0);
 
                 int perGroup = 1 + (considerT ? 1 : 0) + (considerH ? 1 : 0);
                 int valCols = perGroup * 3;
-                int capsWidth = CapHNameW + valCols * CapHValW + 4;
-                // Panel dùng Anchor (Dock=None) nên gán Width sẽ co/giãn đúng.
-                _pileHCapsPanel.Width = capsWidth;
+
+                // Chia đều bề rộng còn lại cho các cột giá trị; phần dư cộng dồn vào các cột đầu
+                // để tổng bề rộng đúng bằng CapHFullW (header & lưới khớp nhau, lấp kín bảng).
+                int avail = CapHFullW - CapHNameW - 4;
+                int baseW = avail / valCols;
+                int rem = avail - baseW * valCols;
+                int[] valWidths = new int[valCols];
+                for (int i = 0; i < valCols; i++) valWidths[i] = baseW + (i < rem ? 1 : 0);
+
+                _pileHCapsHeader = BuildCapsHeaderH(considerT, considerH, valWidths);
+                _pileHCapsPanel.Controls.Add(_pileHCapsHeader, 0, 0);
+
+                // Đặt lại bề rộng các cột đang hiển thị trong lưới nhập cho khớp header.
+                if (dgvPileHCaps != null && dgvPileHCaps.Columns.Count >= 10)
+                {
+                    dgvPileHCaps.Columns[0].Width = CapHNameW;
+                    int vi = 0;
+                    for (int i = 1; i < dgvPileHCaps.Columns.Count; i++)
+                    {
+                        if (!dgvPileHCaps.Columns[i].Visible) continue;
+                        if (vi < valWidths.Length) dgvPileHCaps.Columns[i].Width = valWidths[vi];
+                        vi++;
+                    }
+                }
+
+                // LUÔN giữ bề rộng đầy đủ — KHÔNG co theo số cột.
+                _pileHCapsPanel.Width = CapHFullW;
                 _pileHCapsPanel.ResumeLayout(true);
                 if (_pileHCapsPanel.Parent != null) _pileHCapsPanel.Parent.PerformLayout();
             }
