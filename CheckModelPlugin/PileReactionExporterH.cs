@@ -7,21 +7,24 @@ namespace Etabs_Ultimate_Tools
 {
     /// <summary>
     /// Xuất kết quả kiểm tra phản lực cọc ra Excel: mỗi trường hợp tải = 1 sheet.
-    /// Cột được dựng động: bỏ cột "SCT kéo" khi considerTension = false;
-    /// bỏ các cột |FX|, |FY|, H, SCT ngang, KL ngang khi considerH = false.
+    /// Cột được dựng động theo 3 lựa chọn kiểm tra:
+    /// - considerTension = false  -> bỏ cột "SCT kéo".
+    /// - considerCompression = false -> bỏ cột "SCT nén".
+    /// - considerH = false        -> bỏ các cột |FX|, |FY|, H, SCT ngang, KL ngang.
+    /// Nếu cả kéo lẫn nén đều tắt -> bỏ luôn cột FZ và KL SCT đứng.
     /// </summary>
     public static class PileReactionExporterH
     {
         private static readonly XLColor HeadFill = XLColor.FromArgb(197, 217, 241);
 
         public static void Export(string filePath, List<PileReactionCase> cases,
-            bool considerTension, bool considerH)
+            bool considerTension, bool considerCompression, bool considerH)
         {
             using (var wb = new XLWorkbook())
             {
                 if (cases != null)
                     foreach (var c in cases)
-                        WriteCaseSheet(wb, c, considerTension, considerH);
+                        WriteCaseSheet(wb, c, considerTension, considerCompression, considerH);
 
                 if (!wb.Worksheets.Any())
                     wb.Worksheets.Add("EMPTY");
@@ -31,12 +34,14 @@ namespace Etabs_Ultimate_Tools
         }
 
         // Danh sách khóa cột theo đúng thứ tự hiển thị (đồng bộ với bảng preview).
-        private static List<string> BuildKeys(bool considerTension, bool considerH)
+        private static List<string> BuildKeys(bool considerTension, bool considerCompression, bool considerH)
         {
-            var keys = new List<string> { "Type", "Id", "Combo", "Reaction" };
+            bool anyVert = considerTension || considerCompression;
+            var keys = new List<string> { "Type", "Id", "Combo" };
+            if (anyVert) keys.Add("Reaction");
             if (considerTension) keys.Add("TensCap");
-            keys.Add("CompCap");
-            keys.Add("Result");
+            if (considerCompression) keys.Add("CompCap");
+            if (anyVert) keys.Add("Result");
             if (considerH)
             {
                 keys.Add("Fx"); keys.Add("Fy"); keys.Add("H"); keys.Add("HCap"); keys.Add("HResult");
@@ -116,16 +121,16 @@ namespace Etabs_Ultimate_Tools
         }
 
         private static void WriteCaseSheet(XLWorkbook wb, PileReactionCase c,
-            bool considerTension, bool considerH)
+            bool considerTension, bool considerCompression, bool considerH)
         {
             string sheetName = string.IsNullOrWhiteSpace(c.SheetName) ? "Sheet" : c.SheetName;
             var ws = wb.Worksheets.Add(sheetName);
             EtabsHelper.ApplyA4PageSetup(ws);
 
-            var keys = BuildKeys(considerTension, considerH);
+            var keys = BuildKeys(considerTension, considerCompression, considerH);
             int lastCol = keys.Count;
 
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC";
+            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊ8U TẢI CỦA CỌC";
             ws.Range(1, 1, 1, lastCol).Merge();
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
