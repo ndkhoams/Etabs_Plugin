@@ -182,8 +182,6 @@ namespace Etabs_Ultimate_Tools
         }
 
         // ── Tính phản lực đứng (F3) + hợp lực ngang H = sqrt(FX^2+FY^2) cho 1 tổ hợp ─────
-        // H tính CHÍNH XÁC theo từng bước: tắt chế độ bao (envelope), duyệt mọi step,
-        // tính H tại từng step rồi lấy step có H lớn nhất (FX, FY tương quan cùng 1 bước).
         // considerTension = false -> bỏ qua kiểm tra SCT kéo (không sinh dòng _min, dòng đơn chỉ xét nén).
         public static PileReactionCase ComputeCaseH(cSapModel sap, string combo,
             string title, string sheet, Dictionary<string, PileSpringType> caps, bool considerTension)
@@ -258,13 +256,14 @@ namespace Etabs_Ultimate_Tools
 
         // ── Như ComputeCaseH nhưng duyệt NHIỀU tổ hợp được chọn ───────────────────
         // Với mỗi cọc: phản lực nén lớn nhất & kéo lớn nhất lấy bao trên tất cả tổ hợp;
-        // FX, FY lấy theo ĐÚNG tổ hợp thành phần cho H lớn nhất (tương quan, không bị
-        // cộng dồn sai như tổ hợp bao envelope).
-        // - Cọc chỉ chịu nén  -> 1 dòng (tên tổ hợp, không hậu tố).
-        // - Cọc chỉ chịu kéo  -> 1 dòng (tên tổ hợp, không hậu tố).
-        // - Cọc vừa nén vừa kéo -> 2 dòng kèm hậu tố _max (nén) / _min (kéo).
+        // FX, FY lấy theo ĐÚNG tổ hợp thành phần cho H lớn nhất (tương quan).
+        // Các lựa chọn kiểm tra (độc lập):
+        // - considerCompression = false -> bỏ kiểm tra SCT nén.
+        // - considerTension = false     -> bỏ kiểm tra SCT kéo.
+        // Cọc chỉ chịu nén/kéo -> 1 dòng; vừa nén vừa kéo -> 2 dòng (_max/_min).
         public static PileReactionCase ComputeCaseHMulti(cSapModel sap, List<string> combos,
-            string title, string sheet, Dictionary<string, PileSpringType> caps, bool considerTension)
+            string title, string sheet, Dictionary<string, PileSpringType> caps,
+            bool considerTension, bool considerCompression)
         {
             if (combos == null) return null;
             var valid = combos.Where(c => !string.IsNullOrWhiteSpace(c))
@@ -328,7 +327,8 @@ namespace Etabs_Ultimate_Tools
                 string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (hVal <= horizCap ? "Đạt" : "Không Đạt");
 
                 // Cọc có thực sự chịu nén (Pmax > 0) và/hoặc chịu kéo (Pmin < 0)?
-                bool hasComp = a.Pmax > 0;
+                // Chỉ xét khi lựa chọn tương ứng đang bật.
+                bool hasComp = considerCompression && a.Pmax > 0;
                 bool hasTens = considerTension && a.Pmin < 0;
 
                 if (hasComp && hasTens)
@@ -342,6 +342,13 @@ namespace Etabs_Ultimate_Tools
                     FillH(rt, a.Fx, a.Fy, hVal, horizCap, hResult);
                     rows.Add(rt);
                 }
+                else if (hasComp)
+                {
+                    // Chỉ chịu nén -> 1 dòng, không hậu tố.
+                    var rc = BuildCompRow(type, pile.Label, a.ComboMax, a.Pmax, tensCap, compCap);
+                    FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
+                    rows.Add(rc);
+                }
                 else if (hasTens)
                 {
                     // Chỉ chịu kéo -> 1 dòng, không hậu tố.
@@ -351,10 +358,27 @@ namespace Etabs_Ultimate_Tools
                 }
                 else
                 {
-                    // Chỉ chịu nén (mặc định) -> 1 dòng, không hậu tố _max/_min.
-                    var rc = BuildCompRow(type, pile.Label, a.ComboMax, a.Pmax, tensCap, compCap);
-                    FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
-                    rows.Add(rc);
+                    // Không sinh được dòng nén/kéo theo trạng thái thực của cọc & lựa chọn.
+                    if (considerCompression)
+                    {
+                        var rc = BuildCompRow(type, pile.Label, a.ComboMax, a.Pmax, tensCap, compCap);
+                        FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
+                        rows.Add(rc);
+                    }
+                    else if (considerTension)
+                    {
+                        var rt = BuildTensRow(type, pile.Label, a.ComboMin, a.Pmin, tensCap, compCap);
+                        FillH(rt, a.Fx, a.Fy, hVal, horizCap, hResult);
+                        rows.Add(rt);
+                    }
+                    else
+                    {
+                        // Không kiểm tra đứng -> vẫn xuất 1 dòng để giữ kết quả ngang.
+                        var rc = BuildCompRow(type, pile.Label, a.ComboH, a.Pmax, tensCap, compCap);
+                        rc.Result = "—";
+                        FillH(rc, a.Fx, a.Fy, hVal, horizCap, hResult);
+                        rows.Add(rc);
+                    }
                 }
             }
 
@@ -441,7 +465,7 @@ namespace Etabs_Ultimate_Tools
             return "Kz=" + p.Kz.ToString("0", CultureInfo.InvariantCulture);
         }
 
-        // ── Lấy danh sách điểm có gán point spring (= cọc) ──────────────────────
+        // ── Lấy danh sách điểm có gán point spring (= cọc) ─────────────────────
         private static List<PilePoint> GetPilePoints(cSapModel sap)
         {
             var list = new List<PilePoint>();
@@ -539,8 +563,6 @@ namespace Etabs_Ultimate_Tools
         }
 
         // ── Như TryGetReactionRange nhưng lấy thêm FX, FY tại step có H lớn nhất ──────────
-        // Duyệt từng step: tính H = sqrt(F1^2 + F2^2) tại CHÍNH step đó (FX, FY tương quan)
-        // rồi giữ lại FX, FY của step có H lớn nhất.
         private static bool TryGetReactionRangeH(cSapModel sap, string pointName,
             out double pmax, out double pmin, out double fxAbs, out double fyAbs, out bool multi)
         {
