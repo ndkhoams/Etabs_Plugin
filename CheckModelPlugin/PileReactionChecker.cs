@@ -152,7 +152,7 @@ namespace Etabs_Ultimate_Tools
                 }
                 else
                 {
-                    rows.Add(BuildSingleRow(type, pile.Label, combo, pmax, tensCap, compCap));
+                    rows.Add(BuildSingleRow(type, pile.Label, combo, pmax, tensCap, compCap, true));
                 }
             }
 
@@ -170,8 +170,9 @@ namespace Etabs_Ultimate_Tools
         // ── Tính phản lực đứng (F3) + hợp lực ngang H = sqrt(FX^2+FY^2) cho 1 tổ hợp ─────
         // H tính CHÍNH XÁC theo từng bước: tắt chế độ bao (envelope), duyệt mọi step,
         // tính H tại từng step rồi lấy step có H lớn nhất (FX, FY tương quan cùng 1 bước).
+        // considerTension = false -> bỏ qua kiểm tra SCT kéo (không sinh dòng _min, dòng đơn chỉ xét nén).
         public static PileReactionCase ComputeCaseH(cSapModel sap, string combo,
-            string title, string sheet, Dictionary<string, PileSpringType> caps)
+            string title, string sheet, Dictionary<string, PileSpringType> caps, bool considerTension)
         {
             if (string.IsNullOrWhiteSpace(combo)) return null;
 
@@ -215,13 +216,16 @@ namespace Etabs_Ultimate_Tools
                     var rc = BuildCompRow(type, pile.Label, combo + "_max", pmax, tensCap, compCap);
                     FillH(rc, fxAbs, fyAbs, h, horizCap, hResult);
                     rows.Add(rc);
-                    var rt = BuildTensRow(type, pile.Label, combo + "_min", pmin, tensCap, compCap);
-                    FillH(rt, fxAbs, fyAbs, h, horizCap, hResult);
-                    rows.Add(rt);
+                    if (considerTension)
+                    {
+                        var rt = BuildTensRow(type, pile.Label, combo + "_min", pmin, tensCap, compCap);
+                        FillH(rt, fxAbs, fyAbs, h, horizCap, hResult);
+                        rows.Add(rt);
+                    }
                 }
                 else
                 {
-                    var rs = BuildSingleRow(type, pile.Label, combo, pmax, tensCap, compCap);
+                    var rs = BuildSingleRow(type, pile.Label, combo, pmax, tensCap, compCap, considerTension);
                     FillH(rs, fxAbs, fyAbs, h, horizCap, hResult);
                     rows.Add(rs);
                 }
@@ -279,12 +283,13 @@ namespace Etabs_Ultimate_Tools
         }
 
         // Dòng tổ hợp 1 giá trị: so cả kéo lẫn nén trên cùng 1 dòng.
+        // considerTension = false -> chỉ xét nén (bỏ qua kéo).
         private static PileReactionRow BuildSingleRow(string type, string id, string combo,
-            double v, double tensCap, double compCap)
+            double v, double tensCap, double compCap, bool considerTension)
         {
             double comp = v > 0 ? v : 0.0;
             double tens = v < 0 ? -v : 0.0;
-            bool hasComp = compCap > 0, hasTens = tensCap > 0;
+            bool hasComp = compCap > 0, hasTens = considerTension && tensCap > 0;
             bool okComp = !hasComp || comp <= compCap;
             bool okTens = !hasTens || tens <= tensCap;
             string result = (!hasComp && !hasTens)
