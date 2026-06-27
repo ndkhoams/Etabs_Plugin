@@ -51,15 +51,15 @@ namespace Etabs_Ultimate_Tools
                 case "Type": return "Loại cọc";
                 case "Id": return "Số hiệu cọc";
                 case "Combo": return "Tổ hợp";
-                case "Reaction": return "Phản lực đứng (kN)";
-                case "TensCap": return "SCT kéo (kN)";
-                case "CompCap": return "SCT nén (kN)";
-                case "Result": return "KL đứng";
-                case "Fx": return "|FX| (kN)";
-                case "Fy": return "|FY| (kN)";
-                case "H": return "H (kN)";
-                case "HCap": return "SCT ngang (kN)";
-                case "HResult": return "KL ngang";
+                case "Reaction": return "FZ\n(kN)";
+                case "TensCap": return "SCT kéo\n(kN)";
+                case "CompCap": return "SCT nén\n(kN)";
+                case "Result": return "Kết luận\nSCT đứng";
+                case "Fx": return "|FX|\n(kN)";
+                case "Fy": return "|FY|\n(kN)";
+                case "H": return "H\n(kN)";
+                case "HCap": return "SCT ngang\n(kN)";
+                case "HResult": return "Kết luận\nSCT ngang";
             }
             return "";
         }
@@ -125,17 +125,19 @@ namespace Etabs_Ultimate_Tools
             var keys = BuildKeys(considerTension, considerH);
             int lastCol = keys.Count;
 
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊ8U TẢI CỦA CỌC";
+            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC";
             ws.Range(1, 1, 1, lastCol).Merge();
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
             ws.Cell("A1").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Row(1).Height = 24;
 
             ws.Cell("A2").Value = c.Title;
             ws.Range(2, 1, 2, lastCol).Merge();
             ws.Cell("A2").Style.Font.Bold = true;
             ws.Cell("A2").Style.Fill.BackgroundColor = HeadFill;
             ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            ws.Row(2).Height = 18;
 
             int headerRow = 3;
             for (int i = 0; i < keys.Count; i++)
@@ -170,7 +172,7 @@ namespace Etabs_Ultimate_Tools
                     ws.Range(firstData, col, lastData, col).Style.Alignment.Horizontal =
                         XLAlignmentHorizontalValues.Center;
                 if (IsNum(k))
-                    ws.Range(firstData, col, lastData, col).Style.NumberFormat.Format = "0";
+                    ws.Range(firstData, col, lastData, col).Style.NumberFormat.Format = "0.0";
                 ws.Column(col).Width = WidthOf(k);
             }
 

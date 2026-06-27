@@ -159,7 +159,7 @@ namespace Etabs_Ultimate_Tools
             tab.Controls.Add(root);
 
             root.Controls.Add(MakeTitle("KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC"), 0, 0);
-            root.Controls.Add(MakeSubtitle("(Phản lực đứng so với SCT kéo/nén; hợp lực ngang H=√(FX²+FY²) lấy theo từng step so với SCT ngang, đơn vị kN)"), 0, 1);
+            root.Controls.Add(MakeSubtitle("(Phản lực đứng so với SCT kéo/nén; hợp lực ngang H=√(FX²+FY²) so với SCT ngang, đơn vị kN)"), 0, 1);
 
             var main = new TableLayoutPanel
             {
@@ -214,7 +214,7 @@ namespace Etabs_Ultimate_Tools
 
             chkPileHConsiderH = new CheckBox
             {
-                Text = "Xét tải ngang (FX, FY)",
+                Text = "Kiểm tra tải ngang (FX, FY)",
                 Checked = true,
                 AutoSize = true,
                 Margin = new Padding(0, 4, 24, 0)
@@ -224,7 +224,7 @@ namespace Etabs_Ultimate_Tools
 
             chkPileHConsiderTension = new CheckBox
             {
-                Text = "Xét SCT chịu kéo",
+                Text = "Kiểm tra SCT chịu kéo",
                 Checked = true,
                 AutoSize = true,
                 Margin = new Padding(0, 4, 0, 0)
@@ -234,7 +234,7 @@ namespace Etabs_Ultimate_Tools
 
             left.Controls.Add(new Label
             {
-                Text = "SCT kéo/nén/ngang theo loại cọc & từng tổ hợp (kN):",
+                Text = "SCT theo loại cọc & từng tổ hợp (kN):",
                 Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
             }, 0, 2);
 
@@ -268,7 +268,7 @@ namespace Etabs_Ultimate_Tools
             };
             left.Controls.Add(btnRow, 0, 4);
 
-            btnPileHPreview = new Button { Text = "Xem trước", Width = 130, Height = 38, Margin = new Padding(0, 0, 12, 0) };
+            btnPileHPreview = new Button { Text = "Preview", Width = 130, Height = 38, Margin = new Padding(0, 0, 12, 0) };
             btnPileHPreview.Click += (s, e) => PreviewPileHReactions();
             btnRow.Controls.Add(btnPileHPreview);
 
@@ -289,12 +289,6 @@ namespace Etabs_Ultimate_Tools
             right.RowStyles.Add(new RowStyle(SizeType.Absolute, 24));
             right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             main.Controls.Add(right, 1, 0);
-
-            right.Controls.Add(new Label
-            {
-                Text = "Preview (gộp tất cả trường hợp tải):",
-                Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft
-            }, 0, 0);
 
             dgvPileHPreview = CreateGrid();
             right.Controls.Add(dgvPileHPreview, 0, 1);
@@ -361,15 +355,15 @@ namespace Etabs_Ultimate_Tools
             AddColumn(dgvPileHPreview, "PileType", "Loại cọc", 70, null, true);
             AddColumn(dgvPileHPreview, "PileId", "Số hiệu", 70, null, true);
             AddColumn(dgvPileHPreview, "Combo", "Tổ hợp", 120, null, true);
-            AddColumn(dgvPileHPreview, "Reaction", "Phản lực đứng (kN)", 90, "0.#", true);
+            AddColumn(dgvPileHPreview, "Reaction", "FZ (kN)", 90, "0.#", true);
             AddColumn(dgvPileHPreview, "TensionCap", "SCT kéo", 70, "0.#", true);
             AddColumn(dgvPileHPreview, "CompressionCap", "SCT nén", 70, "0.#", true);
-            AddColumn(dgvPileHPreview, "Result", "KL đứng", 75, null, true);
+            AddColumn(dgvPileHPreview, "Result", "KL SCT\nđứng", 75, null, true);
             AddColumn(dgvPileHPreview, "Fx", "|FX| (kN)", 70, "0.#", true);
             AddColumn(dgvPileHPreview, "Fy", "|FY| (kN)", 70, "0.#", true);
             AddColumn(dgvPileHPreview, "Horizontal", "H (kN)", 70, "0.#", true);
             AddColumn(dgvPileHPreview, "HorizontalCap", "SCT ngang", 75, "0.#", true);
-            AddColumn(dgvPileHPreview, "HResult", "KL ngang", 75, null, true);
+            AddColumn(dgvPileHPreview, "HResult", "KL SCT\nngang", 75, null, true);
         }
 
         // Ẩn/hiện cột liên quan SCT kéo & tải ngang (bảng SCT, header, bảng preview) theo checkbox.
@@ -577,11 +571,11 @@ namespace Etabs_Ultimate_Tools
         private List<PileReactionCase> BuildPileHCases()
         {
             var cases = new List<PileReactionCase>();
-            AddPileHCase(cases, GetCheckedCombos(clbPileHVert), "TỔ HỢP TẢI ĐỨNG", "TAI DUNG",
+            AddPileHCase(cases, GetCheckedCombos(clbPileHVert), "TẢI ĐỨNG", "TAI DUNG",
                 ReadPileHCaps(CapHTensVert, CapHCompVert, CapHHorizVert));
-            AddPileHCase(cases, GetCheckedCombos(clbPileHWind), "TỔ HỢP TẢI GIÓ", "TAI GIO",
+            AddPileHCase(cases, GetCheckedCombos(clbPileHWind), "TẢI GIÓ", "TAI GIO",
                 ReadPileHCaps(CapHTensWind, CapHCompWind, CapHHorizWind));
-            AddPileHCase(cases, GetCheckedCombos(clbPileHEq), "TỔ HỢP TẢI ĐỘNG ĐẤT", "TAI DONG DAT",
+            AddPileHCase(cases, GetCheckedCombos(clbPileHEq), "ĐỘNG ĐẤT", "TAI DONG DAT",
                 ReadPileHCaps(CapHTensEq, CapHCompEq, CapHHorizEq));
             return cases;
         }
