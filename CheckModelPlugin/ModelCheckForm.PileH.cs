@@ -130,7 +130,9 @@ namespace Etabs_Ultimate_Tools
                 RowHeadersVisible = false,
                 SelectionMode = DataGridViewSelectionMode.CellSelect,
                 BorderStyle = BorderStyle.FixedSingle,
-                Margin = new Padding(0, 8, 0, 0)
+                Margin = new Padding(0, 8, 0, 0),
+                DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter },
+                ColumnHeadersDefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter }
             };
         }
 
