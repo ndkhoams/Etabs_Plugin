@@ -6,20 +6,22 @@ using ClosedXML.Excel;
 namespace Etabs_Ultimate_Tools
 {
     /// <summary>
-    /// Xuất kết quả kiểm tra phản lực cọc CÓ LỰC NGANG ra Excel:
-    /// mỗi trường hợp tải = 1 sheet. Nếu considerH = false thì bỏ các cột |FX|, |FY|, H, SCT ngang.
+    /// Xuất kết quả kiểm tra phản lực cọc ra Excel: mỗi trường hợp tải = 1 sheet.
+    /// Cột được dựng động: bỏ cột "SCT kéo" khi considerTension = false;
+    /// bỏ các cột |FX|, |FY|, H, SCT ngang, KL ngang khi considerH = false.
     /// </summary>
     public static class PileReactionExporterH
     {
         private static readonly XLColor HeadFill = XLColor.FromArgb(197, 217, 241);
 
-        public static void Export(string filePath, List<PileReactionCase> cases, bool considerH)
+        public static void Export(string filePath, List<PileReactionCase> cases,
+            bool considerTension, bool considerH)
         {
             using (var wb = new XLWorkbook())
             {
                 if (cases != null)
                     foreach (var c in cases)
-                        WriteCaseSheet(wb, c, considerH);
+                        WriteCaseSheet(wb, c, considerTension, considerH);
 
                 if (!wb.Worksheets.Any())
                     wb.Worksheets.Add("EMPTY");
@@ -28,15 +30,102 @@ namespace Etabs_Ultimate_Tools
             }
         }
 
-        private static void WriteCaseSheet(XLWorkbook wb, PileReactionCase c, bool considerH)
+        // Danh sách khóa cột theo đúng thứ tự hiển thị (đồng bộ với bảng preview).
+        private static List<string> BuildKeys(bool considerTension, bool considerH)
+        {
+            var keys = new List<string> { "Type", "Id", "Combo", "Reaction" };
+            if (considerTension) keys.Add("TensCap");
+            keys.Add("CompCap");
+            keys.Add("Result");
+            if (considerH)
+            {
+                keys.Add("Fx"); keys.Add("Fy"); keys.Add("H"); keys.Add("HCap"); keys.Add("HResult");
+            }
+            return keys;
+        }
+
+        private static string HeadOf(string key)
+        {
+            switch (key)
+            {
+                case "Type": return "Loại cọc";
+                case "Id": return "Số hiệu cọc";
+                case "Combo": return "Tổ hợp";
+                case "Reaction": return "Phản lực đứng (kN)";
+                case "TensCap": return "SCT kéo (kN)";
+                case "CompCap": return "SCT nén (kN)";
+                case "Result": return "KL đứng";
+                case "Fx": return "|FX| (kN)";
+                case "Fy": return "|FY| (kN)";
+                case "H": return "H (kN)";
+                case "HCap": return "SCT ngang (kN)";
+                case "HResult": return "KL ngang";
+            }
+            return "";
+        }
+
+        private static double WidthOf(string key)
+        {
+            switch (key)
+            {
+                case "Type": return 11;
+                case "Id": return 12;
+                case "Combo": return 18;
+                case "Reaction": return 16;
+                case "TensCap": return 13;
+                case "CompCap": return 13;
+                case "Result": return 11;
+                case "Fx": return 12;
+                case "Fy": return 12;
+                case "H": return 12;
+                case "HCap": return 14;
+                case "HResult": return 11;
+            }
+            return 12;
+        }
+
+        private static bool IsCenter(string key)
+        {
+            return key == "Type" || key == "Id" || key == "Combo"
+                || key == "Result" || key == "HResult";
+        }
+
+        private static bool IsNum(string key)
+        {
+            return key == "Reaction" || key == "TensCap" || key == "CompCap"
+                || key == "Fx" || key == "Fy" || key == "H" || key == "HCap";
+        }
+
+        private static void SetCell(IXLCell cell, string key, PileReactionRow row)
+        {
+            switch (key)
+            {
+                case "Type": cell.Value = row.PileType; break;
+                case "Id": cell.Value = row.PileId; break;
+                case "Combo": cell.Value = row.Combo; break;
+                case "Reaction": cell.Value = Math.Round(row.Reaction, 1); break;
+                case "TensCap": cell.Value = Math.Round(row.TensionCap, 1); break;
+                case "CompCap": cell.Value = Math.Round(row.CompressionCap, 1); break;
+                case "Result": cell.Value = row.Result; break;
+                case "Fx": cell.Value = Math.Round(row.Fx, 1); break;
+                case "Fy": cell.Value = Math.Round(row.Fy, 1); break;
+                case "H": cell.Value = Math.Round(row.Horizontal, 1); break;
+                case "HCap": cell.Value = Math.Round(row.HorizontalCap, 1); break;
+                case "HResult": cell.Value = row.HResult; break;
+            }
+        }
+
+        private static void WriteCaseSheet(XLWorkbook wb, PileReactionCase c,
+            bool considerTension, bool considerH)
         {
             string sheetName = string.IsNullOrWhiteSpace(c.SheetName) ? "Sheet" : c.SheetName;
             var ws = wb.Worksheets.Add(sheetName);
             EtabsHelper.ApplyA4PageSetup(ws);
 
-            int lastCol = considerH ? 12 : 7;
+            var keys = BuildKeys(considerTension, considerH);
+            int lastCol = keys.Count;
 
-            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊU TẢI CỦA CỌC";
+            ws.Cell("A1").Value = "KIỂM TRA KHẢ NĂNG CHỊ8U TẢI CỦA CỌC";
             ws.Range(1, 1, 1, lastCol).Merge();
             ws.Cell("A1").Style.Font.Bold = true;
             ws.Cell("A1").Style.Font.FontSize = 14;
@@ -49,14 +138,8 @@ namespace Etabs_Ultimate_Tools
             ws.Cell("A2").Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
             int headerRow = 3;
-            string[] headsBase = { "Loại cọc", "Số hiệu cọc", "Tổ hợp", "Phản lực đứng (kN)",
-                "SCT kéo (kN)", "SCT nén (kN)", "KL đứng" };
-            string[] headsH = { "|FX| (kN)", "|FY| (kN)", "H (kN)", "SCT ngang (kN)", "KL ngang" };
-            for (int i = 0; i < headsBase.Length; i++)
-                ws.Cell(headerRow, 1 + i).Value = headsBase[i];
-            if (considerH)
-                for (int i = 0; i < headsH.Length; i++)
-                    ws.Cell(headerRow, 8 + i).Value = headsH[i];
+            for (int i = 0; i < keys.Count; i++)
+                ws.Cell(headerRow, 1 + i).Value = HeadOf(keys[i]);
             StyleHeaderRange(ws.Range(headerRow, 1, headerRow, lastCol));
 
             int firstData = headerRow + 1;
@@ -64,52 +147,31 @@ namespace Etabs_Ultimate_Tools
             var rows = c.Rows ?? new List<PileReactionRow>();
             foreach (var row in rows)
             {
-                ws.Cell(r, 1).Value = row.PileType;
-                ws.Cell(r, 2).Value = row.PileId;
-                ws.Cell(r, 3).Value = row.Combo;
-                ws.Cell(r, 4).Value = Math.Round(row.Reaction, 1);
-                ws.Cell(r, 5).Value = Math.Round(row.TensionCap, 1);
-                ws.Cell(r, 6).Value = Math.Round(row.CompressionCap, 1);
-                ws.Cell(r, 7).Value = row.Result;
-                if (IsFail(row.Result)) ws.Cell(r, 7).Style.Font.FontColor = XLColor.Red;
-
-                if (considerH)
+                for (int i = 0; i < keys.Count; i++)
                 {
-                    ws.Cell(r, 8).Value = Math.Round(row.Fx, 1);
-                    ws.Cell(r, 9).Value = Math.Round(row.Fy, 1);
-                    ws.Cell(r, 10).Value = Math.Round(row.Horizontal, 1);
-                    ws.Cell(r, 11).Value = Math.Round(row.HorizontalCap, 1);
-                    ws.Cell(r, 12).Value = row.HResult;
-                    if (IsFail(row.HResult)) ws.Cell(r, 12).Style.Font.FontColor = XLColor.Red;
+                    string k = keys[i];
+                    int col = 1 + i;
+                    SetCell(ws.Cell(r, col), k, row);
+                    if ((k == "Result" && IsFail(row.Result)) ||
+                        (k == "HResult" && IsFail(row.HResult)))
+                        ws.Cell(r, col).Style.Font.FontColor = XLColor.Red;
                 }
                 r++;
             }
 
             int lastData = Math.Max(firstData, r - 1);
             StyleBodyBox(ws.Range(firstData, 1, lastData, lastCol));
-            ws.Range(firstData, 1, lastData, 3).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            ws.Range(firstData, 7, lastData, 7).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            ws.Range(firstData, 4, lastData, 6).Style.NumberFormat.Format = "0";
-            if (considerH)
-            {
-                ws.Range(firstData, 12, lastData, 12).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-                ws.Range(firstData, 8, lastData, 11).Style.NumberFormat.Format = "0";
-            }
 
-            ws.Column(1).Width = 11;
-            ws.Column(2).Width = 12;
-            ws.Column(3).Width = 18;
-            ws.Column(4).Width = 16;
-            ws.Column(5).Width = 13;
-            ws.Column(6).Width = 13;
-            ws.Column(7).Width = 11;
-            if (considerH)
+            for (int i = 0; i < keys.Count; i++)
             {
-                ws.Column(8).Width = 12;
-                ws.Column(9).Width = 12;
-                ws.Column(10).Width = 12;
-                ws.Column(11).Width = 14;
-                ws.Column(12).Width = 11;
+                string k = keys[i];
+                int col = 1 + i;
+                if (IsCenter(k))
+                    ws.Range(firstData, col, lastData, col).Style.Alignment.Horizontal =
+                        XLAlignmentHorizontalValues.Center;
+                if (IsNum(k))
+                    ws.Range(firstData, col, lastData, col).Style.NumberFormat.Format = "0";
+                ws.Column(col).Width = WidthOf(k);
             }
 
             var used = ws.RangeUsed();
