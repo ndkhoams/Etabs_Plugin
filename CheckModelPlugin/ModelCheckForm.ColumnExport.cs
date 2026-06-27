@@ -120,7 +120,7 @@ namespace Etabs_Ultimate_Tools
 
             AddColumnExportGridColumns();
 
-            lblColInfo.Text = "Chọn cột/vách trong ETABS trước khi mở tool, chọn tổ hợp rồi bấm Xem trước.";
+            lblColInfo.Text = "Chọn cột/vách trong ETABS trước khi mở tool.";
         }
 
         private void ClbColCombos_MouseDown(object sender, MouseEventArgs e)

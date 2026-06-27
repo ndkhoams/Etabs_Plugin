@@ -308,6 +308,13 @@ namespace Etabs_Ultimate_Tools
             right.Controls.Add(dgvPileHPreview, 0, 1);
             AddPileHGridColumns();
 
+            right.Controls.Add(new Label
+            {
+                Text = "Preview:",
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            }, 0, 0);
+
             lblPileHInfo.Text = "Điền SCT cọc (kéo/nén/ngang) vào bảng.";
 
             // Dựng header bảng SCT + đồng bộ ẩn/hiện cột theo trạng thái checkbox.
