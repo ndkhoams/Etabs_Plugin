@@ -119,6 +119,14 @@ namespace Etabs_Ultimate_Tools
                     row++;
                 }
 
+                // Căn giữa toàn bộ bảng (header + dữ liệu).
+                var used = ws.RangeUsed();
+                if (used != null)
+                {
+                    used.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+                    used.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
+                }
+
                 ws.Columns().AdjustToContents();
 
                 wb.SaveAs(path);
