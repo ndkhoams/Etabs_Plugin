@@ -33,8 +33,8 @@ namespace Etabs_Ultimate_Tools
         public double TensionCap { get; set; }         // SCT chịu kéo (kN)
         public double CompressionCap { get; set; }     // SCT chịu nén (kN)
         public string Result { get; set; } = "";       // Kết luận (đứng)
-        public double Fx { get; set; }                 // |FX| max trên các step (kN)
-        public double Fy { get; set; }                 // |FY| max trên các step (kN)
+        public double Fx { get; set; }                 // |FX| tại step có H lớn nhất (kN)
+        public double Fy { get; set; }                 // |FY| tại step có H lớn nhất (kN)
         public double Horizontal { get; set; }         // Hợp lực ngang H = sqrt(FX^2+FY^2) (kN)
         public double HorizontalCap { get; set; }      // SCT chịu ngang (kN)
         public string HResult { get; set; } = "";      // Kết luận ngang
@@ -168,14 +168,16 @@ namespace Etabs_Ultimate_Tools
         }
 
         // ── Tính phản lực đứng (F3) + hợp lực ngang H = sqrt(FX^2+FY^2) cho 1 tổ hợp ─────
-        // H lấy theo bao thành phần (|FX|max, |FY|max) → giá trị thiên về an toàn.
+        // H tính CHÍNH XÁC theo từng bước: tắt chế độ bao (envelope), duyệt mọi step,
+        // tính H tại từng step rồi lấy step có H lớn nhất (FX, FY tương quan cùng 1 bước).
         public static PileReactionCase ComputeCaseH(cSapModel sap, string combo,
             string title, string sheet, Dictionary<string, PileSpringType> caps)
         {
             if (string.IsNullOrWhiteSpace(combo)) return null;
 
             sap.SetPresentUnits(eUnits.kN_m_C);
-            try { sap.Results.Setup.SetOptionMultiValuedCombo(1); } catch { }
+            // 0 = trả về từng step (không bao) để lấy được cặp FX-FY tương quan cùng 1 bước.
+            try { sap.Results.Setup.SetOptionMultiValuedCombo(0); } catch { }
 
             var piles = GetPilePoints(sap);
             if (piles.Count == 0) return null;
@@ -401,7 +403,9 @@ namespace Etabs_Ultimate_Tools
             return pmax != double.MinValue && pmin != double.MaxValue;
         }
 
-        // ── Như TryGetReactionRange nhưng đọc thêm |FX|max, |FY|max (F1, F2) ──────────
+        // ── Như TryGetReactionRange nhưng lấy thêm FX, FY tại step có H lớn nhất ──────────
+        // Duyệt từng step: tính H = sqrt(F1^2 + F2^2) tại CHÍNH step đó (FX, FY tương quan)
+        // rồi giữ lại FX, FY của step có H lớn nhất.
         private static bool TryGetReactionRangeH(cSapModel sap, string pointName,
             out double pmax, out double pmin, out double fxAbs, out double fyAbs, out bool multi)
         {
@@ -431,12 +435,22 @@ namespace Etabs_Ultimate_Tools
                 return false;
 
             int count = Math.Min(num, f3.Length);
+            double maxH = -1.0;
             for (int i = 0; i < count; i++)
             {
                 if (f3[i] > pmax) pmax = f3[i];
                 if (f3[i] < pmin) pmin = f3[i];
-                if (f1 != null && i < f1.Length) fxAbs = Math.Max(fxAbs, Math.Abs(f1[i]));
-                if (f2 != null && i < f2.Length) fyAbs = Math.Max(fyAbs, Math.Abs(f2[i]));
+
+                // Hợp lực ngang tại CHÍNH step này (FX, FY tương quan cùng 1 bước).
+                double fx = (f1 != null && i < f1.Length) ? f1[i] : 0.0;
+                double fy = (f2 != null && i < f2.Length) ? f2[i] : 0.0;
+                double hStep = Math.Sqrt(fx * fx + fy * fy);
+                if (hStep > maxH)
+                {
+                    maxH = hStep;
+                    fxAbs = Math.Abs(fx);
+                    fyAbs = Math.Abs(fy);
+                }
             }
 
             multi = count > 1;
