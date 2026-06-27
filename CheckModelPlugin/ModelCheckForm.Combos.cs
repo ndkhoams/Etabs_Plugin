@@ -45,7 +45,9 @@ namespace Etabs_Ultimate_Tools
             {
                 clbColCombos.Items.Clear();
                 foreach (var name in ColumnForceExporter.GetCombos(_sap))
-                    clbColCombos.Items.Add(name, true);
+                    clbColCombos.Items.Add(name, false);
+                // Tích sẵn theo yêu cầu: ULS1..ULS17.
+                CheckUlsRange(clbColCombos, 1, 17);
             }
         }
 
