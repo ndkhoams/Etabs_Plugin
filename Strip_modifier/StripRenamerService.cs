@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using ETABSv1;
@@ -24,18 +24,58 @@ namespace Strip_Rename
 
     public static class StripRenamerService
     {
+        // Yeu cau chot: startIndex = 1; padding = 3 (001)
+        public const int DefaultStartIndex = 1;
+        public const int DefaultPadWidth = 3;
+
+        /// <summary>
+        /// Tra ve danh sach ten strip hien co trong model (de hien thi len UI cho nguoi dung chon).
+        /// </summary>
+        public static List<string> GetStripNames(cSapModel sapModel)
+        {
+            int count = 0;
+            string[] names = null;
+
+            int ret = GetStripNameList(sapModel, ref count, ref names);
+            if (ret != 0) throw new Exception($"Get strip list failed (ret={ret})");
+
+            return names?.ToList() ?? new List<string>();
+        }
+
+        /// <summary>
+        /// Tao preview doi ten.
+        /// - Chi nhung strip co ten nam trong selectedStripNames moi duoc doi (null = doi toan bo).
+        /// - Ten moi luon unique toan model: neu candidate trung voi strip KHONG doi ten
+        ///   (hoac trung nhau trong nhom doi ten) thi tu tang index cho den khi khong trung.
+        /// </summary>
         public static List<StripInfo> PreviewRename(
             cSapModel sapModel,
             string prefix,
             int startIndex,
             int padWidth,
-            SortMode sortMode)
+            SortMode sortMode,
+            IEnumerable<string> selectedStripNames = null)
         {
-            var strips = LoadStripsWithMidpointXY(sapModel);
-            var sorted = SortStrips(strips, sortMode);
+            var allStrips = LoadStripsWithMidpointXY(sapModel);
 
-            BuildNewNames(sorted, prefix, startIndex, padWidth);
-            ValidateNoDuplicateNewNames(sorted);
+            HashSet<string> selectedSet = selectedStripNames == null
+                ? null
+                : new HashSet<string>(selectedStripNames, StringComparer.OrdinalIgnoreCase);
+
+            var toRename = selectedSet == null
+                ? allStrips
+                : allStrips.Where(s => selectedSet.Contains(s.OldName)).ToList();
+
+            var sorted = SortStrips(toRename, sortMode);
+
+            // Cac ten dang bi chiem boi strip KHONG doi ten -> phai tranh trung.
+            var renameSet = new HashSet<string>(sorted.Select(s => s.OldName), StringComparer.OrdinalIgnoreCase);
+            var reserved = new HashSet<string>(
+                allStrips.Select(s => s.OldName).Where(n => !renameSet.Contains(n)),
+                StringComparer.OrdinalIgnoreCase);
+
+            BuildNewNames(sorted, prefix, startIndex, padWidth, reserved);
+            ValidateNoDuplicateNewNames(sorted, reserved);
 
             return sorted;
         }
@@ -44,7 +84,7 @@ namespace Strip_Rename
         {
             if (previewRows == null || previewRows.Count == 0) return;
 
-            // Step 1: old -> temp
+            // Step 1: old -> temp (tranh va cham trung gian)
             foreach (var s in previewRows)
             {
                 s.TempName = "__TMP__" + Guid.NewGuid().ToString("N");
@@ -114,44 +154,57 @@ namespace Strip_Rename
             return q.ToList();
         }
 
-        private static void BuildNewNames(List<StripInfo> sorted, string prefix, int startIndex, int padWidth)
+        private static void BuildNewNames(List<StripInfo> sorted, string prefix, int startIndex, int padWidth, HashSet<string> reserved)
         {
             int i = startIndex;
+            var used = new HashSet<string>(
+                reserved ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
+
             foreach (var s in sorted)
             {
-                s.NewName = $"{prefix}{i.ToString().PadLeft(padWidth, '0')}";
-                i++;
+                string candidate;
+                do
+                {
+                    candidate = $"{prefix}{i.ToString().PadLeft(padWidth, '0')}";
+                    i++;
+                }
+                while (used.Contains(candidate));
+
+                s.NewName = candidate;
+                used.Add(candidate);
             }
         }
 
-        private static void ValidateNoDuplicateNewNames(List<StripInfo> rows)
+        private static void ValidateNoDuplicateNewNames(List<StripInfo> rows, HashSet<string> reserved)
         {
             var dup = rows.GroupBy(r => r.NewName, StringComparer.OrdinalIgnoreCase)
                           .FirstOrDefault(g => g.Count() > 1);
             if (dup != null) throw new Exception($"Duplicate new name in preview: {dup.Key}");
+
+            if (reserved != null)
+            {
+                var clash = rows.FirstOrDefault(r => reserved.Contains(r.NewName));
+                if (clash != null)
+                    throw new Exception($"New name clashes with an existing strip that is not being renamed: {clash.NewName}");
+            }
         }
 
-        // ====== ETABS 22 API mapping (bạn map 3 hàm này theo IntelliSense) ======
+        // ====== ETABS 22 API mapping ======
 
         private static int GetStripNameList(cSapModel sapModel, ref int count, ref string[] names)
         {
-            // ETABS 22: map đúng hàm thực tế ở đây:
-            // return sapModel.StripObj.GetNameList(ref count, ref names);
-            throw new NotImplementedException("Map StripObj.GetNameList(...) theo ETABS 22.");
+            return sapModel.StripObj.GetNameList(ref count, ref names);
         }
 
         private static int GetStripPoints(cSapModel sapModel, string stripName, ref int nPts, ref string[] ptNames)
         {
-            // ETABS 22: map đúng hàm thực tế ở đây:
-            // return sapModel.StripObj.GetPoints(stripName, ref nPts, ref ptNames);
-            throw new NotImplementedException("Map StripObj.GetPoints(...) theo ETABS 22.");
+            return sapModel.StripObj.GetPoints(stripName, ref nPts, ref ptNames);
         }
 
         private static int ChangeStripName(cSapModel sapModel, string oldName, string newName)
         {
-            // ETABS 22: map đúng hàm rename thực tế:
-            // return sapModel.StripObj.ChangeName(oldName, newName);
-            throw new NotImplementedException("Map StripObj.ChangeName(...) theo ETABS 22.");
+            return sapModel.StripObj.ChangeName(oldName, newName);
         }
     }
 }

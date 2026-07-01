@@ -17,7 +17,7 @@ namespace Etabs_Ultimate_Tools
             try
             {
                 Application.EnableVisualStyles();
-                using (var form = new ModelCheckForm(_sapModel))
+                using (var form = new StripRenameForm(_sapModel))
                 {
                     form.ShowDialog();
                 }
