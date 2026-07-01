@@ -1,0 +1,4 @@
+C:\Users\admin\source\repos\Strip_modifier\Strip_modifier\obj\Debug\Strip_modifier.csproj.AssemblyReference.cache
+C:\Users\admin\source\repos\Strip_modifier\Strip_modifier\obj\Debug\Strip_modifier.Properties.Resources.resources
+C:\Users\admin\source\repos\Strip_modifier\Strip_modifier\obj\Debug\Strip_modifier.csproj.GenerateResource.cache
+C:\Users\admin\source\repos\Strip_modifier\Strip_modifier\obj\Debug\Strip_modifier.csproj.CoreCompileInputs.cache
