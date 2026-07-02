@@ -35,7 +35,7 @@ namespace Etabs_Ultimate_Tools
 
         public string TableKey = "";
         public string GroupName = "";
-        public string TableVersion = "";
+        public int TableVersion;
         public int NumberFields;
         public string[] FieldKeys = new string[0];
         public int NumberRecords;
@@ -52,7 +52,8 @@ namespace Etabs_Ultimate_Tools
             int n = 0;
             string[] keys = null, names = null;
             int[] importType = null;
-            sap.DatabaseTables.GetAllTables(ref n, ref keys, ref names, ref importType);
+            bool[] isEmpty = null;
+            sap.DatabaseTables.GetAllTables(ref n, ref keys, ref names, ref importType, ref isEmpty);
             if (keys == null) return list;
             for (int i = 0; i < keys.Length; i++)
             {
@@ -70,25 +71,22 @@ namespace Etabs_Ultimate_Tools
         {
             TableKey = tableKey;
             GroupName = groupName ?? "";
-            string tableVersion = "";
-            int numFields = 0;
+            int tableVersion = 0;
             string[] fieldKeys = null;
             int numRecords = 0;
             string[] data = null;
 
             int ret = sap.DatabaseTables.GetTableForEditingArray(
-                tableKey, GroupName, ref tableVersion, ref numFields,
-                ref fieldKeys, ref numRecords, ref data);
+                tableKey, GroupName, ref tableVersion, ref fieldKeys, ref numRecords, ref data);
             if (ret != 0)
                 throw new Exception("Không đọc được bảng \"" + tableKey + "\" (mã lỗi " + ret + ").\n" +
                     "Kiểm tra lại tên bảng hoặc model đã có design strip chưa.");
 
             TableVersion = tableVersion;
-            NumberFields = numFields;
             FieldKeys = fieldKeys ?? new string[0];
+            NumberFields = FieldKeys.Length;
             NumberRecords = numRecords;
             TableData = data ?? new string[0];
-            if (NumberFields <= 0 && FieldKeys.Length > 0) NumberFields = FieldKeys.Length;
 
             AutoDetectColumns();
         }
@@ -248,11 +246,11 @@ namespace Etabs_Ultimate_Tools
 
             sap.SetModelIsLocked(false);
 
-            string tableVersion = TableVersion;
+            int tableVersion = TableVersion;
             string[] fieldKeys = FieldKeys;
             int numRecords = NumberRecords;
             int ret = sap.DatabaseTables.SetTableForEditingArray(
-                TableKey, ref tableVersion, ref fieldKeys, ref numRecords, ref data);
+                TableKey, ref tableVersion, ref fieldKeys, numRecords, ref data);
             if (ret != 0) throw new Exception("SetTableForEditingArray lỗi (mã " + ret + ").");
 
             int fatal = 0, err = 0, warn = 0, info = 0;
