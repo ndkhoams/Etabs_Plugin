@@ -33,6 +33,13 @@ namespace Etabs_Ultimate_Tools
             public int RecordCount;
         }
 
+        public class TableInfo
+        {
+            public string Key;
+            public string Name;
+            public int ImportType;
+        }
+
         public string TableKey = "";
         public string GroupName = "";
         public int TableVersion;
@@ -45,10 +52,10 @@ namespace Etabs_Ultimate_Tools
         public int XCol = -1;
         public int YCol = -1;
 
-        /// <summary>Danh sách các bảng có chữ "strip" trong key/tên (để gợi ý cho người dùng).</summary>
-        public static List<KeyValuePair<string, string>> FindStripTables(cSapModel sap)
+        /// <summary>Liệt kê toàn bộ bảng trong database của model (kèm importType).</summary>
+        public static List<TableInfo> FindAllTables(cSapModel sap)
         {
-            var list = new List<KeyValuePair<string, string>>();
+            var list = new List<TableInfo>();
             int n = 0;
             string[] keys = null, names = null;
             int[] importType = null;
@@ -57,11 +64,25 @@ namespace Etabs_Ultimate_Tools
             if (keys == null) return list;
             for (int i = 0; i < keys.Length; i++)
             {
-                string k = keys[i] ?? "";
-                string nm = (names != null && i < names.Length) ? (names[i] ?? "") : "";
-                if (k.IndexOf("strip", StringComparison.OrdinalIgnoreCase) >= 0
-                    || nm.IndexOf("strip", StringComparison.OrdinalIgnoreCase) >= 0)
-                    list.Add(new KeyValuePair<string, string>(k, nm));
+                list.Add(new TableInfo
+                {
+                    Key = keys[i] ?? "",
+                    Name = (names != null && i < names.Length) ? (names[i] ?? "") : "",
+                    ImportType = (importType != null && i < importType.Length) ? importType[i] : -1
+                });
+            }
+            return list;
+        }
+
+        /// <summary>Các bảng có chữ "strip" trong key/tên (để gợi ý cho người dùng).</summary>
+        public static List<TableInfo> FindStripTables(cSapModel sap)
+        {
+            var list = new List<TableInfo>();
+            foreach (var t in FindAllTables(sap))
+            {
+                if (t.Key.IndexOf("strip", StringComparison.OrdinalIgnoreCase) >= 0
+                    || t.Name.IndexOf("strip", StringComparison.OrdinalIgnoreCase) >= 0)
+                    list.Add(t);
             }
             return list;
         }
@@ -80,7 +101,7 @@ namespace Etabs_Ultimate_Tools
                 tableKey, GroupName, ref tableVersion, ref fieldKeys, ref numRecords, ref data);
             if (ret != 0)
                 throw new Exception("Không đọc được bảng \"" + tableKey + "\" (mã lỗi " + ret + ").\n" +
-                    "Kiểm tra lại tên bảng hoặc model đã có design strip chưa.");
+                    "Có thể key tên bảng chưa đúng hoặc bảng này không cho phép chỉnh sửa (importType = 0).");
 
             TableVersion = tableVersion;
             FieldKeys = fieldKeys ?? new string[0];

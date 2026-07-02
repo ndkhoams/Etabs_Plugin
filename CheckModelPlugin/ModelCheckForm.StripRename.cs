@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Windows.Forms;
 
 namespace Etabs_Ultimate_Tools
@@ -12,7 +13,7 @@ namespace Etabs_Ultimate_Tools
     {
         private TextBox txtStripGroup, txtStripPrefix, txtStripStart, txtStripPad, txtStripTol;
         private ComboBox cboStripTable, cboStripNameCol, cboStripXCol, cboStripYCol, cboStripSort;
-        private Button btnStripRead, btnStripPreview, btnStripApply;
+        private Button btnStripList, btnStripRead, btnStripPreview, btnStripApply;
         private DataGridView dgvStrip;
         private Label lblStripInfo;
         private readonly StripRenamer _stripRenamer = new StripRenamer();
@@ -37,8 +38,8 @@ namespace Etabs_Ultimate_Tools
             root.Controls.Add(MakeSubtitle("Đổi tên strip trong 1 Group theo prefix + số thứ tự, sắp xếp theo vị trí"), 0, 1);
             root.Controls.Add(MakeNote(
                 "ETABS API không lấy được strip đang chọn → hãy chọn các strip trong ETABS rồi gán vào 1 Group " +
-                "(Assign › Assign to Group), nhập tên Group vào đây. Nên chạy thử trên FILE COPY vì đổi tên strip " +
-                "qua database có thể sinh strip trùng ở một số phiên bản ETABS."), 0, 2);
+                "(Assign › Assign to Group), nhập tên Group vào đây. Bấm 'Liệt kê bảng' để xem đúng tên bảng strip " +
+                "trong model. Nên chạy thử trên FILE COPY vì đổi tên strip qua database có thể sinh strip trùng."), 0, 2);
 
             // ----- Hàng tuỳ chọn -----
             var opt = new FlowLayoutPanel
@@ -85,6 +86,7 @@ namespace Etabs_Ultimate_Tools
             mapPanel.Controls.Add(MakeFieldLabel("Cột Y:", 46));
             cboStripYCol = MakeCombo(120); mapPanel.Controls.Add(cboStripYCol);
 
+            btnStripList = MakeButton("Liệt kê bảng"); btnStripList.Click += (s, e) => StripListTables(); mapPanel.Controls.Add(btnStripList);
             btnStripRead = MakeButton("Đọc bảng"); btnStripRead.Click += (s, e) => StripReadTable(); mapPanel.Controls.Add(btnStripRead);
             btnStripPreview = MakeButton("Xem trước"); btnStripPreview.Click += (s, e) => StripPreview(); mapPanel.Controls.Add(btnStripPreview);
             btnStripApply = MakeButton("Áp dụng đổi tên"); btnStripApply.Enabled = false; btnStripApply.Click += (s, e) => StripApply(); mapPanel.Controls.Add(btnStripApply);
@@ -108,16 +110,60 @@ namespace Etabs_Ultimate_Tools
             root.Controls.Add(lblStripInfo, 0, 6);
         }
 
-        private void StripReadTable()
+        /// <summary>Liệt kê các bảng có thật trong model để người dùng chọn đúng key.</summary>
+        private void StripListTables()
         {
             try
             {
-                if (cboStripTable.Items.Count == 0) StripLoadTableList();
-                string tableKey = (cboStripTable.Text ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(tableKey)) { Warn("Chọn hoặc nhập tên bảng design strip.", "Đổi tên Strip"); return; }
-                string group = (txtStripGroup.Text ?? "").Trim();
-                if (string.IsNullOrWhiteSpace(group)) { Warn("Nhập tên Group chứa các strip cần đổi tên.", "Đổi tên Strip"); return; }
+                var strips = StripRenamer.FindStripTables(_sap);
+                if (strips.Count > 0)
+                {
+                    cboStripTable.Items.Clear();
+                    foreach (var t in strips)
+                        if (!cboStripTable.Items.Contains(t.Key)) cboStripTable.Items.Add(t.Key);
+                    if (string.IsNullOrWhiteSpace(cboStripTable.Text) && cboStripTable.Items.Count > 0)
+                        cboStripTable.SelectedIndex = 0;
 
+                    var sb = new StringBuilder();
+                    sb.AppendLine("Các bảng có chữ 'strip' trong model (importType: 0 = chỉ xem, không sửa được):");
+                    sb.AppendLine();
+                    foreach (var t in strips)
+                        sb.AppendLine("[" + t.ImportType + "]  " + t.Key
+                            + (string.IsNullOrEmpty(t.Name) || t.Name == t.Key ? "" : "   (" + t.Name + ")"));
+                    sb.AppendLine();
+                    sb.AppendLine("Chọn đúng key trong ô 'Bảng strip' rồi bấm 'Đọc bảng'.");
+                    Info(sb.ToString(), "Danh sách bảng strip");
+                    lblStripInfo.Text = "Tìm thấy " + strips.Count + " bảng chứa 'strip'. Đã nạp vào ô 'Bảng strip'.";
+                }
+                else
+                {
+                    var all = StripRenamer.FindAllTables(_sap);
+                    var sb = new StringBuilder();
+                    sb.AppendLine("Không tìm thấy bảng nào chứa 'strip'. Tổng số bảng: " + all.Count + ".");
+                    sb.AppendLine("Một số bảng đầu tiên (importType, key):");
+                    sb.AppendLine();
+                    int c = 0;
+                    foreach (var t in all)
+                    {
+                        sb.AppendLine("[" + t.ImportType + "]  " + t.Key);
+                        if (++c >= 50) { sb.AppendLine("..."); break; }
+                    }
+                    Info(sb.ToString(), "Danh sách bảng");
+                    lblStripInfo.Text = "Không có bảng 'strip'. Model này có thể chưa định nghĩa design strip.";
+                }
+            }
+            catch (Exception ex) { Warn("Không liệt kê được bảng: " + ex.Message, "Đổi tên Strip"); }
+        }
+
+        private void StripReadTable()
+        {
+            string tableKey = (cboStripTable.Text ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(tableKey)) { StripListTables(); return; }
+            string group = (txtStripGroup.Text ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(group)) { Warn("Nhập tên Group chứa các strip cần đổi tên.", "Đổi tên Strip"); return; }
+
+            try
+            {
                 _stripRenamer.ReadGroup(_sap, tableKey, group);
                 StripPopulateColumnCombos();
 
@@ -130,29 +176,35 @@ namespace Etabs_Ultimate_Tools
                 }
                 StripPreview();
             }
-            catch (Exception ex) { Warn(ex.Message, "Đổi tên Strip"); }
-        }
-
-        private void StripLoadTableList()
-        {
-            string[] guesses =
+            catch (Exception ex)
             {
-                "Object Geometry - Design Strips",
-                "Object Connectivity - Design Strips",
-                "Design Strip Object Geometry",
-                "Slab Design - Strip Definitions"
-            };
-            foreach (var g in guesses)
-                if (!cboStripTable.Items.Contains(g)) cboStripTable.Items.Add(g);
-            try
-            {
-                var found = StripRenamer.FindStripTables(_sap);
-                foreach (var kv in found)
-                    if (!cboStripTable.Items.Contains(kv.Key)) cboStripTable.Items.Add(kv.Key);
+                string extra = "";
+                try
+                {
+                    var strips = StripRenamer.FindStripTables(_sap);
+                    if (strips.Count > 0)
+                    {
+                        cboStripTable.Items.Clear();
+                        var sb = new StringBuilder();
+                        sb.AppendLine();
+                        sb.AppendLine("Các bảng 'strip' có trong model (importType 0 = không sửa được):");
+                        foreach (var t in strips)
+                        {
+                            if (!cboStripTable.Items.Contains(t.Key)) cboStripTable.Items.Add(t.Key);
+                            sb.AppendLine("[" + t.ImportType + "]  " + t.Key);
+                        }
+                        sb.AppendLine();
+                        sb.AppendLine("Đã nạp danh sách vào ô 'Bảng strip' — chọn đúng key rồi thử lại.");
+                        extra = sb.ToString();
+                    }
+                    else
+                    {
+                        extra = "\n\nKhông tìm thấy bảng nào chứa 'strip'. Bấm 'Liệt kê bảng' để xem toàn bộ bảng.";
+                    }
+                }
+                catch { }
+                Warn(ex.Message + extra, "Đổi tên Strip");
             }
-            catch { /* GetAllTables có thể không khả dụng – dùng danh sách phỏng đoán */ }
-            if (string.IsNullOrWhiteSpace(cboStripTable.Text) && cboStripTable.Items.Count > 0)
-                cboStripTable.SelectedIndex = 0;
         }
 
         private void StripPopulateColumnCombos()
