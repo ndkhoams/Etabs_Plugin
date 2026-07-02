@@ -98,6 +98,7 @@ namespace Etabs_Ultimate_Tools
             var tabAxial = new TabPage("Axial Force");
             var tabColExport = new TabPage("Column Force Exporter");
             var tabPileH = new TabPage("Pile Reactions");
+            var tabStrip = new TabPage("Đổi tên Strip");
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
@@ -107,6 +108,7 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
             tabs.TabPages.Add(tabPileH);
+            tabs.TabPages.Add(tabStrip);
 
             BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
@@ -116,6 +118,7 @@ namespace Etabs_Ultimate_Tools
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
             BuildPileHTab(tabPileH);
+            BuildStripRenameTab(tabStrip);
         }
 
         // ---------- Hộp thoại dùng chung ----------
@@ -222,67 +225,4 @@ namespace Etabs_Ultimate_Tools
 
         private static Label MakeNote(string text) => new Label
         {
-            Text = text, Dock = DockStyle.Fill, AutoSize = false, Font = new Font("Arial", 10F),
-            ForeColor = Color.DimGray, TextAlign = ContentAlignment.TopLeft,
-            Padding = new Padding(2, 2, 2, 0)
-        };
-
-        private static Label MakeFieldLabel(string text, int width) => new Label
-        {
-            Text = text, AutoSize = false, Width = width, Height = CtrlHeight,
-            TextAlign = ContentAlignment.MiddleLeft, Margin = new Padding(0, 6, 10, 0)
-        };
-
-        private static ComboBox MakeCombo(int width) => new ComboBox
-        {
-            DropDownStyle = ComboBoxStyle.DropDownList, Width = width,
-            Margin = new Padding(0, 6, 18, 0)
-        };
-
-        private static TextBox MakeTextBox(string value, int width) => new TextBox
-        {
-            Text = value, Width = width, Margin = new Padding(0, 7, 18, 0)
-        };
-
-        private static Button MakeButton(string text) => new Button
-        {
-            Text = text, Width = 112, Height = CtrlHeight, Margin = new Padding(0, 6, 10, 0)
-        };
-
-        private DataGridView CreateGrid()
-        {
-            return new DataGridView
-            {
-                Dock = DockStyle.Fill,
-                AutoGenerateColumns = false,
-                AllowUserToAddRows = false,
-                ReadOnly = true,
-                BackgroundColor = SystemColors.ControlLightLight,
-                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.None,
-                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
-                RowHeadersVisible = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                MultiSelect = false,
-                BorderStyle = BorderStyle.FixedSingle,
-                Margin = new Padding(0, 8, 0, 0),
-                DefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter },
-                ColumnHeadersDefaultCellStyle = { Alignment = DataGridViewContentAlignment.MiddleCenter }
-            };
-        }
-
-        private void AddColumn(DataGridView grid, string property, string header, int width, string format = null, bool fill = false)
-        {
-            var col = new DataGridViewTextBoxColumn
-            {
-                DataPropertyName = property,
-                HeaderText = header,
-                Width = width,
-                SortMode = DataGridViewColumnSortMode.NotSortable,
-                AutoSizeMode = fill ? DataGridViewAutoSizeColumnMode.Fill : DataGridViewAutoSizeColumnMode.None
-            };
-            if (fill) col.FillWeight = width;
-            if (!string.IsNullOrWhiteSpace(format)) col.DefaultCellStyle.Format = format;
-            grid.Columns.Add(col);
-        }
-    }
-}
+            Text = text, Dock = DockStyle.Fill, AutoSize = false, Font =
