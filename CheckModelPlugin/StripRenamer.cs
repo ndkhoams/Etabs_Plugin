@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 
 namespace Etabs_Ultimate_Tools
 {
@@ -14,9 +15,10 @@ namespace Etabs_Ultimate_Tools
     /// design strip; cGroup.GetAssignments cũng dùng bộ loại đó). Vì vậy ta lọc theo Group
     /// ngay trong bảng database (tham số GroupName).
     ///
-    /// Toạ độ strip: bảng rên tên (ví dụ overwrites) thường không có toạ độ, nên
-    /// ta tự quét các bảng strip khác (đọc bằng GetTableForDisplayArray – chạy được cả với
-    /// bảng chỉ-xem) để tìm bảng có toạ độ điểm, rồi tính tâm mỗi strip.
+    /// Toạ độ strip: bảng đổi tên (ví dụ overwrites) thường không có toạ độ, nên
+    /// ta tự quét các bảng strip khác. Nếu bảng có sẵn cột X/Y thì dùng luôn; nếu chỉ có
+    /// nhãn điểm (ví dụ "Strip Object Connectivity") thì gọi PointObj.GetCoordCartesian cho
+    /// từng điểm để lấy toạ độ, rồi tính tâm mỗi strip.
     /// </summary>
     internal class StripRenamer
     {
@@ -59,6 +61,8 @@ namespace Etabs_Ultimate_Tools
         // Toạ độ lấy từ bảng khác (name -> {x, y}).
         public Dictionary<string, double[]> CoordMap = new Dictionary<string, double[]>(StringComparer.Ordinal);
         public string CoordSource = "";
+        // Chẩn đoán: liệt kê các bảng đã quét và cột của chúng (để cấu hình khi dò trượt).
+        public string CoordDiag = "";
 
         /// <summary>Liệt kê toàn bộ bảng trong database của model (kèm importType).</summary>
         public static List<TableInfo> FindAllTables(cSapModel sap)
@@ -122,11 +126,16 @@ namespace Etabs_Ultimate_Tools
             YCol = FindCoordCol(FieldKeys, "y");
         }
 
-        /// <summary>Quét các bảng strip khác để tìm toạ độ điểm, tính tâm mỗi strip. Trả về true nếu có.</summary>
+        /// <summary>
+        /// Quét các bảng strip khác để lấy toạ độ tâm mỗi strip. Đọc TOÀN BỘ bảng (không lọc
+        /// group) rồi ghép theo tên strip. Ưu tiên cột X/Y có sẵn; nếu không có thì dùng nhãn
+        /// điểm + PointObj.GetCoordCartesian. Trả về true nếu lấy được toạ độ.
+        /// </summary>
         public bool LoadCoordinatesFromStripTables(cSapModel sap, string groupName, string excludeTableKey)
         {
             CoordMap = new Dictionary<string, double[]>(StringComparer.Ordinal);
             CoordSource = "";
+            var diag = new StringBuilder();
             var candidates = FindStripTables(sap)
                 .OrderByDescending(t => ScoreCoordTable(t)).ToList();
             foreach (var t in candidates)
@@ -135,10 +144,33 @@ namespace Etabs_Ultimate_Tools
                     && string.Equals(t.Key, excludeTableKey, StringComparison.OrdinalIgnoreCase)) continue;
                 try
                 {
-                    if (TryLoadCoordFromTable(sap, t.Key, groupName)) { CoordSource = t.Key; return true; }
+                    string[] fields; string[] data; int nf;
+                    if (!ReadDisplay(sap, t.Key, "", out fields, out data, out nf))
+                    {
+                        diag.AppendLine("• " + t.Key + " → không đọc được (rỗng hoặc lỗi).");
+                        continue;
+                    }
+                    diag.AppendLine("• " + t.Key + " [" + nf + " cột]: " + string.Join(", ", fields));
+
+                    if (TryFillFromXY(fields, data, nf))
+                    {
+                        CoordSource = t.Key + " (cột X/Y)";
+                        CoordDiag = diag.ToString();
+                        return true;
+                    }
+                    if (TryFillFromPoints(sap, fields, data, nf))
+                    {
+                        CoordSource = t.Key + " (nhãn điểm → GetCoordCartesian)";
+                        CoordDiag = diag.ToString();
+                        return true;
+                    }
                 }
-                catch { /* bỏ qua bảng không đọc được */ }
+                catch (Exception ex)
+                {
+                    diag.AppendLine("• " + t.Key + " → lỗi: " + ex.Message);
+                }
             }
+            CoordDiag = diag.ToString();
             return false;
         }
 
@@ -156,27 +188,35 @@ namespace Etabs_Ultimate_Tools
             return score;
         }
 
-        private bool TryLoadCoordFromTable(cSapModel sap, string tableKey, string groupName)
+        /// <summary>Đọc bảng ở chế độ hiển thị (chạy được cả với bảng chỉ-xem).</summary>
+        private static bool ReadDisplay(cSapModel sap, string tableKey, string groupName,
+            out string[] fields, out string[] data, out int nf)
         {
+            fields = new string[0]; data = new string[0]; nf = 0;
             int tableVersion = 0;
             string[] fieldKeyList = new string[0];
             string[] fieldsIncluded = null;
             int numRecords = 0;
-            string[] data = null;
-
+            string[] d = null;
             int ret = sap.DatabaseTables.GetTableForDisplayArray(
                 tableKey, ref fieldKeyList, groupName ?? "", ref tableVersion,
-                ref fieldsIncluded, ref numRecords, ref data);
-            if (ret != 0 || fieldsIncluded == null || data == null) return false;
+                ref fieldsIncluded, ref numRecords, ref d);
+            if (ret != 0 || fieldsIncluded == null || d == null) return false;
+            fields = fieldsIncluded;
+            data = d;
+            nf = fieldsIncluded.Length;
+            return nf > 0;
+        }
 
-            int nf = fieldsIncluded.Length;
-            if (nf <= 0) return false;
-            int nameC = FindNameCol(fieldsIncluded, true);
-            int xC = FindCoordCol(fieldsIncluded, "x");
-            int yC = FindCoordCol(fieldsIncluded, "y");
+        /// <summary>Nếu bảng có sẵn cột toạ độ X/Y thì gom trung bình theo tên strip.</summary>
+        private bool TryFillFromXY(string[] fields, string[] data, int nf)
+        {
+            int nameC = FindNameCol(fields, true);
+            int xC = FindCoordCol(fields, "x");
+            int yC = FindCoordCol(fields, "y");
             if (nameC < 0 || xC < 0 || yC < 0) return false;
 
-            var acc = new Dictionary<string, double[]>(StringComparer.Ordinal); // name -> {sumX, sumY, count}
+            var acc = new Dictionary<string, double[]>(StringComparer.Ordinal);
             int rows = data.Length / nf;
             for (int r = 0; r < rows; r++)
             {
@@ -192,6 +232,53 @@ namespace Etabs_Ultimate_Tools
                 if (hy) a[1] += y;
                 a[2] += 1;
             }
+            return Finalize(acc);
+        }
+
+        /// <summary>
+        /// Nếu bảng chỉ có nhãn điểm (không có cột X/Y) thì lấy toạ độ từng điểm qua
+        /// PointObj.GetCoordCartesian rồi tính tâm mỗi strip.
+        /// </summary>
+        private bool TryFillFromPoints(cSapModel sap, string[] fields, string[] data, int nf)
+        {
+            int nameC = FindNameCol(fields, true);
+            if (nameC < 0) return false;
+            var pointCols = FindPointCols(fields, nameC);
+            if (pointCols.Count == 0) return false;
+
+            var acc = new Dictionary<string, double[]>(StringComparer.Ordinal);
+            var cache = new Dictionary<string, double[]>(StringComparer.Ordinal); // point label -> {x,y} hoặc null
+            int rows = data.Length / nf;
+            for (int r = 0; r < rows; r++)
+            {
+                string nm = GetCell(data, r, nf, nameC);
+                if (string.IsNullOrWhiteSpace(nm)) continue;
+                foreach (int pc in pointCols)
+                {
+                    string pl = GetCell(data, r, nf, pc);
+                    if (string.IsNullOrWhiteSpace(pl)) continue;
+                    pl = pl.Trim();
+                    double[] xy;
+                    if (!cache.TryGetValue(pl, out xy))
+                    {
+                        double px = 0, py = 0, pz = 0;
+                        int ret = sap.PointObj.GetCoordCartesian(pl, ref px, ref py, ref pz, "Global");
+                        xy = (ret == 0) ? new double[] { px, py } : null;
+                        cache[pl] = xy;
+                    }
+                    if (xy == null) continue;
+                    double[] a;
+                    if (!acc.TryGetValue(nm, out a)) { a = new double[3]; acc[nm] = a; }
+                    a[0] += xy[0];
+                    a[1] += xy[1];
+                    a[2] += 1;
+                }
+            }
+            return Finalize(acc);
+        }
+
+        private bool Finalize(Dictionary<string, double[]> acc)
+        {
             if (acc.Count == 0) return false;
             foreach (var kv in acc)
             {
@@ -199,6 +286,20 @@ namespace Etabs_Ultimate_Tools
                 CoordMap[kv.Key] = new double[] { kv.Value[0] / c, kv.Value[1] / c };
             }
             return CoordMap.Count > 0;
+        }
+
+        /// <summary>Các cột chứa nhãn điểm/joint (loại trừ cột tên strip và cột đếm số điểm).</summary>
+        private static List<int> FindPointCols(string[] fields, int excludeCol)
+        {
+            var cols = new List<int>();
+            for (int i = 0; i < fields.Length; i++)
+            {
+                if (i == excludeCol) continue;
+                string fl = (fields[i] ?? "").ToLowerInvariant().Replace(" ", "");
+                if (fl.Contains("number") || fl.Contains("count") || fl.Contains("num")) continue;
+                if (fl.Contains("point") || fl.Contains("joint")) cols.Add(i);
+            }
+            return cols;
         }
 
         private static string GetCell(string[] data, int r, int nf, int c)

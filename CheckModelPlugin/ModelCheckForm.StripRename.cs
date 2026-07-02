@@ -175,12 +175,20 @@ namespace Etabs_Ultimate_Tools
                     return;
                 }
 
-                // Nếu bảng rên tên không có toạ độ → tự tìm bảng toạ độ để sắp theo vị trí.
+                // Nếu bảng đổi tên không có toạ độ → tự tìm bảng toạ độ để sắp theo vị trí.
                 bool mainHasCoord = _stripRenamer.XCol >= 0 && _stripRenamer.YCol >= 0;
                 if (!mainHasCoord)
                 {
-                    try { _stripRenamer.LoadCoordinatesFromStripTables(_sap, group, tableKey); }
+                    bool got = false;
+                    try { got = _stripRenamer.LoadCoordinatesFromStripTables(_sap, group, tableKey); }
                     catch { }
+                    if (!got && !string.IsNullOrEmpty(_stripRenamer.CoordDiag))
+                    {
+                        Info("Chưa tự tìm được toạ độ cho strip. Cột của các bảng 'strip' đã quét:\n\n"
+                            + _stripRenamer.CoordDiag
+                            + "\nHãy gửi ảnh này để mình chỉ đúng bảng/cột chứa toạ độ (hoặc nhãn điểm).",
+                            "Chẩn đoán toạ độ strip");
+                    }
                 }
 
                 StripPreview();
@@ -267,7 +275,7 @@ namespace Etabs_Ultimate_Tools
                 if (mainCoord)
                     info += "  Sắp theo vị trí (toạ độ từ cột X/Y trong bảng).";
                 else if (mapCoord)
-                    info += "  Sắp theo vị trí (toạ độ tự lấy từ bảng '" + _stripRenamer.CoordSource + "').";
+                    info += "  Sắp theo vị trí (toạ độ tự lấy từ '" + _stripRenamer.CoordSource + "').";
                 else
                     info += "  CHƯA có toạ độ → sắp theo tên. Chọn cột X/Y hoặc kiểm tra bảng hình học strip.";
                 lblStripInfo.Text = info;
