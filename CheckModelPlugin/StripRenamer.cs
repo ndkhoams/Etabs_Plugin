@@ -12,7 +12,11 @@ namespace Etabs_Ultimate_Tools
     /// Lưu ý quan trọng: ETABS OAPI KHÔNG cho phép lấy "strip đang chọn" trực tiếp
     /// (SelectObj.GetSelected chỉ trả về Point/Frame/Cable/Tendon/Area/Solid/Link, không có
     /// design strip; cGroup.GetAssignments cũng dùng bộ loại đó). Vì vậy ta lọc theo Group
-    /// ngay trong bảng database (tham số GroupName của GetTableForEditingArray).
+    /// ngay trong bảng database (tham số GroupName).
+    ///
+    /// Toạ độ strip: bảng rên tên (ví dụ overwrites) thường không có toạ độ, nên
+    /// ta tự quét các bảng strip khác (đọc bằng GetTableForDisplayArray – chạy được cả với
+    /// bảng chỉ-xem) để tìm bảng có toạ độ điểm, rồi tính tâm mỗi strip.
     /// </summary>
     internal class StripRenamer
     {
@@ -51,6 +55,10 @@ namespace Etabs_Ultimate_Tools
         public int NameCol = -1;
         public int XCol = -1;
         public int YCol = -1;
+
+        // Toạ độ lấy từ bảng khác (name -> {x, y}).
+        public Dictionary<string, double[]> CoordMap = new Dictionary<string, double[]>(StringComparer.Ordinal);
+        public string CoordSource = "";
 
         /// <summary>Liệt kê toàn bộ bảng trong database của model (kèm importType).</summary>
         public static List<TableInfo> FindAllTables(cSapModel sap)
@@ -109,22 +117,103 @@ namespace Etabs_Ultimate_Tools
             NumberRecords = numRecords;
             TableData = data ?? new string[0];
 
-            AutoDetectColumns();
+            NameCol = FindNameCol(FieldKeys, false);
+            XCol = FindCoordCol(FieldKeys, "x");
+            YCol = FindCoordCol(FieldKeys, "y");
         }
 
-        private void AutoDetectColumns()
+        /// <summary>Quét các bảng strip khác để tìm toạ độ điểm, tính tâm mỗi strip. Trả về true nếu có.</summary>
+        public bool LoadCoordinatesFromStripTables(cSapModel sap, string groupName, string excludeTableKey)
         {
-            NameCol = FindNameCol();
-            XCol = FindCoordCol("x");
-            YCol = FindCoordCol("y");
+            CoordMap = new Dictionary<string, double[]>(StringComparer.Ordinal);
+            CoordSource = "";
+            var candidates = FindStripTables(sap)
+                .OrderByDescending(t => ScoreCoordTable(t)).ToList();
+            foreach (var t in candidates)
+            {
+                if (!string.IsNullOrEmpty(excludeTableKey)
+                    && string.Equals(t.Key, excludeTableKey, StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    if (TryLoadCoordFromTable(sap, t.Key, groupName)) { CoordSource = t.Key; return true; }
+                }
+                catch { /* bỏ qua bảng không đọc được */ }
+            }
+            return false;
         }
 
-        private int FindNameCol()
+        private static int ScoreCoordTable(TableInfo t)
+        {
+            string s = ((t.Key ?? "") + " " + (t.Name ?? "")).ToLowerInvariant();
+            int score = 0;
+            if (s.Contains("connectivity")) score += 50;
+            if (s.Contains("geometry")) score += 45;
+            if (s.Contains("object")) score += 20;
+            if (s.Contains("point")) score += 15;
+            if (s.Contains("general")) score += 10;
+            if (s.Contains("overwrite")) score -= 40;
+            if (s.Contains("reinforc") || s.Contains("result") || s.Contains("forces")) score -= 30;
+            return score;
+        }
+
+        private bool TryLoadCoordFromTable(cSapModel sap, string tableKey, string groupName)
+        {
+            int tableVersion = 0;
+            string[] fieldKeyList = new string[0];
+            string[] fieldsIncluded = null;
+            int numRecords = 0;
+            string[] data = null;
+
+            int ret = sap.DatabaseTables.GetTableForDisplayArray(
+                tableKey, ref fieldKeyList, groupName ?? "", ref tableVersion,
+                ref fieldsIncluded, ref numRecords, ref data);
+            if (ret != 0 || fieldsIncluded == null || data == null) return false;
+
+            int nf = fieldsIncluded.Length;
+            if (nf <= 0) return false;
+            int nameC = FindNameCol(fieldsIncluded, true);
+            int xC = FindCoordCol(fieldsIncluded, "x");
+            int yC = FindCoordCol(fieldsIncluded, "y");
+            if (nameC < 0 || xC < 0 || yC < 0) return false;
+
+            var acc = new Dictionary<string, double[]>(StringComparer.Ordinal); // name -> {sumX, sumY, count}
+            int rows = data.Length / nf;
+            for (int r = 0; r < rows; r++)
+            {
+                string nm = GetCell(data, r, nf, nameC);
+                if (string.IsNullOrWhiteSpace(nm)) continue;
+                double x, y;
+                bool hx = TryNum(GetCell(data, r, nf, xC), out x);
+                bool hy = TryNum(GetCell(data, r, nf, yC), out y);
+                if (!hx && !hy) continue;
+                double[] a;
+                if (!acc.TryGetValue(nm, out a)) { a = new double[3]; acc[nm] = a; }
+                if (hx) a[0] += x;
+                if (hy) a[1] += y;
+                a[2] += 1;
+            }
+            if (acc.Count == 0) return false;
+            foreach (var kv in acc)
+            {
+                double c = kv.Value[2] > 0 ? kv.Value[2] : 1;
+                CoordMap[kv.Key] = new double[] { kv.Value[0] / c, kv.Value[1] / c };
+            }
+            return CoordMap.Count > 0;
+        }
+
+        private static string GetCell(string[] data, int r, int nf, int c)
+        {
+            int idx = r * nf + c;
+            if (idx < 0 || idx >= data.Length) return "";
+            return data[idx] ?? "";
+        }
+
+        private static int FindNameCol(string[] fields, bool requireMatch)
         {
             int best = -1, bestScore = 0;
-            for (int i = 0; i < FieldKeys.Length; i++)
+            for (int i = 0; i < fields.Length; i++)
             {
-                string fl = (FieldKeys[i] ?? "").ToLowerInvariant().Replace(" ", "");
+                string fl = (fields[i] ?? "").ToLowerInvariant().Replace(" ", "");
                 int score = 0;
                 if (fl == "uniquename") score = 100;
                 else if (fl.Contains("strip") && fl.Contains("name")) score = 90;
@@ -134,16 +223,17 @@ namespace Etabs_Ultimate_Tools
                          && !fl.Contains("story") && !fl.Contains("layer") && !fl.Contains("section")) score = 40;
                 if (score > bestScore) { bestScore = score; best = i; }
             }
-            if (best >= 0) return best;
-            return FieldKeys.Length > 0 ? 0 : -1;
+            if (best >= 0 && bestScore > 0) return best;
+            if (requireMatch) return -1;
+            return fields.Length > 0 ? 0 : -1;
         }
 
-        private int FindCoordCol(string axis)
+        private static int FindCoordCol(string[] fields, string axis)
         {
             int best = -1, bestScore = 0;
-            for (int i = 0; i < FieldKeys.Length; i++)
+            for (int i = 0; i < fields.Length; i++)
             {
-                string fl = (FieldKeys[i] ?? "").ToLowerInvariant().Replace(" ", "");
+                string fl = (fields[i] ?? "").ToLowerInvariant().Replace(" ", "");
                 int score = 0;
                 if (fl == "global" + axis) score = 100;
                 else if (fl.Contains("global") && fl.Contains(axis)) score = 90;
@@ -202,11 +292,22 @@ namespace Etabs_Ultimate_Tools
             foreach (var k in order)
             {
                 var it = map[k];
-                if (it.RecordCount > 0) { it.X /= it.RecordCount; it.Y /= it.RecordCount; }
+                if ((xCol >= 0 || yCol >= 0) && it.RecordCount > 0) { it.X /= it.RecordCount; it.Y /= it.RecordCount; }
                 items.Add(it);
             }
 
             bool hasCoord = xCol >= 0 && yCol >= 0;
+            if (!hasCoord && CoordMap != null && CoordMap.Count > 0)
+            {
+                int matched = 0;
+                foreach (var it in items)
+                {
+                    double[] c;
+                    if (CoordMap.TryGetValue(it.OldName, out c)) { it.X = c[0]; it.Y = c[1]; matched++; }
+                }
+                if (matched > 0) hasCoord = true;
+            }
+
             var sorted = SortItems(items, mode, tol, hasCoord);
 
             int idx = startNo;

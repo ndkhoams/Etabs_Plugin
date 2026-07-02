@@ -38,8 +38,8 @@ namespace Etabs_Ultimate_Tools
             root.Controls.Add(MakeSubtitle("Đổi tên strip trong 1 Group theo prefix + số thứ tự, sắp xếp theo vị trí"), 0, 1);
             root.Controls.Add(MakeNote(
                 "ETABS API không lấy được strip đang chọn → hãy chọn các strip trong ETABS rồi gán vào 1 Group " +
-                "(Assign › Assign to Group), nhập tên Group vào đây. Bấm 'Liệt kê bảng' để xem đúng tên bảng strip " +
-                "trong model. Nên chạy thử trên FILE COPY vì đổi tên strip qua database có thể sinh strip trùng."), 0, 2);
+                "(Assign › Assign to Group), nhập tên Group vào đây. Bấm 'Liệt kê bảng' để xem đúng tên bảng. " +
+                "Toạ độ để sắp xếp được tự động lấy từ bảng hình học strip. Nên chạy thử trên FILE COPY."), 0, 2);
 
             // ----- Hàng tuỳ chọn -----
             var opt = new FlowLayoutPanel
@@ -131,7 +131,7 @@ namespace Etabs_Ultimate_Tools
                         sb.AppendLine("[" + t.ImportType + "]  " + t.Key
                             + (string.IsNullOrEmpty(t.Name) || t.Name == t.Key ? "" : "   (" + t.Name + ")"));
                     sb.AppendLine();
-                    sb.AppendLine("Chọn đúng key trong ô 'Bảng strip' rồi bấm 'Đọc bảng'.");
+                    sb.AppendLine("Chọn bảng cho phép sửa (importType > 0) trong ô 'Bảng strip' rồi bấm 'Đọc bảng'.");
                     Info(sb.ToString(), "Danh sách bảng strip");
                     lblStripInfo.Text = "Tìm thấy " + strips.Count + " bảng chứa 'strip'. Đã nạp vào ô 'Bảng strip'.";
                 }
@@ -174,6 +174,15 @@ namespace Etabs_Ultimate_Tools
                     lblStripInfo.Text = "Đọc được 0 dòng cho group '" + group + "'. Kiểm tra lại tên bảng / tên group.";
                     return;
                 }
+
+                // Nếu bảng rên tên không có toạ độ → tự tìm bảng toạ độ để sắp theo vị trí.
+                bool mainHasCoord = _stripRenamer.XCol >= 0 && _stripRenamer.YCol >= 0;
+                if (!mainHasCoord)
+                {
+                    try { _stripRenamer.LoadCoordinatesFromStripTables(_sap, group, tableKey); }
+                    catch { }
+                }
+
                 StripPreview();
             }
             catch (Exception ex)
@@ -251,9 +260,18 @@ namespace Etabs_Ultimate_Tools
                     });
                 dgvStrip.DataSource = null;
                 dgvStrip.DataSource = rows;
-                bool hasCoord = xCol >= 0 && yCol >= 0;
-                lblStripInfo.Text = "Tìm thấy " + _stripPlan.Count + " strip trong group '" + _stripRenamer.GroupName + "'."
-                    + (hasCoord ? "" : "  —  CHƯA chọn cột toạ độ X/Y nên sắp xếp theo tên (không theo vị trí).");
+
+                bool mainCoord = xCol >= 0 && yCol >= 0;
+                bool mapCoord = _stripRenamer.CoordMap != null && _stripRenamer.CoordMap.Count > 0;
+                string info = "Tìm thấy " + _stripPlan.Count + " strip trong group '" + _stripRenamer.GroupName + "'.";
+                if (mainCoord)
+                    info += "  Sắp theo vị trí (toạ độ từ cột X/Y trong bảng).";
+                else if (mapCoord)
+                    info += "  Sắp theo vị trí (toạ độ tự lấy từ bảng '" + _stripRenamer.CoordSource + "').";
+                else
+                    info += "  CHƯA có toạ độ → sắp theo tên. Chọn cột X/Y hoặc kiểm tra bảng hình học strip.";
+                lblStripInfo.Text = info;
+
                 btnStripApply.Enabled = _stripPlan.Count > 0;
             }
             catch (Exception ex) { Warn(ex.Message, "Đổi tên Strip"); }
