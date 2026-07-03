@@ -10,24 +10,21 @@ namespace Etabs_Ultimate_Tools
     /// <summary>
     /// Đọc / đổi tên design strip thông qua Interactive Database Tables của ETABS.
     ///
-    /// Lưu ý quan trọng: ETABS OAPI KHÔNG cho phép lấy "strip đang chọn" trực tiếp
-    /// (SelectObj.GetSelected chỉ trả về Point/Frame/Cable/Tendon/Area/Solid/Link, không có
-    /// design strip; cGroup.GetAssignments cũng dùng bộ loại đó). Vì vậy ta lọc theo Group
-    /// ngay trong bảng database (tham số GroupName).
+    /// Lọc theo Group: bảng overwrites nhiều khi KHÔNG lọc được design strip theo tham số
+    /// GroupName (trả về tất cả). Vì vậy ta lấy danh sách thành viên của Group qua
+    /// cGroup.GetAssignments rồi chỉ giữ các strip có tên nằm trong Group.
     ///
-    /// Toạ độ strip: bảng đổi tên (ví dụ overwrites) thường không có toạ độ, nên
-    /// ta tự quét các bảng strip khác. Nếu bảng có sẵn cột X/Y thì dùng luôn; nếu chỉ có
-    /// nhãn điểm (ví dụ "Strip Object Connectivity") thì gọi PointObj.GetCoordCartesian cho
-    /// từng điểm để lấy toạ độ, rồi tính tâm mỗi strip.
+    /// Toạ độ strip: nếu bảng có sẵn cột X/Y thì dùng luôn; nếu chỉ có nhãn điểm
+    /// (ví dụ "Strip Object Connectivity") thì gọi PointObj.GetCoordCartesian cho từng điểm.
     /// </summary>
     internal class StripRenamer
     {
         public enum SortMode
         {
-            RowLtoR_TtoB = 0,   // Hàng ngang: Trái→Phải, Trên→Dưới
-            RowRtoL_BtoT = 1,   // Hàng ngang ngược: Phải→Trái, Dưới→Trên
-            ColTtoB_LtoR = 2,   // Cột dọc: Trên→Dưới, Trái→Phải
-            ColBtoT_RtoL = 3    // Cột dọc ngược: Dưới→Trên, Phải→Trái
+            RowLtoR_TtoB = 0,
+            RowRtoL_BtoT = 1,
+            ColTtoB_LtoR = 2,
+            ColBtoT_RtoL = 3
         }
 
         public class StripItem
@@ -61,8 +58,11 @@ namespace Etabs_Ultimate_Tools
         // Toạ độ lấy từ bảng khác (name -> {x, y}).
         public Dictionary<string, double[]> CoordMap = new Dictionary<string, double[]>(StringComparer.Ordinal);
         public string CoordSource = "";
-        // Chẩn đoán: liệt kê các bảng đã quét và cột của chúng (để cấu hình khi dò trượt).
         public string CoordDiag = "";
+
+        // Lọc theo Group: tên strip thuộc Group (nếu lấy được) và số strip khớp.
+        public HashSet<string> GroupStripNames = null;
+        public int GroupFilterCount = -1;
 
         /// <summary>Liệt kê toàn bộ bảng trong database của model (kèm importType).</summary>
         public static List<TableInfo> FindAllTables(cSapModel sap)
@@ -86,7 +86,7 @@ namespace Etabs_Ultimate_Tools
             return list;
         }
 
-        /// <summary>Các bảng có chữ "strip" trong key/tên (để gợi ý cho người dùng).</summary>
+        /// <summary>Các bảng có chữ "strip" trong key/tên.</summary>
         public static List<TableInfo> FindStripTables(cSapModel sap)
         {
             var list = new List<TableInfo>();
@@ -99,11 +99,37 @@ namespace Etabs_Ultimate_Tools
             return list;
         }
 
-        /// <summary>Đọc bảng để chỉnh sửa, lọc theo group.</summary>
+        /// <summary>Danh sách tên Group trong model.</summary>
+        public static List<string> GetGroupNames(cSapModel sap)
+        {
+            var list = new List<string>();
+            int n = 0;
+            string[] names = null;
+            try { sap.GroupDef.GetNameList(ref n, ref names); }
+            catch { }
+            if (names != null) foreach (var s in names) if (s != null) list.Add(s);
+            return list;
+        }
+
+        /// <summary>Thành phần được gán vào Group (loại đối tượng + tên).</summary>
+        public static void GetGroupAssignments(cSapModel sap, string group, out int[] types, out string[] names)
+        {
+            int n = 0;
+            int[] t = null;
+            string[] nm = null;
+            try { sap.GroupDef.GetAssignments(group, ref n, ref t, ref nm); }
+            catch { }
+            types = t ?? new int[0];
+            names = nm ?? new string[0];
+        }
+
+        /// <summary>Đọc bảng để chỉnh sửa, lọc theo group (qua tham số GroupName của ETABS).</summary>
         public void ReadGroup(cSapModel sap, string tableKey, string groupName)
         {
             TableKey = tableKey;
             GroupName = groupName ?? "";
+            GroupStripNames = null;
+            GroupFilterCount = -1;
             int tableVersion = 0;
             string[] fieldKeys = null;
             int numRecords = 0;
@@ -127,9 +153,38 @@ namespace Etabs_Ultimate_Tools
         }
 
         /// <summary>
-        /// Quét các bảng strip khác để lấy toạ độ tâm mỗi strip. Đọc TOÀN BỘ bảng (không lọc
-        /// group) rồi ghép theo tên strip. Ưu tiên cột X/Y có sẵn; nếu không có thì dùng nhãn
-        /// điểm + PointObj.GetCoordCartesian. Trả về true nếu lấy được toạ độ.
+        /// Lấy danh sách strip thuộc Group qua GetAssignments, chỉ giữ strip có tên khớp.
+        /// Trả về: số strip trong bảng khớp Group (>0 = đã lọc); 0 = Group có phần tử nhưng
+        /// không khớp strip nào; -1 = không lấy được thành viên Group.
+        /// </summary>
+        public int ApplyGroupNameFilter(cSapModel sap, string group)
+        {
+            GroupStripNames = null;
+            GroupFilterCount = -1;
+            if (NameCol < 0 || string.IsNullOrWhiteSpace(group)) return -1;
+            int[] types; string[] names;
+            GetGroupAssignments(sap, group, out types, out names);
+            if (names == null || names.Length == 0) return -1;
+
+            var set = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var s in names) if (!string.IsNullOrWhiteSpace(s)) set.Add(s.Trim());
+
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            int match = 0;
+            for (int r = 0; r < NumberRecords; r++)
+            {
+                string nm = Cell(r, NameCol);
+                if (string.IsNullOrWhiteSpace(nm)) continue;
+                if (!seen.Add(nm)) continue;
+                if (set.Contains(nm)) match++;
+            }
+            if (match > 0) { GroupStripNames = set; GroupFilterCount = match; return match; }
+            return 0;
+        }
+
+        /// <summary>
+        /// Quét các bảng strip khác để lấy toạ độ tâm mỗi strip. Đọc TOÀN BỘ bảng rồi ghép
+        /// theo tên. Ưu tiên cột X/Y; không có thì dùng nhãn điểm + GetCoordCartesian.
         /// </summary>
         public bool LoadCoordinatesFromStripTables(cSapModel sap, string groupName, string excludeTableKey)
         {
@@ -188,7 +243,6 @@ namespace Etabs_Ultimate_Tools
             return score;
         }
 
-        /// <summary>Đọc bảng ở chế độ hiển thị (chạy được cả với bảng chỉ-xem).</summary>
         private static bool ReadDisplay(cSapModel sap, string tableKey, string groupName,
             out string[] fields, out string[] data, out int nf)
         {
@@ -208,7 +262,6 @@ namespace Etabs_Ultimate_Tools
             return nf > 0;
         }
 
-        /// <summary>Nếu bảng có sẵn cột toạ độ X/Y thì gom trung bình theo tên strip.</summary>
         private bool TryFillFromXY(string[] fields, string[] data, int nf)
         {
             int nameC = FindNameCol(fields, true);
@@ -235,10 +288,6 @@ namespace Etabs_Ultimate_Tools
             return Finalize(acc);
         }
 
-        /// <summary>
-        /// Nếu bảng chỉ có nhãn điểm (không có cột X/Y) thì lấy toạ độ từng điểm qua
-        /// PointObj.GetCoordCartesian rồi tính tâm mỗi strip.
-        /// </summary>
         private bool TryFillFromPoints(cSapModel sap, string[] fields, string[] data, int nf)
         {
             int nameC = FindNameCol(fields, true);
@@ -247,7 +296,7 @@ namespace Etabs_Ultimate_Tools
             if (pointCols.Count == 0) return false;
 
             var acc = new Dictionary<string, double[]>(StringComparer.Ordinal);
-            var cache = new Dictionary<string, double[]>(StringComparer.Ordinal); // point label -> {x,y} hoặc null
+            var cache = new Dictionary<string, double[]>(StringComparer.Ordinal);
             int rows = data.Length / nf;
             for (int r = 0; r < rows; r++)
             {
@@ -288,7 +337,6 @@ namespace Etabs_Ultimate_Tools
             return CoordMap.Count > 0;
         }
 
-        /// <summary>Các cột chứa nhãn điểm/joint (loại trừ cột tên strip và cột đếm số điểm).</summary>
         private static List<int> FindPointCols(string[] fields, int excludeCol)
         {
             var cols = new List<int>();
@@ -363,7 +411,7 @@ namespace Etabs_Ultimate_Tools
             return double.TryParse(s.Replace(",", "."), NumberStyles.Any, CultureInfo.InvariantCulture, out v);
         }
 
-        /// <summary>Gom record theo tên strip, sắp xếp theo vị trí, gán tên mới.</summary>
+        /// <summary>Gom record theo tên strip (lọc theo Group nếu có), sắp theo vị trí, gán tên mới.</summary>
         public List<StripItem> BuildPlan(int nameCol, int xCol, int yCol,
             string prefix, int startNo, int pad, SortMode mode, double tol)
         {
@@ -376,6 +424,7 @@ namespace Etabs_Ultimate_Tools
             {
                 string oldName = Cell(r, nameCol);
                 if (string.IsNullOrWhiteSpace(oldName)) continue;
+                if (GroupStripNames != null && GroupStripNames.Count > 0 && !GroupStripNames.Contains(oldName)) continue;
                 StripItem it;
                 if (!map.TryGetValue(oldName, out it))
                 {
@@ -450,7 +499,6 @@ namespace Etabs_Ultimate_Tools
             foreach (var it in plan)
                 if (!string.IsNullOrWhiteSpace(it.NewName)) rename[it.OldName] = it.NewName;
 
-            // kiểm tra trùng tên mới
             var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             foreach (var kv in rename)
                 if (!seen.Add(kv.Value))

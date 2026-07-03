@@ -13,7 +13,7 @@ namespace Etabs_Ultimate_Tools
     {
         private TextBox txtStripGroup, txtStripPrefix, txtStripStart, txtStripPad, txtStripTol;
         private ComboBox cboStripTable, cboStripNameCol, cboStripXCol, cboStripYCol, cboStripSort;
-        private Button btnStripList, btnStripRead, btnStripPreview, btnStripApply;
+        private Button btnStripList, btnStripCheck, btnStripRead, btnStripPreview, btnStripApply;
         private DataGridView dgvStrip;
         private Label lblStripInfo;
         private readonly StripRenamer _stripRenamer = new StripRenamer();
@@ -37,9 +37,9 @@ namespace Etabs_Ultimate_Tools
             root.Controls.Add(MakeTitle("ĐỔI TÊN UNIQUE NAME CỦA DESIGN STRIP"), 0, 0);
             root.Controls.Add(MakeSubtitle("Đổi tên strip trong 1 Group theo prefix + số thứ tự, sắp xếp theo vị trí"), 0, 1);
             root.Controls.Add(MakeNote(
-                "ETABS API không lấy được strip đang chọn → hãy chọn các strip trong ETABS rồi gán vào 1 Group " +
-                "(Assign › Assign to Group), nhập tên Group vào đây. Bấm 'Liệt kê bảng' để xem đúng tên bảng. " +
-                "Toạ độ để sắp xếp được tự động lấy từ bảng hình học strip. Nên chạy thử trên FILE COPY."), 0, 2);
+                "Chọn các strip trong ETABS rồi gán vào 1 Group (Assign › Assign to Group), nhập tên Group vào đây. " +
+                "Bấm 'Kiểm tra Group' để xem đúng tên Group và số strip trong Group; 'Liệt kê bảng' để xem tên bảng. " +
+                "Toạ độ sắp xếp được tự động lấy từ bảng hình học strip. Nên chạy thử trên FILE COPY."), 0, 2);
 
             // ----- Hàng tuỳ chọn -----
             var opt = new FlowLayoutPanel
@@ -87,6 +87,7 @@ namespace Etabs_Ultimate_Tools
             cboStripYCol = MakeCombo(120); mapPanel.Controls.Add(cboStripYCol);
 
             btnStripList = MakeButton("Liệt kê bảng"); btnStripList.Click += (s, e) => StripListTables(); mapPanel.Controls.Add(btnStripList);
+            btnStripCheck = MakeButton("Kiểm tra Group"); btnStripCheck.Click += (s, e) => StripCheckGroup(); mapPanel.Controls.Add(btnStripCheck);
             btnStripRead = MakeButton("Đọc bảng"); btnStripRead.Click += (s, e) => StripReadTable(); mapPanel.Controls.Add(btnStripRead);
             btnStripPreview = MakeButton("Xem trước"); btnStripPreview.Click += (s, e) => StripPreview(); mapPanel.Controls.Add(btnStripPreview);
             btnStripApply = MakeButton("Áp dụng đổi tên"); btnStripApply.Enabled = false; btnStripApply.Click += (s, e) => StripApply(); mapPanel.Controls.Add(btnStripApply);
@@ -108,6 +109,63 @@ namespace Etabs_Ultimate_Tools
                 TextAlign = ContentAlignment.MiddleLeft, AutoSize = false
             };
             root.Controls.Add(lblStripInfo, 0, 6);
+        }
+
+        /// <summary>Kiểm tra Group: liệt kê tên Group và thành phần được gán vào Group đang nhập.</summary>
+        private void StripCheckGroup()
+        {
+            try
+            {
+                string group = (txtStripGroup.Text ?? "").Trim();
+                var sb = new StringBuilder();
+                var groups = StripRenamer.GetGroupNames(_sap);
+                sb.AppendLine("Các Group trong model (" + groups.Count + "):");
+                foreach (var g in groups) sb.AppendLine("   • " + g);
+                sb.AppendLine();
+
+                if (string.IsNullOrWhiteSpace(group))
+                {
+                    sb.AppendLine("Chưa nhập tên Group để kiểm tra chi tiết.");
+                    Info(sb.ToString(), "Kiểm tra Group");
+                    return;
+                }
+
+                bool exists = groups.Any(g => string.Equals(g, group, StringComparison.OrdinalIgnoreCase));
+                sb.AppendLine("Group đang nhập: '" + group + "' → " +
+                    (exists ? "CÓ trong model." : "KHÔNG khớp tên nào ở trên (sai tên = ETABS xuất TẤT CẢ strip)."));
+
+                int[] types; string[] names;
+                StripRenamer.GetGroupAssignments(_sap, group, out types, out names);
+                int cnt = names == null ? 0 : names.Length;
+                sb.AppendLine("Số phần tử gán vào Group: " + cnt);
+                if (types != null && types.Length > 0)
+                {
+                    var byType = new Dictionary<int, int>();
+                    for (int i = 0; i < types.Length; i++)
+                    {
+                        int k = types[i];
+                        byType[k] = byType.ContainsKey(k) ? byType[k] + 1 : 1;
+                    }
+                    sb.AppendLine("   (mã loại: 1=Point 2=Frame 3=Cable 4=Tendon 5=Area 6=Solid 7=Link)");
+                    sb.Append("   Theo loại: ");
+                    foreach (var kv in byType) sb.Append(kv.Key + "×" + kv.Value + "   ");
+                    sb.AppendLine();
+                }
+                if (names != null && names.Length > 0)
+                {
+                    sb.Append("   Vài tên đầu: ");
+                    for (int i = 0; i < Math.Min(12, names.Length); i++) sb.Append(names[i] + "  ");
+                    sb.AppendLine();
+                }
+                sb.AppendLine();
+                sb.AppendLine("Nếu 'Số phần tử' = 0 nhưng bạn đã gán strip vào Group, có thể phiên bản ETABS " +
+                    "không liệt kê design strip qua API — gửi ảnh này để mình tìm cách lọc khác.");
+                Info(sb.ToString(), "Kiểm tra Group");
+                lblStripInfo.Text = exists
+                    ? "Group hợp lệ (" + cnt + " phần tử). Xem hộp thoại để rõ chi tiết."
+                    : "Tên Group không khớp — xem danh sách trong hộp thoại.";
+            }
+            catch (Exception ex) { Warn("Không kiểm tra được Group: " + ex.Message, "Đổi tên Strip"); }
         }
 
         /// <summary>Liệt kê các bảng có thật trong model để người dùng chọn đúng key.</summary>
@@ -173,6 +231,17 @@ namespace Etabs_Ultimate_Tools
                     btnStripApply.Enabled = false;
                     lblStripInfo.Text = "Đọc được 0 dòng cho group '" + group + "'. Kiểm tra lại tên bảng / tên group.";
                     return;
+                }
+
+                // Lọc đúng theo Group bằng danh sách thành viên (GetAssignments) khi bảng không tự lọc.
+                int gmatch = -1;
+                try { gmatch = _stripRenamer.ApplyGroupNameFilter(_sap, group); }
+                catch { }
+                if (gmatch == 0)
+                {
+                    Info("Group '" + group + "' có phần tử nhưng KHÔNG khớp tên strip nào trong bảng — " +
+                        "có thể Group chứa đối tượng khác (area/point) chứ không phải design strip. " +
+                        "Bấm 'Kiểm tra Group' để xem chi tiết.", "Đổi tên Strip");
                 }
 
                 // Nếu bảng đổi tên không có toạ độ → tự tìm bảng toạ độ để sắp theo vị trí.
@@ -269,15 +338,20 @@ namespace Etabs_Ultimate_Tools
                 dgvStrip.DataSource = null;
                 dgvStrip.DataSource = rows;
 
+                bool grouped = _stripRenamer.GroupStripNames != null && _stripRenamer.GroupStripNames.Count > 0;
                 bool mainCoord = xCol >= 0 && yCol >= 0;
                 bool mapCoord = _stripRenamer.CoordMap != null && _stripRenamer.CoordMap.Count > 0;
-                string info = "Tìm thấy " + _stripPlan.Count + " strip trong group '" + _stripRenamer.GroupName + "'.";
+
+                string info = grouped
+                    ? ("Đã lọc theo Group '" + _stripRenamer.GroupName + "': " + _stripPlan.Count + " strip.")
+                    : (_stripPlan.Count + " strip (bảng trả về — nếu nhiều hơn strip thực trong Group, bấm 'Kiểm tra Group').");
+
                 if (mainCoord)
-                    info += "  Sắp theo vị trí (toạ độ từ cột X/Y trong bảng).";
+                    info += "  Sắp theo vị trí (toạ độ từ cột X/Y).";
                 else if (mapCoord)
-                    info += "  Sắp theo vị trí (toạ độ tự lấy từ '" + _stripRenamer.CoordSource + "').";
+                    info += "  Sắp theo vị trí (toạ độ từ '" + _stripRenamer.CoordSource + "').";
                 else
-                    info += "  CHƯA có toạ độ → sắp theo tên. Chọn cột X/Y hoặc kiểm tra bảng hình học strip.";
+                    info += "  CHƯA có toạ độ → sắp theo tên.";
                 lblStripInfo.Text = info;
 
                 btnStripApply.Enabled = _stripPlan.Count > 0;
