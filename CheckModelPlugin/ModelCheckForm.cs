@@ -98,7 +98,7 @@ namespace Etabs_Ultimate_Tools
             var tabAxial = new TabPage("Axial Force");
             var tabColExport = new TabPage("Column Force Exporter");
             var tabPileH = new TabPage("Pile Reactions");
-            var tabStrip = new TabPage("Đổi tên Strip");
+           
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
@@ -108,7 +108,7 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
             tabs.TabPages.Add(tabPileH);
-            tabs.TabPages.Add(tabStrip);
+            
 
             BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
@@ -118,7 +118,7 @@ namespace Etabs_Ultimate_Tools
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
             BuildPileHTab(tabPileH);
-            BuildStripRenameTab(tabStrip);
+            
         }
 
         // ---------- Hộp thoại dùng chung ----------
