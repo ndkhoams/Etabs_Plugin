@@ -1,8 +1,0 @@
-# Visual Studio local/cache files
-.vs/
-*.user
-*.suo
-
-# Build output
-[Bb]in/
-[Oo]bj/
