@@ -57,11 +57,13 @@ namespace Etabs_Ultimate_Tools
     public static class PileReactionChecker
     {
         private const double SctFactor = 0.01; // SCT tạm = Kz (kN/m) * 0.01 (m)
+        public static string LastHorizontalReadDiagnostic { get; private set; } = "";
 
         private class PilePoint
         {
             public string Name = "";
             public string Label = "";
+            public string SpringName = "";
             public double Kz = 0.0;   // độ cứng lò xo phương đứng (U3)
         }
 
@@ -85,8 +87,15 @@ namespace Etabs_Ultimate_Tools
         {
             int n = 0;
             string[] names = null;
-            try { sap.PropPointSpring.GetNameList(ref n, ref names); }
-            catch { return new List<string>(); }
+            int ret;
+            try { ret = sap.PropPointSpring.GetNameList(ref n, ref names); }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Không đọc được danh sách point spring: " + ex.Message, ex);
+            }
+
+            if (ret != 0 || n < 0 || (n > 0 && (names == null || names.Length < n)))
+                throw new InvalidOperationException("PropPointSpring.GetNameList thất bại (return code " + ret + ").");
 
             if (names == null) return new List<string>();
             return names.Where(s => !string.IsNullOrWhiteSpace(s))
@@ -100,12 +109,11 @@ namespace Etabs_Ultimate_Tools
         public static List<PileTypeInfo> GetPileTypeInfos(cSapModel sap)
         {
             var piles = GetPilePoints(sap);
-            var defined = GetSpringTypes(sap);
 
             var maxKz = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
             foreach (var p in piles)
             {
-                string key = ResolveType(p, defined);
+                string key = ResolveType(p);
                 double cur;
                 if (!maxKz.TryGetValue(key, out cur) || p.Kz > cur) maxKz[key] = p.Kz;
             }
@@ -131,12 +139,13 @@ namespace Etabs_Ultimate_Tools
             sap.SetPresentUnits(eUnits.kN_m_C);
 
             // Bật chế độ bao (Envelopes): tổ hợp bao trả về CẢ Max và Min cho mỗi điểm.
-            try { sap.Results.Setup.SetOptionMultiValuedCombo(1); } catch { }
+            int optionRet = sap.Results.Setup.SetOptionMultiValuedCombo(1);
+            if (optionRet != 0)
+                throw new InvalidOperationException("Không bật được chế độ bao Max/Min cho tổ hợp '" + combo + "'.");
 
             var piles = GetPilePoints(sap);
             if (piles.Count == 0) return null;
 
-            var defined = GetSpringTypes(sap);
             EtabsHelper.SelectCaseOrCombo(sap, combo);
 
             var rows = new List<PileReactionRow>();
@@ -144,10 +153,10 @@ namespace Etabs_Ultimate_Tools
             {
                 double pmax, pmin;
                 bool multi;
-                if (!TryGetReactionRange(sap, pile.Name, out pmax, out pmin, out multi))
+                if (!TryGetReactionRange(sap, pile.Name, combo, out pmax, out pmin, out multi))
                     continue;
 
-                string type = ResolveType(pile, defined);
+                string type = ResolveType(pile);
                 double tensCap = 0, compCap = 0;
                 if (caps != null)
                 {
@@ -189,26 +198,24 @@ namespace Etabs_Ultimate_Tools
             if (string.IsNullOrWhiteSpace(combo)) return null;
 
             sap.SetPresentUnits(eUnits.kN_m_C);
-            // 0 = trả về từng step (không bao) để lấy được cặp FX-FY tương quan cùng 1 bước.
-            try { sap.Results.Setup.SetOptionMultiValuedCombo(0); } catch { }
+            EtabsHelper.SelectCaseOrCombo(sap, combo);
+            bool correlateFxFy = TrySetStepByStep(sap, combo);
 
             var piles = GetPilePoints(sap);
             if (piles.Count == 0) return null;
-
-            var defined = GetSpringTypes(sap);
-            EtabsHelper.SelectCaseOrCombo(sap, combo);
 
             var rows = new List<PileReactionRow>();
             foreach (var pile in piles)
             {
                 double pmax, pmin, fxAbs, fyAbs;
                 bool multi;
-                if (!TryGetReactionRangeH(sap, pile.Name, out pmax, out pmin, out fxAbs, out fyAbs, out multi))
+                if (!TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
+                    out pmax, out pmin, out fxAbs, out fyAbs, out multi))
                     continue;
 
                 double h = Math.Sqrt(fxAbs * fxAbs + fyAbs * fyAbs);
 
-                string type = ResolveType(pile, defined);
+                string type = ResolveType(pile);
                 double tensCap = 0, compCap = 0, horizCap = 0;
                 if (caps != null)
                 {
@@ -263,7 +270,7 @@ namespace Etabs_Ultimate_Tools
         // Cọc chỉ chịu nén/kéo -> 1 dòng; vừa nén vừa kéo -> 2 dòng (_max/_min).
         public static PileReactionCase ComputeCaseHMulti(cSapModel sap, List<string> combos,
             string title, string sheet, Dictionary<string, PileSpringType> caps,
-            bool considerTension, bool considerCompression)
+            bool considerTension, bool considerCompression, bool considerH)
         {
             if (combos == null) return null;
             var valid = combos.Where(c => !string.IsNullOrWhiteSpace(c))
@@ -273,13 +280,12 @@ namespace Etabs_Ultimate_Tools
             if (valid.Count == 0) return null;
 
             sap.SetPresentUnits(eUnits.kN_m_C);
-            // 0 = trả về từng step để lấy cặp FX-FY tương quan cùng 1 bước.
-            try { sap.Results.Setup.SetOptionMultiValuedCombo(0); } catch { }
+            EtabsHelper.SelectCaseOrCombo(sap, valid[0]);
+            bool correlateFxFy = considerH && TrySetStepByStep(sap, string.Join(", ", valid));
+            if (!considerH) LastHorizontalReadDiagnostic = "";
 
             var piles = GetPilePoints(sap);
             if (piles.Count == 0) return null;
-            var defined = GetSpringTypes(sap);
-
             var agg = new Dictionary<string, PileAgg>(StringComparer.Ordinal);
             foreach (var pile in piles)
                 if (!agg.ContainsKey(pile.Name)) agg[pile.Name] = new PileAgg { Pile = pile };
@@ -290,8 +296,14 @@ namespace Etabs_Ultimate_Tools
                 foreach (var pile in piles)
                 {
                     double pmax, pmin, fxAbs, fyAbs;
+                    fxAbs = 0.0;
+                    fyAbs = 0.0;
                     bool multi;
-                    if (!TryGetReactionRangeH(sap, pile.Name, out pmax, out pmin, out fxAbs, out fyAbs, out multi))
+                    bool hasReaction = considerH
+                        ? TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
+                            out pmax, out pmin, out fxAbs, out fyAbs, out multi)
+                        : TryGetReactionRange(sap, pile.Name, combo, out pmax, out pmin, out multi);
+                    if (!hasReaction)
                         continue;
 
                     var a = agg[pile.Name];
@@ -310,7 +322,7 @@ namespace Etabs_Ultimate_Tools
                 var a = agg[pile.Name];
                 if (!a.HasData) continue;
 
-                string type = ResolveType(pile, defined);
+                string type = ResolveType(pile);
                 double tensCap = 0, compCap = 0, horizCap = 0;
                 if (caps != null)
                 {
@@ -458,11 +470,10 @@ namespace Etabs_Ultimate_Tools
 
         // Loại cọc: nếu chỉ có 1 loại point spring khai báo -> dùng tên đó cho mọi cọc;
         // nếu chưa khai báo -> "Cọc"; nếu nhiều loại -> nhóm theo độ cứng đứng Kz.
-        private static string ResolveType(PilePoint p, List<string> defined)
+        private static string ResolveType(PilePoint p)
         {
-            if (defined != null && defined.Count == 1) return defined[0];
-            if (defined == null || defined.Count == 0) return "Cọc";
-            return "Kz=" + p.Kz.ToString("0", CultureInfo.InvariantCulture);
+            if (!string.IsNullOrWhiteSpace(p.SpringName)) return p.SpringName;
+            return "Kz=" + p.Kz.ToString("G", CultureInfo.InvariantCulture);
         }
 
         // ── Lấy danh sách điểm có gán point spring (= cọc) ─────────────────────
@@ -472,19 +483,38 @@ namespace Etabs_Ultimate_Tools
 
             int n = 0;
             string[] names = null;
+            int ret;
             try
             {
-                if (sap.PointObj.GetNameList(ref n, ref names) != 0 || names == null)
-                    return list;
+                ret = sap.PointObj.GetNameList(ref n, ref names);
             }
-            catch { return list; }
-
-            foreach (string pt in names)
+            catch (Exception ex)
             {
+                throw new InvalidOperationException("Không đọc được danh sách point object khi tìm cọc: " + ex.Message, ex);
+            }
+            if (ret != 0 || n < 0 || (n > 0 && (names == null || names.Length < n)))
+                throw new InvalidOperationException("PointObj.GetNameList thất bại khi tìm cọc (return code " + ret + ").");
+            if (names == null) return list;
+
+            for (int pointIndex = 0; pointIndex < n; pointIndex++)
+            {
+                string pt = names[pointIndex];
                 if (string.IsNullOrWhiteSpace(pt)) continue;
 
                 double kz;
                 if (!HasSpring(sap, pt, out kz)) continue;
+
+                string springName = "";
+                int assignmentRet;
+                try
+                {
+                    assignmentRet = sap.PointObj.GetSpringAssignment(pt, ref springName);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException("Không đọc được spring assignment tại point '" + pt + "': " + ex.Message, ex);
+                }
+                if (assignmentRet != 0) springName = "";
 
                 string label = pt, story = "";
                 try { sap.PointObj.GetLabelFromName(pt, ref label, ref story); }
@@ -494,6 +524,7 @@ namespace Etabs_Ultimate_Tools
                 {
                     Name = pt,
                     Label = string.IsNullOrWhiteSpace(label) ? pt : label.Trim(),
+                    SpringName = springName == null ? "" : springName.Trim(),
                     Kz = kz
                 });
             }
@@ -518,14 +549,17 @@ namespace Etabs_Ultimate_Tools
                 if (!any) return false;
 
                 kz = Math.Abs(k[2]);   // U3 (phương đứng)
-                return true;
+                return kz > 1e-9;
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("Không đọc được spring tại point '" + pointName + "': " + ex.Message, ex);
+            }
         }
 
         // ── Đọc phản lực F3 (phương đứng) của 1 điểm: max & min trên mọi step ────
         // multi = true nếu tổ hợp trả về > 1 giá trị (tổ hợp bao Max/Min).
-        private static bool TryGetReactionRange(cSapModel sap, string pointName,
+        private static bool TryGetReactionRange(cSapModel sap, string pointName, string combo,
             out double pmax, out double pmin, out bool multi)
         {
             pmax = double.MinValue;
@@ -546,9 +580,16 @@ namespace Etabs_Ultimate_Tools
                     ref num, ref obj, ref elm, ref lc, ref stepType, ref stepNum,
                     ref f1, ref f2, ref f3, ref m1, ref m2, ref m3);
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("JointReact lỗi tại point '" + pointName +
+                    "', tổ hợp '" + combo + "': " + ex.Message, ex);
+            }
 
-            if (ret != 0 || num == 0 || f3 == null || f3.Length == 0)
+            if (ret != 0)
+                throw new InvalidOperationException("JointReact thất bại tại point '" + pointName +
+                    "', tổ hợp '" + combo + "' (return code " + ret + ").");
+            if (num == 0 || f3 == null || f3.Length == 0)
                 return false;
 
             int count = Math.Min(num, f3.Length);
@@ -563,7 +604,8 @@ namespace Etabs_Ultimate_Tools
         }
 
         // ── Như TryGetReactionRange nhưng lấy thêm FX, FY tại step có H lớn nhất ──────────
-        private static bool TryGetReactionRangeH(cSapModel sap, string pointName,
+        private static bool TryGetReactionRangeH(cSapModel sap, string pointName, string combo,
+            bool correlateFxFy,
             out double pmax, out double pmin, out double fxAbs, out double fyAbs, out bool multi)
         {
             pmax = double.MinValue;
@@ -586,9 +628,16 @@ namespace Etabs_Ultimate_Tools
                     ref num, ref obj, ref elm, ref lc, ref stepType, ref stepNum,
                     ref f1, ref f2, ref f3, ref m1, ref m2, ref m3);
             }
-            catch { return false; }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException("JointReact lỗi tại point '" + pointName +
+                    "', tổ hợp '" + combo + "': " + ex.Message, ex);
+            }
 
-            if (ret != 0 || num == 0 || f3 == null || f3.Length == 0)
+            if (ret != 0)
+                throw new InvalidOperationException("JointReact thất bại tại point '" + pointName +
+                    "', tổ hợp '" + combo + "' (return code " + ret + ").");
+            if (num == 0 || f3 == null || f3.Length == 0)
                 return false;
 
             int count = Math.Min(num, f3.Length);
@@ -598,20 +647,50 @@ namespace Etabs_Ultimate_Tools
                 if (f3[i] > pmax) pmax = f3[i];
                 if (f3[i] < pmin) pmin = f3[i];
 
-                // Hợp lực ngang tại CHÍNH step này (FX, FY tương quan cùng 1 bước).
                 double fx = (f1 != null && i < f1.Length) ? f1[i] : 0.0;
                 double fy = (f2 != null && i < f2.Length) ? f2[i] : 0.0;
-                double hStep = Math.Sqrt(fx * fx + fy * fy);
-                if (hStep > maxH)
+                if (!correlateFxFy)
                 {
-                    maxH = hStep;
-                    fxAbs = Math.Abs(fx);
-                    fyAbs = Math.Abs(fy);
+                    fxAbs = Math.Max(fxAbs, Math.Abs(fx));
+                    fyAbs = Math.Max(fyAbs, Math.Abs(fy));
+                }
+                else
+                {
+                    double hStep = Math.Sqrt(fx * fx + fy * fy);
+                    if (hStep > maxH)
+                    {
+                        maxH = hStep;
+                        fxAbs = Math.Abs(fx);
+                        fyAbs = Math.Abs(fy);
+                    }
                 }
             }
 
             multi = count > 1;
             return pmax != double.MinValue && pmin != double.MaxValue;
+        }
+
+        private static bool TrySetStepByStep(cSapModel sap, string comboDescription)
+        {
+            try
+            {
+                int ret = sap.Results.Setup.SetOptionMultiValuedCombo(2);
+                if (ret == 0)
+                {
+                    LastHorizontalReadDiagnostic = "";
+                    return true;
+                }
+
+                LastHorizontalReadDiagnostic = "ETABS từ chối chế độ step-by-step (return code " + ret +
+                    ") cho " + comboDescription + "; H được tính bảo thủ từ max |FX| và max |FY| riêng biệt.";
+                return false;
+            }
+            catch (Exception ex)
+            {
+                LastHorizontalReadDiagnostic = "Không bật được step-by-step cho " + comboDescription +
+                    ": " + ex.Message + "; H được tính bảo thủ từ max |FX| và max |FY| riêng biệt.";
+                return false;
+            }
         }
 
         // So sánh "tự nhiên" để 2,10,100 sắp đúng thứ tự số.

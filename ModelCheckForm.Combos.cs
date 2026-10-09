@@ -20,10 +20,11 @@ namespace Etabs_Ultimate_Tools
                 cbo.Items.AddRange(combos.Cast<object>().ToArray());
             }
 
-            SelectByKeyword(cboCombo, "EQ-SRSS", "Vtot", "EQ", "DD", "DONGDAT", "RS", "SPEC", "E");
+            SelectByPrefix(cboCombo, "SRSS");
+            SelectByPrefix(cboAxialCombo, "ENV_EQ");
             SelectByKeyword(cboWindCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
             SelectByKeyword(cboWindDriftCombo, "ENV_SLS_W", "WX", "WY", "WINDX", "WINDY", "GIOX", "GIOY");
-            SelectByKeyword(cboSeisCombo, "EQ-SRSS", "Vtot", "DDX", "DDY", "DD", "DONGDAT", "RS", "SPEC", "E");
+            SelectByPrefix(cboSeisCombo, "SRSS");
 
             // Tab Pile Reactions: mỗi trường hợp tải là 1 CheckedListBox cho chọn NHIỀU tổ hợp.
             foreach (var clb in new[] { clbPileHVert, clbPileHWind, clbPileHEq })
@@ -38,8 +39,6 @@ namespace Etabs_Ultimate_Tools
             CheckUlsRange(clbPileHWind, 2, 13);
             CheckUlsRange(clbPileHEq, 14, 17);
             LoadPileHSpringTypes();
-
-            if (cboAxialCombo.Items.Count > 0 && cboAxialCombo.SelectedIndex < 0) cboAxialCombo.SelectedIndex = 0;
 
             if (clbColCombos != null)
             {
@@ -61,7 +60,22 @@ namespace Etabs_Ultimate_Tools
                 for (int i = 0; i < cbo.Items.Count; i++)
                     if (cbo.Items[i].ToString().IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0) { cbo.SelectedIndex = i; return; }
 
-            if (cbo.Items.Count > 0 && cbo.SelectedIndex < 0) cbo.SelectedIndex = 0;
+        }
+
+        private static void SelectByPrefix(ComboBox cbo, string prefix)
+        {
+            if (cbo == null) return;
+            cbo.SelectedIndex = -1;
+            for (int i = 0; i < cbo.Items.Count; i++)
+            {
+                string name = Convert.ToString(cbo.Items[i]);
+                if (!string.IsNullOrWhiteSpace(name) &&
+                    name.TrimStart().StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    cbo.SelectedIndex = i;
+                    return;
+                }
+            }
         }
 
         // Tích sẵn các tổ hợp có chứa từ khóa (không phân biệt hoa thường) trong CheckedListBox.

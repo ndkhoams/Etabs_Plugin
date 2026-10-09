@@ -515,8 +515,7 @@ namespace Etabs_Ultimate_Tools
             {
                 foreach (var info in infos)
                 {
-                    int idx = dgvPileHCaps.Rows.Add(info.Key, "", "", "", "", "", "", "", "", "");
-                    FillRowHDefaults(dgvPileHCaps.Rows[idx], info.DefaultCap);
+                    dgvPileHCaps.Rows.Add(info.Key, "", "", "", "", "", "", "", "", "");
                 }
             }
             else
@@ -556,34 +555,9 @@ namespace Etabs_Ultimate_Tools
                     row = dgvPileHCaps.Rows[idx];
                     rowByType[info.Key] = row;
                 }
-                FillRowHDefaults(row, info.DefaultCap);
             }
 
             AdjustPileHCapsHeight();
-        }
-
-        // Điền SCT tạm = Kz×0.01 vào các ô KÉO/NÉN còn trống; cột NGANG lấy tạm = 1/10 SCT nén.
-        private static void FillRowHDefaults(DataGridViewRow row, double defaultCap)
-        {
-            if (row == null || defaultCap <= 0) return;
-            string val = Math.Round(defaultCap, 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            int[] vertCols = { CapHTensVert, CapHCompVert, CapHTensWind, CapHCompWind, CapHTensEq, CapHCompEq };
-            foreach (int c in vertCols)
-            {
-                object cur = row.Cells[c].Value;
-                if (cur == null || string.IsNullOrWhiteSpace(cur.ToString()))
-                    row.Cells[c].Value = val;
-            }
-
-            // Lực ngang lấy tạm = 1/10 SCT nén; chỉ điền vào ô NGANG còn trống.
-            string horizVal = Math.Round(defaultCap / 10.0, 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
-            int[] horizCols = { CapHHorizVert, CapHHorizWind, CapHHorizEq };
-            foreach (int c in horizCols)
-            {
-                object cur = row.Cells[c].Value;
-                if (cur == null || string.IsNullOrWhiteSpace(cur.ToString()))
-                    row.Cells[c].Value = horizVal;
-            }
         }
 
         private Dictionary<string, PileSpringType> ReadPileHCaps(int tensCol, int compCol, int horizCol)
@@ -635,7 +609,7 @@ namespace Etabs_Ultimate_Tools
         {
             if (combos == null || combos.Count == 0) return;
             var c = PileReactionChecker.ComputeCaseHMulti(_sap, combos, title, sheet, caps,
-                ConsiderPileTension, ConsiderPileCompression);
+                ConsiderPileTension, ConsiderPileCompression, ConsiderPileH);
             if (c != null) cases.Add(c);
         }
 
@@ -693,6 +667,8 @@ namespace Etabs_Ultimate_Tools
                 || (considerH && !string.IsNullOrEmpty(p.HResult) && p.HResult.IndexOf("Không", StringComparison.OrdinalIgnoreCase) >= 0));
 
             lblPileHInfo.Text = "Số trường hợp: " + cases.Count + "  |  Tổng dòng: " + preview.Count + "  |  Không đạt: " + fail;
+            if (!string.IsNullOrWhiteSpace(PileReactionChecker.LastHorizontalReadDiagnostic))
+                lblPileHInfo.Text += "  |  " + PileReactionChecker.LastHorizontalReadDiagnostic;
 
             btnPileHExport.Enabled = preview.Count > 0;
 

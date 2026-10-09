@@ -23,7 +23,7 @@ namespace Etabs_Ultimate_Tools
             bar.Controls.Add(MakeFieldLabel("Tổ hợp:", 68));
             cboCombo = MakeCombo(240); bar.Controls.Add(cboCombo);
             bar.Controls.Add(MakeFieldLabel("q:", 22));
-            txtQ = MakeTextBox("1.5", 60); bar.Controls.Add(txtQ);
+            txtQ = MakeTextBox("3.12", 60); bar.Controls.Add(txtQ);
             bar.Controls.Add(MakeFieldLabel("Nguồn:", 56));
             cboPDeltaSource = MakeDisplacementSourceCombo(); bar.Controls.Add(cboPDeltaSource);
             bar.Controls.Add(MakeFieldLabel("Tính theo:", 70));

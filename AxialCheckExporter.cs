@@ -48,7 +48,7 @@ namespace Etabs_Ultimate_Tools
                 WriteConcreteBlock(ws, rows[0].FckCube);
                 WriteCoefficients(ws, alphaCc, gammaC);
                 WriteConditions(ws, colLimit, wallLimit);
-                WriteOverallResult(ws);
+                WriteOverallResult(ws, rows.Count);
                 WriteTableHeader(ws);
                 WriteData(ws, rows, colLimit, wallLimit);
                 ApplyTableStyle(ws, rows.Count);
@@ -139,14 +139,15 @@ namespace Etabs_Ultimate_Tools
         }
 
         // ── Kết luận tổng ────────────────────────────────────────────────────────
-        private static void WriteOverallResult(IXLWorksheet ws)
+        private static void WriteOverallResult(IXLWorksheet ws, int rowCount)
         {
             SetBoldUnderline(ws.Cell("A8"), "Kết luận:");
 
             var resultRange = ws.Range("C8:D8");
             resultRange.Merge();
+            int lastDataRow = FirstDataRow + rowCount - 1;
             resultRange.FirstCell().FormulaA1 =
-                "=IF(COUNTIF(M11:M2000,\"Không thỏa mãn\")>0,\"Không thỏa mãn\",\"Thỏa mãn\")";
+                $"=IF(COUNTIF(M{FirstDataRow}:M{lastDataRow},\"Không thỏa mãn\")>0,\"Không thỏa mãn\",\"Thỏa mãn\")";
             resultRange.Style.Font.Bold = true;
             resultRange.Style.Font.FontSize = 11;
             resultRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
@@ -203,8 +204,8 @@ namespace Etabs_Ultimate_Tools
                 ws.Cell(r, ColT3).Value = item.T3;
                 ws.Cell(r, ColT2).Value = item.T2;
 
-                // Các cột tính bằng công thức Excel để người dùng có thể chỉnh fcd sau
-                ws.Cell(r, ColAc).FormulaA1 = $"=G{r}*H{r}";
+                // Ac lấy từ tiết diện ETABS; sức kháng được tính lại theo fcd trong Excel.
+                ws.Cell(r, ColAc).Value = item.Ac;
                 ws.Cell(r, ColAcFcd).FormulaA1 = $"=I{r}*$C$7*1000";
                 ws.Cell(r, ColVd).FormulaA1 = $"=ABS(F{r}/J{r})";
                 ws.Cell(r, ColVdLimit).Value = item.VdLimit;

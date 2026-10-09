@@ -58,6 +58,8 @@ namespace Etabs_Ultimate_Tools
         private Label lblColInfo;
         private List<ForceRow> _colRows = new List<ForceRow>();
         private int _lastColIndex = -1;
+        private int _pendingColMouseIndex = -1;
+        private bool _settingColComboRange;
 
         // Property Modifiers (mỗi nhóm cấu kiện là 1 ModGroup tái sử dụng)
         private ModGroup _modBeam, _modCol, _modSlab, _modWall;

@@ -229,7 +229,7 @@ namespace Etabs_Ultimate_Tools
 
                 ApplyConcreteToSection(sec);
 
-                double ac = sec.T2 * sec.T3;
+                double ac = sec.Ac;
                 double acFcd = ac * sec.Fcd * 1000.0;
                 if (acFcd <= 0 || double.IsInfinity(acFcd)) continue;
 
@@ -388,7 +388,7 @@ namespace Etabs_Ultimate_Tools
 
             return new SectionInfo
             {
-                Ac = maxLength * thickness,
+                Ac = totalAc,
                 T3 = RoundDown2(thickness),
                 T2 = RoundDown2(maxLength),
                 Material = matProp

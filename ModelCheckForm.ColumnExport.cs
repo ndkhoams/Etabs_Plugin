@@ -59,6 +59,7 @@ namespace Etabs_Ultimate_Tools
                 BorderStyle = BorderStyle.FixedSingle
             };
             clbColCombos.MouseDown += ClbColCombos_MouseDown;
+            clbColCombos.ItemCheck += ClbColCombos_ItemCheck;
             left.Controls.Add(clbColCombos, 0, 1);
 
             var selBar = new FlowLayoutPanel
@@ -125,22 +126,33 @@ namespace Etabs_Ultimate_Tools
 
         private void ClbColCombos_MouseDown(object sender, MouseEventArgs e)
         {
-            int index = clbColCombos.IndexFromPoint(e.Location);
-            if (index < 0) return;
+            _pendingColMouseIndex = clbColCombos.IndexFromPoint(e.Location);
+        }
 
-            if ((Control.ModifierKeys & Keys.Shift) == Keys.Shift && _lastColIndex >= 0 && _lastColIndex != index)
+        private void ClbColCombos_ItemCheck(object sender, ItemCheckEventArgs e)
+        {
+            if (_settingColComboRange) return;
+            bool userMouseCheck = _pendingColMouseIndex == e.Index;
+            if (userMouseCheck && (Control.ModifierKeys & Keys.Shift) == Keys.Shift &&
+                _lastColIndex >= 0 && _lastColIndex != e.Index)
             {
-                bool target = !clbColCombos.GetItemChecked(index);
-                int start = Math.Min(_lastColIndex, index);
-                int end = Math.Max(_lastColIndex, index);
-                for (int i = start; i <= end; i++)
+                _settingColComboRange = true;
+                try
                 {
-                    if (i == index) continue;
-                    clbColCombos.SetItemChecked(i, target);
+                    int start = Math.Min(_lastColIndex, e.Index);
+                    int end = Math.Max(_lastColIndex, e.Index);
+                    for (int i = start; i <= end; i++)
+                        if (i != e.Index)
+                            clbColCombos.SetItemChecked(i, e.NewValue == CheckState.Checked);
                 }
+                finally { _settingColComboRange = false; }
             }
 
-            _lastColIndex = index;
+            if (userMouseCheck)
+            {
+                _lastColIndex = e.Index;
+                _pendingColMouseIndex = -1;
+            }
         }
 
         private void SetColCombosChecked(bool state)

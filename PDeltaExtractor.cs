@@ -182,21 +182,6 @@ namespace Etabs_Ultimate_Tools
                     result[story] = v;
             }
 
-            if (result.Count == 0)
-            {
-                foreach (var row in table)
-                {
-                    string story = EtabsTableReader.Get(row, "Story", "StoryName", "Level");
-                    if (string.IsNullOrWhiteSpace(story)) continue;
-                    double v = Math.Abs(EtabsTableReader.GetDouble(row,
-                        forceField, otherForceField,
-                        "V" + dir, "V" + dir + " kN", forceField + " kN", otherForceField + " kN",
-                        "F" + dir, "F" + dir + " kN", "VX", "VY"));
-                    if (v > 0 && (!result.TryGetValue(story, out var cur) || v > cur))
-                        result[story] = v;
-                }
-            }
-
             return result;
         }
 

@@ -3,7 +3,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using System.Reflection;
 
 namespace Etabs_Ultimate_Tools
 {
@@ -21,11 +20,9 @@ namespace Etabs_Ultimate_Tools
 
     public static class EtabsTableReader
     {
-        private static readonly Dictionary<DisplacementSource, List<string>> AvailableDisplacementTableKeys =
-            new Dictionary<DisplacementSource, List<string>>();
-
         public static string LastDisplacementReadDiagnostic { get; private set; } = "";
         public static string LastDisplacementTableName { get; private set; } = "";
+        public static string LastTableReadDiagnostic { get; private set; } = "";
 
         internal static readonly string[] MassSummaryTableNames =
         {
@@ -148,11 +145,15 @@ namespace Etabs_Ultimate_Tools
             cSapModel sap, string combo, string dir, DisplacementSource source,
             DiaphragmAggregationMode aggregationMode = DiaphragmAggregationMode.Max)
         {
+            if (sap.SetPresentUnits(eUnits.kN_m_C) != 0)
+                throw new InvalidOperationException("Không thể đặt đơn vị ETABS về kN-m trước khi đọc chuyển vị.");
+
             var bestWithCase = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
-            var bestAnyCase = new Dictionary<string, List<double>>(StringComparer.OrdinalIgnoreCase);
             var bestWithCaseName = new Dictionary<string, List<Tuple<double, string>>>(StringComparer.OrdinalIgnoreCase);
-            var bestAnyCaseName = new Dictionary<string, List<Tuple<double, string>>>(StringComparer.OrdinalIgnoreCase);
+            var observedOutputCases = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var observedStepTypes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             var tableNames = new List<string>(GetDisplacementTableNames(source));
+            var readErrors = new List<string>();
             int totalRows = 0;
             string lastTable = "", lastFields = "";
 
@@ -165,7 +166,11 @@ namespace Etabs_Ultimate_Tools
             {
                 List<Dictionary<string, string>> table;
                 try { table = ReadTable(sap, tableName, combo); }
-                catch { continue; }
+                catch (Exception ex)
+                {
+                    readErrors.Add(tableName + ": " + ex.Message);
+                    continue;
+                }
                 totalRows += table.Count;
                 if (table.Count > 0)
                 {
@@ -181,21 +186,17 @@ namespace Etabs_Ultimate_Tools
 
                     string outputCase = Get(row,
                         "Output Case", "OutputCase", "Load Case", "LoadCase", "Case", "Combo", "Combination");
+                    string stepType = Get(row, "Step Type", "StepType", "Step");
+                    if (!string.IsNullOrWhiteSpace(outputCase)) observedOutputCases.Add(outputCase.Trim());
+                    if (!string.IsNullOrWhiteSpace(stepType)) observedStepTypes.Add(stepType.Trim());
                     double displacement = ReadDirectionalDisplacement(row, dir, source);
-                    displacement = Math.Abs(displacement) > 5.0
-                        ? displacement / 1000.0
-                        : displacement;
 
                     string diaphragmName = Get(row,
                         "Diaphragm", "Diaphragm ID", "Diaphragm Name", "DiaphragmName",
                         "Name", "Label", "Object", "Story Diaphragm");
                     if (!string.IsNullOrWhiteSpace(diaphragmName)) diaphragmName = diaphragmName.Trim();
 
-                    AddStoryValue(bestAnyCase, story, displacement);
-                    if (!string.IsNullOrWhiteSpace(diaphragmName))
-                        AddStoryName(bestAnyCaseName, story, diaphragmName, displacement);
-
-                    if (EtabsHelper.IsSameOrBlank(outputCase, combo))
+                    if (EtabsHelper.IsSameOrEnvelopeCase(outputCase, combo))
                     {
                         AddStoryValue(bestWithCase, story, displacement);
                         if (!string.IsNullOrWhiteSpace(diaphragmName))
@@ -214,22 +215,24 @@ namespace Etabs_Ultimate_Tools
                 }
 
             }
-            var result = bestWithCase.Count > 0 ? AggregateStoryValues(bestWithCase, aggregationMode) : AggregateStoryValues(bestAnyCase, aggregationMode);
-            var resultName = bestWithCase.Count > 0 ? AggregateStoryNames(bestWithCaseName) : AggregateStoryNames(bestAnyCaseName);
+                        var result = AggregateStoryValues(bestWithCase, aggregationMode);
+                        var resultName = AggregateStoryNames(bestWithCaseName);
             bool hasNonZero = result.Values.Any(value => Math.Abs(value) > 1e-12);
             LastDisplacementTableName = lastTable;
-            LastDisplacementReadDiagnostic =
-                "Nguồn=" + source + "; bảng cuối=" + lastTable + "; số dòng=" + totalRows +
-                "; trường=" + lastFields + "; có giá trị khác 0=" + hasNonZero;
+                        LastDisplacementReadDiagnostic = bestWithCase.Count == 0
+                                ? "Không đọc được chuyển vị cho tổ hợp " + combo + "; OutputCase quan sát=" +
+                                    string.Join(", ", observedOutputCases.Take(10)) + "; StepType=" +
+                                    string.Join(", ", observedStepTypes.Take(10)) +
+                                    "; nguồn=" + source + "; bảng cuối=" + lastTable + "; số dòng=" + totalRows + "; trường=" + lastFields +
+                                    (readErrors.Count > 0 ? "; lỗi đọc bảng=" + string.Join(" | ", readErrors) : "")
+                                : "Nguồn=" + source + "; bảng cuối=" + lastTable + "; số dòng=" + totalRows +
+                                    "; trường=" + lastFields + "; có giá trị khác 0=" + hasNonZero;
             return Tuple.Create(result, resultName);
         }
 
         private static List<string> GetAvailableDisplacementTableKeys(
             cSapModel sap, DisplacementSource source)
         {
-            if (AvailableDisplacementTableKeys.TryGetValue(source, out var cached))
-                return cached;
-
             int count = 0;
             string[] keys = null, names = null;
             int[] importTypes = null;
@@ -255,7 +258,6 @@ namespace Etabs_Ultimate_Tools
                         matches.Add(keys[i]);
                 }
 
-                AvailableDisplacementTableKeys[source] = matches;
             }
             catch
             {
@@ -358,8 +360,11 @@ namespace Etabs_Ultimate_Tools
             int numberRecords = 0;
             string[] tableData = null;
 
-            sap.DatabaseTables.GetTableForDisplayArray(tableKey, ref fieldKeyList, groupName,
+            int ret = sap.DatabaseTables.GetTableForDisplayArray(tableKey, ref fieldKeyList, groupName,
                 ref tableVersion, ref fieldsKeysIncluded, ref numberRecords, ref tableData);
+            if (ret != 0)
+                throw new InvalidOperationException("ETABS không đọc được bảng '" + tableKey +
+                    "' cho tổ hợp '" + outputCase + "' (return code " + ret + ").");
 
             var rows = new List<Dictionary<string, string>>();
             if (fieldsKeysIncluded == null || tableData == null || fieldsKeysIncluded.Length == 0)
@@ -383,15 +388,29 @@ namespace Etabs_Ultimate_Tools
         public static List<Dictionary<string, string>> ReadTableWithFallback(
             cSapModel sap, string[] tableNames, string outputCase)
         {
+            var errors = new List<string>();
             foreach (var name in tableNames)
             {
                 try
                 {
                     var table = ReadTable(sap, name, outputCase);
-                    if (table.Count > 0) return table;
+                    if (table.Count > 0)
+                    {
+                        LastTableReadDiagnostic = errors.Count == 0
+                            ? "Đọc bảng '" + name + "' cho tổ hợp '" + outputCase + "'."
+                            : "Đã dùng bảng '" + name + "' cho tổ hợp '" + outputCase +
+                              "'; alias trước đó lỗi: " + string.Join(" | ", errors);
+                        return table;
+                    }
                 }
-                catch { /* Bảng không tồn tại trong bản ETABS này, thử tên khác */ }
+                catch (Exception ex)
+                {
+                    errors.Add("'" + name + "': " + ex.Message);
+                }
             }
+            LastTableReadDiagnostic = "Không có dữ liệu từ các bảng [" + string.Join(", ", tableNames) +
+                "] cho tổ hợp '" + outputCase + "'." +
+                (errors.Count > 0 ? " Lỗi: " + string.Join(" | ", errors) : "");
             return new List<Dictionary<string, string>>();
         }
 
@@ -460,69 +479,26 @@ namespace Etabs_Ultimate_Tools
             return "";
         }
 
-        private static readonly Dictionary<string, MethodInfo[]> _methodCache =
-            new Dictionary<string, MethodInfo[]>();
-
         private static void TrySelectComboForDatabaseTables(cSapModel sap, string comboName)
         {
             if (string.IsNullOrWhiteSpace(comboName)) return;
-            try
-            {
-                sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
-                sap.Results.Setup.SetComboSelectedForOutput(comboName);
+            sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
+            int outputRet = sap.Results.Setup.SetComboSelectedForOutput(comboName);
+            if (outputRet != 0)
+                throw new InvalidOperationException("Không chọn được tổ hợp '" + comboName +
+                    "' cho kết quả ETABS (return code " + outputRet + ").");
 
-                object db = sap.DatabaseTables;
-                Type t = db.GetType();
+            string[] noCases = new string[0];
+            int clearCasesRet = sap.DatabaseTables.SetLoadCasesSelectedForDisplay(ref noCases);
+            if (clearCasesRet != 0)
+                throw new InvalidOperationException("Không xóa được load case cũ khỏi Database Tables " +
+                    "(return code " + clearCasesRet + ").");
 
-                TryInvokeFlexible(db, t, "DeselectAllLoadCasesAndCombosForDisplay", comboName);
-                TryInvokeFlexible(db, t, "DeselectAllCasesAndCombosForDisplay", comboName);
-                TryInvokeFlexible(db, t, "SetLoadCombinationsSelectedForDisplay", comboName);
-                TryInvokeFlexible(db, t, "SetLoadCombinationSelectedForDisplay", comboName);
-                TryInvokeFlexible(db, t, "SetLoadCasesSelectedForDisplay", comboName);
-                TryInvokeFlexible(db, t, "SetLoadCaseSelectedForDisplay", comboName);
-            }
-            catch { /* Không chặn nếu DLL không hỗ trợ */ }
-        }
-
-        private static void TryInvokeFlexible(object target, Type type, string methodName, string comboName)
-        {
-            foreach (var mi in GetCachedMethods(type, methodName))
-            {
-                try
-                {
-                    var ps = mi.GetParameters();
-                    var args = new object[ps.Length];
-                    for (int i = 0; i < ps.Length; i++)
-                    {
-                        Type pt = ps[i].ParameterType;
-                        Type bt = pt.IsByRef ? pt.GetElementType() : pt;
-
-                        if (bt == typeof(int)) args[i] = 1;
-                        else if (bt == typeof(string[])) args[i] = new[] { comboName };
-                        else if (bt == typeof(string)) args[i] = comboName;
-                        else if (bt == typeof(bool)) args[i] = true;
-                        else args[i] = null;
-                    }
-                    mi.Invoke(target, args);
-                    return;
-                }
-                catch { /* Thử overload tiếp theo */ }
-            }
-        }
-
-        private static MethodInfo[] GetCachedMethods(Type type, string methodName)
-        {
-            string cacheKey = type.FullName + "::" + methodName;
-            if (_methodCache.TryGetValue(cacheKey, out var cached)) return cached;
-
-            var list = new List<MethodInfo>();
-            foreach (var mi in type.GetMethods(BindingFlags.InvokeMethod | BindingFlags.Public | BindingFlags.Instance))
-                if (string.Equals(mi.Name, methodName, StringComparison.OrdinalIgnoreCase))
-                    list.Add(mi);
-
-            var arr = list.ToArray();
-            _methodCache[cacheKey] = arr;
-            return arr;
+            string[] selectedCombos = { comboName };
+            int comboRet = sap.DatabaseTables.SetLoadCombinationsSelectedForDisplay(ref selectedCombos);
+            if (comboRet != 0)
+                throw new InvalidOperationException("Không chọn được tổ hợp '" + comboName +
+                    "' trong Database Tables (return code " + comboRet + ").");
         }
 
         private static string NormalizeKey(string s)

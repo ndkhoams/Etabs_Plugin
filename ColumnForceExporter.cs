@@ -216,21 +216,21 @@ namespace Etabs_Ultimate_Tools
         {
             string label = "";
             string storyName = "";
-
-            try
-            {
-                sap.AreaObj.GetLabelFromName(areaName, ref label, ref storyName);
-            }
-            catch
-            {
-                storyName = "";
-            }
+            int ret = sap.AreaObj.GetLabelFromName(areaName, ref label, ref storyName);
+            if (ret != 0)
+                throw new InvalidOperationException("Không đọc được story của area '" + areaName +
+                    "' (return code " + ret + ").");
 
             return storyName;
         }
 
         private static bool IsColumnByGeometry(cSapModel sap, string frameName)
         {
+            eFrameDesignOrientation orientation = eFrameDesignOrientation.Null;
+            if (sap.FrameObj.GetDesignOrientation(frameName, ref orientation) == 0 &&
+                orientation != eFrameDesignOrientation.Null)
+                return orientation == eFrameDesignOrientation.Column;
+
             string p1 = "";
             string p2 = "";
 

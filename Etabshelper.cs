@@ -27,8 +27,12 @@ namespace Etabs_Ultimate_Tools
             string[] similarTo = null;
             double[] spliceHeight = null;
 
-            sap.Story.GetStories(ref n, ref names, ref elevations, ref heights,
+            int ret = sap.Story.GetStories(ref n, ref names, ref elevations, ref heights,
                 ref isMaster, ref similarTo, ref spliceAbove, ref spliceHeight);
+            if (ret != 0 || n < 0 || names == null || elevations == null ||
+                names.Length < n || elevations.Length < n)
+                throw new InvalidOperationException(
+                    "ETABS Story.GetStories thất bại hoặc trả về mảng tầng không hợp lệ (return code " + ret + ").");
 
             var list = new List<StoryInfo>(n);
             for (int i = 0; i < n; i++)
@@ -104,14 +108,32 @@ namespace Etabs_Ultimate_Tools
             return storyName.Trim().IndexOf("Base", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
-        /// <summary>outputCase trùng selectedName (rỗng, bằng, hoặc chứa nhau).</summary>
+        /// <summary>So sánh tên output case sau khi trim, không phân biệt hoa thường.</summary>
         public static bool IsSameOrBlank(string outputCase, string selectedName)
         {
-            if (string.IsNullOrWhiteSpace(outputCase)) return true;
-            if (string.Equals(outputCase.Trim(), selectedName.Trim(), StringComparison.OrdinalIgnoreCase))
-                return true;
-            return outputCase.IndexOf(selectedName, StringComparison.OrdinalIgnoreCase) >= 0
-                || selectedName.IndexOf(outputCase, StringComparison.OrdinalIgnoreCase) >= 0;
+            return !string.IsNullOrWhiteSpace(outputCase)
+                && !string.IsNullOrWhiteSpace(selectedName)
+                && string.Equals(outputCase.Trim(), selectedName.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        public static bool IsSameOrEnvelopeCase(string outputCase, string selectedName)
+        {
+            if (IsSameOrBlank(outputCase, selectedName)) return true;
+            if (string.IsNullOrWhiteSpace(outputCase) || string.IsNullOrWhiteSpace(selectedName))
+                return false;
+
+            string actual = outputCase.Trim();
+            string selected = selectedName.Trim();
+            string[] suffixes = { " (Max)", " (Min)", "_max", "_min", "-max", "-min", " Max", " Min" };
+            foreach (string suffix in suffixes)
+            {
+                if (actual.EndsWith(suffix, StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(actual.Substring(0, actual.Length - suffix.Length).TrimEnd(),
+                        selected, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+
+            return false;
         }
 
         public static void SelectCaseOrCombo(cSapModel sap, string name)

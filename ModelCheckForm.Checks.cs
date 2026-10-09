@@ -28,6 +28,10 @@ namespace Etabs_Ultimate_Tools
             _rows.AddRange(PDeltaExtractor.Calculate(_sap, combo, combo, "Y", q, displacementSource, aggregationMode));
             _rows = _rows.OrderBy(r => r.Direction).ThenByDescending(r => r.Elevation).ToList();
 
+            if (_rows.Count == 0)
+                Warn("Không có kết quả P-Delta cho tổ hợp " + combo +
+                    ". Kiểm tra bảng Story Forces, Output Case và kết quả phân tích ETABS.", "Check Model");
+
             dgv.DataSource = null;
             dgv.DataSource = _rows;
 

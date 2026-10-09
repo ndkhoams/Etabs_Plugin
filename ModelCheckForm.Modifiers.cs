@@ -223,6 +223,11 @@ namespace Etabs_Ultimate_Tools
 
         private bool IsColumnFrame(string frameName)
         {
+            eFrameDesignOrientation orientation = eFrameDesignOrientation.Null;
+            if (_sap.FrameObj.GetDesignOrientation(frameName, ref orientation) == 0 &&
+                orientation != eFrameDesignOrientation.Null)
+                return orientation == eFrameDesignOrientation.Column;
+
             string p1 = "", p2 = "";
             _sap.FrameObj.GetPoints(frameName, ref p1, ref p2);
             double xi = 0, yi = 0, zi = 0, xj = 0, yj = 0, zj = 0;
@@ -235,6 +240,12 @@ namespace Etabs_Ultimate_Tools
 
         private bool IsWallArea(string areaName)
         {
+            string pier = "";
+            if (_sap.AreaObj.GetPier(areaName, ref pier) == 0 &&
+                !string.IsNullOrWhiteSpace(pier) &&
+                !pier.Equals("None", StringComparison.OrdinalIgnoreCase))
+                return true;
+
             int n = 0;
             string[] pts = null;
             _sap.AreaObj.GetPoints(areaName, ref n, ref pts);
