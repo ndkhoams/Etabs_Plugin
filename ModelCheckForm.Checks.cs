@@ -65,6 +65,7 @@ namespace Etabs_Ultimate_Tools
             if (dgvWind.Columns.Contains("SourceName"))
                 dgvWind.Columns["SourceName"].Visible = source == DisplacementSource.Diaphragm;
 
+            if (_windRows.Count == 0) Warn("Không có kết quả chuyển vị đỉnh cho tổ hợp " + windCombo + ". Kiểm tra bảng Displacements và kết quả phân tích ETABS.", "Chuyển vị đỉnh");
             if (_windRows.Count > 0 && _windRows.All(r => Math.Abs(r.TopDisplacement) < 1e-12))
                 Warn("Chuyển vị các tầng đang bằng 0. Hãy kiểm tra combo gió và bảng kết quả " +
                     GetDisplacementSource(cboWindSource) + " Displacements trong ETABS.\n" +
@@ -88,6 +89,7 @@ namespace Etabs_Ultimate_Tools
             dgvWindDrift.DataSource = null;
             dgvWindDrift.DataSource = displayRows;
 
+            if (_windDriftRows.Count == 0) Warn("Không có kết quả drift cho tổ hợp gió " + combo + ". Kiểm tra bảng Story Drifts và kết quả phân tích ETABS.", "Chuyển vị lệch tầng");
             if (_windDriftRows.Count > 0 && _windDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
                 Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp gió và model đã Run Analysis chưa.", "Chuyển vị lệch tầng");
 
@@ -111,6 +113,7 @@ namespace Etabs_Ultimate_Tools
             dgvSeis.DataSource = null;
             dgvSeis.DataSource = displayRows;
 
+            if (_seismicDriftRows.Count == 0) Warn("Không có kết quả drift cho tổ hợp động đất " + combo + ". Kiểm tra bảng Story Drifts và kết quả phân tích ETABS.", "Chuyển vị lệch tầng (động đất)");
             if (_seismicDriftRows.Count > 0 && _seismicDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
                 Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp động đất và model đã Run Analysis chưa.", "Chuyển vị lệch tầng (động đất)");
 

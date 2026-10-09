@@ -66,6 +66,12 @@ namespace Etabs_Ultimate_Tools
         private Button btnModApply, btnModRollback;
         private Label lblModInfo;
 
+        private Label lblUpdateBuildDate, lblUpdateLatestCommit, lblUpdateStatus;
+        private Label lblUpdateLatestDate;
+        private Button btnUpdateCheck, btnUpdateDownload;
+        private ProgressBar progressUpdate;
+        private string _latestUpdateCommit;
+
         private const double AxialAlphaCc = 1.0;
         private const double AxialGammaC = 1.2;
         private const double AxialColumnLimit = 0.65;
@@ -82,7 +88,7 @@ namespace Etabs_Ultimate_Tools
 
         private void InitializeComponent()
         {
-            Text = "Etabs Ultimate Tools  ©20261009v2 by KhoaND13";
+            Text = "Etabs Ultimate Tools  ©20261009 by KhoaND13";
             Width = 1480;
             Height = 780;
             MinimumSize = new Size(1360, 700);
@@ -109,6 +115,7 @@ namespace Etabs_Ultimate_Tools
             var tabAxial = new TabPage("Axial Force");
             var tabColExport = new TabPage("Column Force Exporter");
             var tabPileH = new TabPage("Pile Reactions");
+            var tabUpdate = new TabPage("Update");
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
@@ -118,6 +125,7 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabAxial);
             tabs.TabPages.Add(tabColExport);
             tabs.TabPages.Add(tabPileH);
+            tabs.TabPages.Add(tabUpdate);
 
             BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
@@ -127,6 +135,7 @@ namespace Etabs_Ultimate_Tools
             BuildAxialTab(tabAxial);
             BuildColumnExportTab(tabColExport);
             BuildPileHTab(tabPileH);
+            BuildUpdateTab(tabUpdate);
         }
 
         // ---------- Hộp thoại dùng chung ----------

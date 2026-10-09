@@ -68,7 +68,7 @@ namespace Etabs_Ultimate_Tools
 
                 string outputCase = EtabsTableReader.Get(row,
                     "Output Case", "OutputCase", "Load Case", "LoadCase", "Case", "Combo", "Combination");
-                if (!EtabsHelper.IsSameOrBlank(outputCase, combo)) continue;
+                if (!EtabsHelper.IsSameOrEnvelopeCase(outputCase, combo)) continue;
 
                 string direction = EtabsTableReader.Get(row, "Direction", "Dir");
                 if (string.IsNullOrWhiteSpace(direction) ||

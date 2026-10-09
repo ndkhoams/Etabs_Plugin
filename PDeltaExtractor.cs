@@ -157,7 +157,7 @@ namespace Etabs_Ultimate_Tools
                 string outputCase = EtabsTableReader.Get(row,
                     "Output Case", "OutputCase", "Load Case", "LoadCase", "Case", "Combo", "Combination",
                     "Load Case/Combo", "LoadCaseCombo");
-                if (!EtabsHelper.IsSameOrBlank(outputCase, loadCase)) continue;
+                if (!EtabsHelper.IsSameOrEnvelopeCase(outputCase, loadCase)) continue;
 
                 string location = EtabsTableReader.Get(row, "Location", "Loc", "Story Level", "StoryPoint");
                 if (!string.IsNullOrWhiteSpace(location) && !IsBottom(location))

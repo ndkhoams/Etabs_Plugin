@@ -89,7 +89,7 @@ namespace Etabs_Ultimate_Tools
 
                 string outputCase = Get(row,
                     "Output Case", "OutputCase", "Load Case", "LoadCase", "Case", "Combo", "Combination");
-                if (!EtabsHelper.IsSameOrBlank(outputCase, combo)) continue;
+                if (!EtabsHelper.IsSameOrEnvelopeCase(outputCase, combo)) continue;
 
                 string item = Get(row, "Item", "Diaphragm", "Diaphragm Name", "Name").Trim();
                 string rowDirection = Get(row, "Direction", "Dir").Trim();

@@ -129,67 +129,6 @@ namespace Etabs_Ultimate_Tools
                 .ToList();
         }
 
-        // ── Tính phản lực + kết luận cho 1 tổ hợp tải (1 case = 1 sheet) ─────────────
-        // Tổ hợp bao -> mỗi cọc 2 dòng: tên tổ hợp + "_max" (nén) và + "_min" (kéo).
-        public static PileReactionCase ComputeCase(cSapModel sap, string combo,
-            string title, string sheet, Dictionary<string, PileSpringType> caps)
-        {
-            if (string.IsNullOrWhiteSpace(combo)) return null;
-
-            sap.SetPresentUnits(eUnits.kN_m_C);
-
-            // Bật chế độ bao (Envelopes): tổ hợp bao trả về CẢ Max và Min cho mỗi điểm.
-            int optionRet = sap.Results.Setup.SetOptionMultiValuedCombo(1);
-            if (optionRet != 0)
-                throw new InvalidOperationException("Không bật được chế độ bao Max/Min cho tổ hợp '" + combo + "'.");
-
-            var piles = GetPilePoints(sap);
-            if (piles.Count == 0) return null;
-
-            EtabsHelper.SelectCaseOrCombo(sap, combo);
-
-            var rows = new List<PileReactionRow>();
-            foreach (var pile in piles)
-            {
-                double pmax, pmin;
-                bool multi;
-                if (!TryGetReactionRange(sap, pile.Name, combo, out pmax, out pmin, out multi))
-                    continue;
-
-                string type = ResolveType(pile);
-                double tensCap = 0, compCap = 0;
-                if (caps != null)
-                {
-                    PileSpringType cap;
-                    if (caps.TryGetValue(type, out cap))
-                    {
-                        tensCap = cap.TensionCap;
-                        compCap = cap.CompressionCap;
-                    }
-                }
-
-                if (multi)
-                {
-                    rows.Add(BuildCompRow(type, pile.Label, combo + "_max", pmax, tensCap, compCap));
-                    rows.Add(BuildTensRow(type, pile.Label, combo + "_min", pmin, tensCap, compCap));
-                }
-                else
-                {
-                    rows.Add(BuildSingleRow(type, pile.Label, combo, pmax, tensCap, compCap, true));
-                }
-            }
-
-            if (rows.Count == 0) return null;
-
-            var sorted = rows
-                .OrderBy(r => r.PileType, StringComparer.OrdinalIgnoreCase)
-                .ThenBy(r => r.PileId, new NaturalComparer())
-                .ThenBy(r => r.Combo, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-
-            return new PileReactionCase { Title = title, SheetName = sheet, Combo = combo, Rows = sorted };
-        }
-
         // ── Tính phản lực đứng (F3) + hợp lực ngang H = sqrt(FX^2+FY^2) cho 1 tổ hợp ─────
         // considerTension = false -> bỏ qua kiểm tra SCT kéo (không sinh dòng _min, dòng đơn chỉ xét nén).
         public static PileReactionCase ComputeCaseH(cSapModel sap, string combo,
