@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
@@ -27,6 +28,16 @@ namespace Etabs_Ultimate_Tools
             client.DefaultRequestHeaders.Accept.Add(
                 new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
             return client;
+        }
+
+        private static string GetPluginBuildTimestamp()
+        {
+            var metadata = typeof(ModelCheckForm).Assembly
+                .GetCustomAttributes(typeof(AssemblyMetadataAttribute), false)
+                .Cast<AssemblyMetadataAttribute>()
+                .FirstOrDefault(attribute => string.Equals(attribute.Key, "PluginBuildTimestamp",
+                    StringComparison.OrdinalIgnoreCase));
+            return metadata == null ? "00000000-000000" : metadata.Value;
         }
 
         private void BuildUpdateTab(TabPage tab)
@@ -62,24 +73,20 @@ namespace Etabs_Ultimate_Tools
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 3
+                RowCount = 2
             };
             versionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
             versionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
-            versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
-            versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34F));
+            versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+            versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
             versionBox.Controls.Add(versionLayout);
 
-            versionLayout.Controls.Add(MakeFieldLabel("Ngày build hiện tại:", 135), 0, 0);
+            versionLayout.Controls.Add(MakeFieldLabel("Bản dựng hiện tại:", 135), 0, 0);
             lblUpdateBuildDate = MakeUpdateValueLabel(GetBuildDateDisplay());
             versionLayout.Controls.Add(lblUpdateBuildDate, 1, 0);
-            versionLayout.Controls.Add(MakeFieldLabel("Commit mới nhất:", 135), 0, 1);
-            lblUpdateLatestCommit = MakeUpdateValueLabel("Chưa kiểm tra");
-            versionLayout.Controls.Add(lblUpdateLatestCommit, 1, 1);
-            versionLayout.Controls.Add(MakeFieldLabel("Ngày commit mới nhất:", 135), 0, 2);
+            versionLayout.Controls.Add(MakeFieldLabel("Bản dựng mới nhất:", 135), 0, 1);
             lblUpdateLatestDate = MakeUpdateValueLabel("Chưa kiểm tra");
-            versionLayout.Controls.Add(lblUpdateLatestDate, 1, 2);
+            versionLayout.Controls.Add(lblUpdateLatestDate, 1, 1);
 
             lblUpdateStatus = new Label
             {
@@ -141,15 +148,15 @@ namespace Etabs_Ultimate_Tools
         {
             DateTime buildDate;
             return TryGetBuildDate(out buildDate)
-                ? buildDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+                ? buildDate.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)
                 : "Không tìm thấy ngày build";
         }
 
         private bool TryGetBuildDate(out DateTime buildDate)
         {
             buildDate = default(DateTime);
-            var match = Regex.Match(Text ?? "", @"©\s*(\d{8})");
-            return match.Success && DateTime.TryParseExact(match.Groups[1].Value, "yyyyMMdd",
+            var match = Regex.Match(Text ?? "", @"©\s*(\d{8}-\d{6})");
+            return match.Success && DateTime.TryParseExact(match.Groups[1].Value, "yyyyMMdd-HHmmss",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out buildDate);
         }
 
@@ -177,7 +184,6 @@ namespace Etabs_Ultimate_Tools
                         throw new InvalidOperationException("GitHub không trả về commit cho file cập nhật.");
 
                     _latestUpdateCommit = commits[0].Sha;
-                    lblUpdateLatestCommit.Text = _latestUpdateCommit;
                     string latestDateText = commits[0].Commit?.Committer?.Date;
                     DateTimeOffset latestCommitDate;
                     if (!DateTimeOffset.TryParse(latestDateText, CultureInfo.InvariantCulture,
@@ -187,17 +193,18 @@ namespace Etabs_Ultimate_Tools
 
                     DateTimeOffset latestCommitDateGmt7 = latestCommitDate.ToOffset(TimeSpan.FromHours(7));
                     lblUpdateLatestDate.Text = latestCommitDateGmt7.ToString(
-                        "yyyy-MM-dd HH:mm:ss 'GMT+7'", CultureInfo.InvariantCulture);
+                        "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                     DateTime buildDate;
                     if (!TryGetBuildDate(out buildDate))
                     {
                         lblUpdateBuildDate.Text = "Không tìm thấy ngày build";
-                        lblUpdateStatus.Text = "Không đọc được ngày build từ tiêu đề (định dạng ©yyyyMMdd).";
+                        lblUpdateStatus.Text = "Không đọc được ngày build từ tiêu đề (định dạng ©yyyyMMdd-HHmmss).";
                     }
                     else
                     {
-                        lblUpdateBuildDate.Text = buildDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-                        bool hasNewerVersion = latestCommitDateGmt7.Date > buildDate.Date;
+                        lblUpdateBuildDate.Text = buildDate.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+                        var buildTimestampGmt7 = new DateTimeOffset(buildDate, TimeSpan.FromHours(7));
+                        bool hasNewerVersion = latestCommitDateGmt7 > buildTimestampGmt7;
                         lblUpdateStatus.Text = hasNewerVersion
                             ? "Có phiên bản mới."
                             : "Bạn đang dùng phiên bản mới nhất.";

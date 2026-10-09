@@ -9,7 +9,12 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <OutputPath>bin\$(Configuration)\</OutputPath>
     <PublishDir>bin\$(Configuration)\publish\</PublishDir>
+    <PluginBuildTimestamp Condition="'$(PluginBuildTimestamp)' == ''">$([System.DateTime]::UtcNow.AddHours(7).ToString('yyyyMMdd-HHmmss'))</PluginBuildTimestamp>
   </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="PluginBuildTimestamp" Value="$(PluginBuildTimestamp)" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="ETABSv1">
