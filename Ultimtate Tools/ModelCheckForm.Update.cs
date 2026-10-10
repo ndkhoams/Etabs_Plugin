@@ -18,7 +18,7 @@ namespace Etabs_Ultimate_Tools
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
-        private const string currentBuild = "20261010-085210";
+        private const string currentBuild = "20261010-085401";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
         private static HttpClient CreateUpdateHttpClient()
@@ -58,8 +58,9 @@ namespace Etabs_Ultimate_Tools
             layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
             tab.Controls.Add(layout);
 
-            layout.Controls.Add(MakeTitle("CẬP NHẬT ETABS ULTIMATE TOOLS"), 0, 0);
-            
+            var title = MakeTitle("CẬP NHẬT ETABS ULTIMATE TOOLS");
+            title.Font = new System.Drawing.Font("Arial", 16F, System.Drawing.FontStyle.Bold);
+            layout.Controls.Add(title, 0, 0);
 
             var versionBox = new GroupBox
             {
@@ -75,16 +76,16 @@ namespace Etabs_Ultimate_Tools
                 ColumnCount = 2,
                 RowCount = 2
             };
-            versionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145));
+            versionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
             versionLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
             versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
             versionBox.Controls.Add(versionLayout);
 
-            versionLayout.Controls.Add(MakeFieldLabel("Bản dựng hiện tại:", 135), 0, 0);
+            versionLayout.Controls.Add(MakeUpdateFieldLabel("Bản dựng hiện tại:"), 0, 0);
             lblUpdateBuildDate = MakeUpdateValueLabel(GetBuildDateDisplay());
             versionLayout.Controls.Add(lblUpdateBuildDate, 1, 0);
-            versionLayout.Controls.Add(MakeFieldLabel("Bản dựng mới nhất:", 135), 0, 1);
+            versionLayout.Controls.Add(MakeUpdateFieldLabel("Bản dựng mới nhất:"), 0, 1);
             lblUpdateLatestDate = MakeUpdateValueLabel("Chưa kiểm tra");
             versionLayout.Controls.Add(lblUpdateLatestDate, 1, 1);
 
@@ -93,7 +94,7 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill,
                 Text = "Chưa kiểm tra phiên bản mới.",
                 TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-                Font = new System.Drawing.Font("Arial", 10F, System.Drawing.FontStyle.Bold),
+                Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold),
                 ForeColor = System.Drawing.Color.FromArgb(45, 55, 72)
             };
             layout.Controls.Add(lblUpdateStatus, 0, 3);
@@ -117,18 +118,34 @@ namespace Etabs_Ultimate_Tools
             };
             btnUpdateCheck = MakeButton("Kiểm tra phiên bản");
             btnUpdateCheck.Width = 160;
+            btnUpdateCheck.Font = new System.Drawing.Font("Arial", 10F);
             btnUpdateCheck.Click += async (s, e) => await CheckForPluginUpdateAsync();
             actions.Controls.Add(btnUpdateCheck);
 
             btnUpdateDownload = MakeButton("Tải file cập nhật");
             btnUpdateDownload.Width = 160;
+            btnUpdateDownload.Font = new System.Drawing.Font("Arial", 10F);
             btnUpdateDownload.Enabled = false;
             btnUpdateDownload.Click += async (s, e) => await DownloadPluginUpdateAsync();
             actions.Controls.Add(btnUpdateDownload);
             layout.Controls.Add(actions, 0, 5);
 
             var note = MakeNote("File ISO sẽ được lưu tại vị trí bạn chọn. Tải file không tự cài đặt hoặc thay thế plugin đang chạy.");
+            note.Font = new System.Drawing.Font("Arial", 11F);
             layout.Controls.Add(note, 0, 6);
+        }
+
+        private static Label MakeUpdateFieldLabel(string text)
+        {
+            return new Label
+            {
+                AutoSize = false,
+                Dock = DockStyle.Fill,
+                Text = text,
+                TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+                Font = new System.Drawing.Font("Arial", 11F),
+                Margin = new Padding(0)
+            };
         }
 
         private static Label MakeUpdateValueLabel(string text)
@@ -139,8 +156,9 @@ namespace Etabs_Ultimate_Tools
                 Dock = DockStyle.Fill,
                 Text = text,
                 TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
-                Font = new System.Drawing.Font("Consolas", 9F),
-                AutoEllipsis = true
+                Font = new System.Drawing.Font("Consolas", 11F),
+                AutoEllipsis = true,
+                Margin = new Padding(0)
             };
         }
 
