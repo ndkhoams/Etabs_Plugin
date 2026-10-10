@@ -26,4 +26,8 @@
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.102.2" />
   </ItemGroup>
+
+  <Target Name="StampPluginBuildTimestamp" BeforeTargets="CoreCompile">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -Command &quot;$path = '$(MSBuildProjectDirectory)\ModelCheckForm.Update.cs'; $text = [System.IO.File]::ReadAllText($path); $pattern = '(?m)(private const string currentBuild = \x22)[^\x22]*(\x22;)'; $match = [System.Text.RegularExpressions.Regex]::Match($text, $pattern); if (-not $match.Success) { throw 'Could not find currentBuild timestamp declaration.' }; $replacement = '${1}$(PluginBuildTimestamp)${2}'; $updated = [System.Text.RegularExpressions.Regex]::Replace($text, $pattern, $replacement); [System.IO.File]::WriteAllText($path, $updated, [System.Text.UTF8Encoding]::new($false))&quot;" />
+  </Target>
 </Project>

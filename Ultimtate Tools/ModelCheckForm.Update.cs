@@ -8,7 +8,6 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -19,6 +18,7 @@ namespace Etabs_Ultimate_Tools
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
+        private const string currentBuild = "20261010-085210";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
         private static HttpClient CreateUpdateHttpClient()
@@ -155,8 +155,7 @@ namespace Etabs_Ultimate_Tools
         private bool TryGetBuildDate(out DateTime buildDate)
         {
             buildDate = default(DateTime);
-            var match = Regex.Match(Text ?? "", @"©\s*(\d{8}-\d{6})");
-            return match.Success && DateTime.TryParseExact(match.Groups[1].Value, "yyyyMMdd-HHmmss",
+            return DateTime.TryParseExact(currentBuild, "yyyyMMdd-HHmmss",
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out buildDate);
         }
 
@@ -198,7 +197,7 @@ namespace Etabs_Ultimate_Tools
                     if (!TryGetBuildDate(out buildDate))
                     {
                         lblUpdateBuildDate.Text = "Không tìm thấy ngày build";
-                        lblUpdateStatus.Text = "Không đọc được ngày build từ tiêu đề (định dạng ©yyyyMMdd-HHmmss).";
+                        lblUpdateStatus.Text = "Không đọc được ngày build (định dạng yyyyMMdd-HHmmss).";
                     }
                     else
                     {
