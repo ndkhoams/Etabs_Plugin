@@ -21,7 +21,7 @@ namespace Etabs_Ultimate_Tools
         private const string UpdateFilePath = "Etabs_Tool.iso";
         private const string UpdateBranch = "main";
         private const string UpdateSourceFilePath = "Ultimtate Tools/ModelCheckForm.Update.cs";
-        private const string currentBuild = "20261010-090135";
+        private const string currentBuild = "20261010-090700";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
         private static HttpClient CreateUpdateHttpClient()
@@ -216,9 +216,24 @@ namespace Etabs_Ultimate_Tools
                     _latestUpdateCommit = commits[0].Sha;
                     string escapedSourcePath = string.Join("/",
                         UpdateSourceFilePath.Split('/').Select(Uri.EscapeDataString));
-                    string sourceUrl = "https://raw.githubusercontent.com/" + UpdateOwner + "/" +
-                        UpdateRepository + "/" + UpdateBranch + "/" + escapedSourcePath;
-                    string publishedSource = await UpdateHttpClient.GetStringAsync(sourceUrl);
+                    string sourceUrl = "https://api.github.com/repos/" + UpdateOwner + "/" +
+                        UpdateRepository + "/contents/" + escapedSourcePath + "?ref=" +
+                        Uri.EscapeDataString(UpdateBranch);
+                    string sourceJson;
+                    using (var sourceResponse = await UpdateHttpClient.GetAsync(sourceUrl))
+                    {
+                        sourceResponse.EnsureSuccessStatusCode();
+                        sourceJson = await sourceResponse.Content.ReadAsStringAsync();
+                    }
+                    var sourceSerializer = new DataContractJsonSerializer(typeof(GitHubFileContent));
+                    GitHubFileContent sourceFile;
+                    using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(sourceJson)))
+                        sourceFile = sourceSerializer.ReadObject(stream) as GitHubFileContent;
+                    if (sourceFile == null || string.IsNullOrWhiteSpace(sourceFile.Content))
+                        throw new InvalidOperationException("GitHub không trả về nội dung file phiên bản.");
+
+                    string publishedSource = Encoding.UTF8.GetString(
+                        Convert.FromBase64String(sourceFile.Content));
                     DateTime latestBuildDate;
                     if (!TryGetPublishedBuildDate(publishedSource, out latestBuildDate))
                         throw new InvalidOperationException("GitHub không trả về currentBuild hợp lệ.");
@@ -341,6 +356,13 @@ namespace Etabs_Ultimate_Tools
                     }
                 }
             }
+        }
+
+        [DataContract]
+        private sealed class GitHubFileContent
+        {
+            [DataMember(Name = "content")]
+            public string Content { get; set; }
         }
 
         [DataContract]
