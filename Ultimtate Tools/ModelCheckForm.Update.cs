@@ -8,6 +8,7 @@ using System.Reflection;
 using System.Runtime.Serialization;
 using System.Runtime.Serialization.Json;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -18,7 +19,9 @@ namespace Etabs_Ultimate_Tools
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
-        private const string currentBuild = "20261010-085556";
+        private const string UpdateBranch = "main";
+        private const string UpdateSourceFilePath = "Ultimtate Tools/ModelCheckForm.Update.cs";
+        private const string currentBuild = "20261010-090135";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
         private static HttpClient CreateUpdateHttpClient()
@@ -178,6 +181,15 @@ namespace Etabs_Ultimate_Tools
                 CultureInfo.InvariantCulture, DateTimeStyles.None, out buildDate);
         }
 
+        private static bool TryGetPublishedBuildDate(string source, out DateTime buildDate)
+        {
+            buildDate = default(DateTime);
+            var match = Regex.Match(source ?? string.Empty,
+                @"private\s+const\s+string\s+currentBuild\s*=\s*\""(?<timestamp>\d{8}-\d{6})\""\s*;");
+            return match.Success && DateTime.TryParseExact(match.Groups["timestamp"].Value,
+                "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture, DateTimeStyles.None, out buildDate);
+        }
+
         private async Task CheckForPluginUpdateAsync()
         {
             btnUpdateCheck.Enabled = false;
@@ -202,15 +214,17 @@ namespace Etabs_Ultimate_Tools
                         throw new InvalidOperationException("GitHub không trả về commit cho file cập nhật.");
 
                     _latestUpdateCommit = commits[0].Sha;
-                    string latestDateText = commits[0].Commit?.Committer?.Date;
-                    DateTimeOffset latestCommitDate;
-                    if (!DateTimeOffset.TryParse(latestDateText, CultureInfo.InvariantCulture,
-                        DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
-                        out latestCommitDate))
-                        throw new InvalidOperationException("GitHub không trả về ngày commit hợp lệ.");
+                    string escapedSourcePath = string.Join("/",
+                        UpdateSourceFilePath.Split('/').Select(Uri.EscapeDataString));
+                    string sourceUrl = "https://raw.githubusercontent.com/" + UpdateOwner + "/" +
+                        UpdateRepository + "/" + UpdateBranch + "/" + escapedSourcePath;
+                    string publishedSource = await UpdateHttpClient.GetStringAsync(sourceUrl);
+                    DateTime latestBuildDate;
+                    if (!TryGetPublishedBuildDate(publishedSource, out latestBuildDate))
+                        throw new InvalidOperationException("GitHub không trả về currentBuild hợp lệ.");
 
-                    DateTimeOffset latestCommitDateGmt7 = latestCommitDate.ToOffset(TimeSpan.FromHours(7));
-                    lblUpdateLatestDate.Text = latestCommitDateGmt7.ToString(
+                    var latestBuildTimestampGmt7 = new DateTimeOffset(latestBuildDate, TimeSpan.FromHours(7));
+                    lblUpdateLatestDate.Text = latestBuildTimestampGmt7.ToString(
                         "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                     DateTime buildDate;
                     if (!TryGetBuildDate(out buildDate))
@@ -222,7 +236,7 @@ namespace Etabs_Ultimate_Tools
                     {
                         lblUpdateBuildDate.Text = buildDate.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
                         var buildTimestampGmt7 = new DateTimeOffset(buildDate, TimeSpan.FromHours(7));
-                        bool hasNewerVersion = latestCommitDateGmt7 > buildTimestampGmt7;
+                        bool hasNewerVersion = latestBuildTimestampGmt7 > buildTimestampGmt7;
                         lblUpdateStatus.Text = hasNewerVersion
                             ? "Có phiên bản mới."
                             : "Bạn đang dùng phiên bản mới nhất.";
