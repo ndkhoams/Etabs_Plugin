@@ -18,7 +18,7 @@ namespace Etabs_Ultimate_Tools
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
-        private const string currentBuild = "20261010-085401";
+        private const string currentBuild = "20261010-085556";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
         private static HttpClient CreateUpdateHttpClient()
@@ -66,7 +66,8 @@ namespace Etabs_Ultimate_Tools
             {
                 Dock = DockStyle.Fill,
                 Text = "Phiên bản",
-                Padding = new Padding(12)
+                Padding = new Padding(12),
+                Font = new System.Drawing.Font("Arial", 12F, System.Drawing.FontStyle.Bold)
             };
             layout.Controls.Add(versionBox, 0, 2);
 
