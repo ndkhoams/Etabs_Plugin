@@ -115,7 +115,7 @@ namespace Etabs_Ultimate_Tools
             var tabAxial = new TabPage("Axial Force");
             var tabColExport = new TabPage("Column Force Exporter");
             var tabPileH = new TabPage("Pile Reactions");
-            var tabUpdate = new TabPage("Check for Update");
+            var tabUpdate = new TabPage("Check for Updates");
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);

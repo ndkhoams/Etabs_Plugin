@@ -21,7 +21,7 @@ namespace Etabs_Ultimate_Tools
         private const string UpdateFilePath = "Etabs_Tool.iso";
         private const string UpdateBranch = "main";
         private const string UpdateSourceFilePath = "Ultimtate Tools/ModelCheckForm.Update.cs";
-        private const string currentBuild = "20261010-090700";
+        private const string currentBuild = "20261010-091008";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
         private static HttpClient CreateUpdateHttpClient()
