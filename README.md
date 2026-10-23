@@ -44,7 +44,7 @@ Bản phân phối được đóng gói trong file **`Etabs_Tool.iso`** ở thư
 
 ## Cập nhật
 
-Mở tab **Check for Updates** trong plugin: công cụ so sánh bản build đang chạy với commit mới nhất của file `Etabs_Tool.iso` trên GitHub và cho tải ISO mới về vị trí bạn chọn (tải về không tự cài — thay thư mục plugin bằng bản trong ISO mới như bước cài đặt).
+Mở tab **Check for Updates** trong plugin: công cụ tải file `Etabs_Tool.iso` ở commit mới nhất trên GitHub và so sánh bản build đang chạy với dấu build ghi trong **`version.txt` đóng gói bên trong chính file ISO đó** — một nguồn sự thật duy nhất, không lệch giữa code và bản phân phối. Có bản mới thì nút tải mới bật; file ISO vừa tải về để kiểm tra được dùng lại luôn cho bước tải, không phải tải hai lần. (Tải về không tự cài — thay thư mục plugin bằng bản trong ISO mới như bước cài đặt.)
 
 ## Build từ mã nguồn
 
