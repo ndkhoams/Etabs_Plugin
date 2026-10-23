@@ -86,7 +86,7 @@ namespace Etabs_Ultimate_Tools
         {
             SetBoldUnderline(ws.Cell("A4"), "Bê tông:");
 
-            string grade = $"B{fckCube:0.#}";
+            string grade = "B" + fckCube.ToString("0.#", CultureInfo.InvariantCulture);
             var gradeCell = ws.Cell("C4");
             gradeCell.Value = grade;
             gradeCell.Style.Font.Bold = true;
@@ -133,9 +133,9 @@ namespace Etabs_Ultimate_Tools
             SetBoldUnderline(ws.Cell("J4"), "Điều kiện:");
             ws.Cell("J5").Value = "ʋd = Ned/(Ac.fcd)";
             ws.Cell("J6").Value = "Cột:";
-            ws.Cell("K6").Value = $"ʋd ≤ {colLimit:0.##}";
+            ws.Cell("K6").Value = "ʋd ≤ " + colLimit.ToString("0.##", CultureInfo.InvariantCulture);
             ws.Cell("J7").Value = "Vách:";
-            ws.Cell("K7").Value = $"ʋd ≤ {wallLimit:0.##}";
+            ws.Cell("K7").Value = "ʋd ≤ " + wallLimit.ToString("0.##", CultureInfo.InvariantCulture);
         }
 
         // ── Kết luận tổng ────────────────────────────────────────────────────────

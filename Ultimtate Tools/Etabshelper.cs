@@ -1,6 +1,7 @@
 using ETABSv1;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 
 namespace Etabs_Ultimate_Tools
@@ -173,6 +174,186 @@ namespace Etabs_Ultimate_Tools
 
             ws.Style.Font.FontName = "Arial";
             ws.Style.Font.FontSize = 11;
+        }
+
+        /// <summary>
+        /// Parse số thập phân KHÔNG phụ thuộc culture của Windows (double.TryParse mặc định
+        /// theo CurrentCulture: trên Windows tiếng Việt "3.12" bị hiểu thành 312).
+        /// Chấp nhận "3.12", "3,12" và kiểu VN "1.234,5" (chấm = phân cách nghìn, phẩy = thập phân).
+        /// Chuỗi chỉ gồm các nhóm nghìn kiểu "1.000" được hiểu là 1000.
+        /// </summary>
+        public static bool TryParseNumber(string text, out double value)
+        {
+            value = 0.0;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            string s = text.Trim();
+            try
+            {
+                bool hasDot = s.IndexOf('.') >= 0;
+                bool hasComma = s.IndexOf(',') >= 0;
+                if (hasDot && hasComma)
+                    s = s.Replace(".", "").Replace(",", ".");
+                else if (hasComma)
+                    s = s.Replace(",", ".");
+                else if (hasDot && System.Text.RegularExpressions.Regex.IsMatch(
+                    s, @"^\d{1,3}(\.\d{3})+$"))
+                    s = s.Replace(".", "");
+
+                return double.TryParse(s, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
+            }
+            catch
+            {
+                value = 0.0;
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Chụp trạng thái toàn cục của phiên ETABS mà các tính năng của tool tạm thay đổi —
+    /// đơn vị hiện hành, lựa chọn case/combo xuất kết quả (Results.Setup), tùy chọn combo
+    /// nhiều giá trị, lựa chọn hiển thị của Database Tables — và khôi phục khi Dispose.
+    /// Dùng: using (new EtabsStateGuard(sap)) { ... } quanh mỗi lần chạy tính năng.
+    /// Mọi bước đều best-effort (try/catch riêng): lỗi một bước không chặn các bước còn lại,
+    /// và việc chụp trạng thái không bao giờ làm hỏng lần chạy chính.
+    /// </summary>
+    public sealed class EtabsStateGuard : IDisposable
+    {
+        private readonly cSapModel _sap;
+        private eUnits _units;
+        private bool _hasUnits;
+        private readonly List<string> _cases = new List<string>();
+        private readonly List<string> _combos = new List<string>();
+        private bool _hasSelection;
+        private int _multiValuedOption;
+        private bool _hasMultiValuedOption;
+        private string[] _dbCases;
+        private bool _hasDbCases;
+        private string[] _dbCombos;
+        private bool _hasDbCombos;
+        private bool _disposed;
+
+        public EtabsStateGuard(cSapModel sap)
+        {
+            _sap = sap;
+            if (_sap == null) return;
+
+            try
+            {
+                eUnits u = eUnits.kN_m_C;
+                if (_sap.GetPresentUnits(ref u) == 0) { _units = u; _hasUnits = true; }
+            }
+            catch { }
+
+            try
+            {
+                int n = 0;
+                string[] names = null;
+                if (_sap.LoadCases.GetNameList(ref n, ref names) == 0 && names != null)
+                {
+                    foreach (string name in names)
+                    {
+                        bool sel = false;
+                        try
+                        {
+                            if (_sap.Results.Setup.GetCaseSelectedForOutput(name, ref sel) == 0 && sel)
+                                _cases.Add(name);
+                        }
+                        catch { }
+                    }
+                }
+                n = 0; names = null;
+                if (_sap.RespCombo.GetNameList(ref n, ref names) == 0 && names != null)
+                {
+                    foreach (string name in names)
+                    {
+                        bool sel = false;
+                        try
+                        {
+                            if (_sap.Results.Setup.GetComboSelectedForOutput(name, ref sel) == 0 && sel)
+                                _combos.Add(name);
+                        }
+                        catch { }
+                    }
+                }
+                _hasSelection = true;
+            }
+            catch { }
+
+            try
+            {
+                int opt = 0;
+                if (_sap.Results.Setup.GetOptionMultiValuedCombo(ref opt) == 0)
+                { _multiValuedOption = opt; _hasMultiValuedOption = true; }
+            }
+            catch { }
+
+            try
+            {
+                int n = 0;
+                string[] list = null;
+                if (_sap.DatabaseTables.GetLoadCasesSelectedForDisplay(ref n, ref list) == 0)
+                { _dbCases = list; _hasDbCases = true; }
+            }
+            catch { }
+
+            try
+            {
+                int n = 0;
+                string[] list = null;
+                if (_sap.DatabaseTables.GetLoadCombinationsSelectedForDisplay(ref n, ref list) == 0)
+                { _dbCombos = list; _hasDbCombos = true; }
+            }
+            catch { }
+        }
+
+        public void Dispose()
+        {
+            if (_disposed || _sap == null) return;
+            _disposed = true;
+
+            if (_hasSelection)
+            {
+                try { _sap.Results.Setup.DeselectAllCasesAndCombosForOutput(); } catch { }
+                foreach (string name in _cases)
+                {
+                    try { _sap.Results.Setup.SetCaseSelectedForOutput(name); } catch { }
+                }
+                foreach (string name in _combos)
+                {
+                    try { _sap.Results.Setup.SetComboSelectedForOutput(name); } catch { }
+                }
+            }
+
+            if (_hasMultiValuedOption)
+            {
+                try { _sap.Results.Setup.SetOptionMultiValuedCombo(_multiValuedOption); } catch { }
+            }
+
+            if (_hasDbCases)
+            {
+                try
+                {
+                    string[] list = _dbCases ?? new string[0];
+                    _sap.DatabaseTables.SetLoadCasesSelectedForDisplay(ref list);
+                }
+                catch { }
+            }
+
+            if (_hasDbCombos)
+            {
+                try
+                {
+                    string[] list = _dbCombos ?? new string[0];
+                    _sap.DatabaseTables.SetLoadCombinationsSelectedForDisplay(ref list);
+                }
+                catch { }
+            }
+
+            if (_hasUnits)
+            {
+                try { _sap.SetPresentUnits(_units); } catch { }
+            }
         }
     }
 }

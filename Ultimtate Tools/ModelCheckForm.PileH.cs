@@ -149,10 +149,10 @@ namespace Etabs_Ultimate_Tools
         private static double ParseCap(object value)
         {
             if (value == null) return 0.0;
-            string s = value.ToString().Trim().Replace(",", ".");
+            // Dùng chung parser không phụ thuộc culture: "1.000" (một nghìn kiểu VN)
+            // trước đây bị hiểu thành 1.0, "1.000,5" thì parse hỏng thành 0.
             double d;
-            return double.TryParse(s, System.Globalization.NumberStyles.Float,
-                System.Globalization.CultureInfo.InvariantCulture, out d) ? d : 0.0;
+            return EtabsHelper.TryParseNumber(value.ToString(), out d) ? d : 0.0;
         }
 
         private void BuildPileHTab(TabPage tab)
@@ -618,9 +618,14 @@ namespace Etabs_Ultimate_Tools
             List<PileReactionCase> cases;
             try
             {
-                _sap.SetPresentUnits(eUnits.kN_m_C);
-                SyncPileHCapsGrid();
-                cases = BuildPileHCases();
+                // Cụm tính cọc đổi đơn vị, lựa chọn output và tùy chọn combo nhiều giá trị
+                // của ETABS -> chụp & khôi phục trạng thái sau khi chạy.
+                using (new EtabsStateGuard(_sap))
+                {
+                    _sap.SetPresentUnits(eUnits.kN_m_C);
+                    SyncPileHCapsGrid();
+                    cases = BuildPileHCases();
+                }
             }
             catch (Exception ex)
             {
@@ -662,9 +667,10 @@ namespace Etabs_Ultimate_Tools
 
             bool considerH = ConsiderPileH;
             bool anyVert = ConsiderPileTension || ConsiderPileCompression;
+            // Chỉ đếm "Không Đạt" thật — "Không xác định"/"Không có dữ liệu" không tính là trượt.
             int fail = preview.Count(p =>
-                (anyVert && !string.IsNullOrEmpty(p.Result) && p.Result.IndexOf("Không", StringComparison.OrdinalIgnoreCase) >= 0)
-                || (considerH && !string.IsNullOrEmpty(p.HResult) && p.HResult.IndexOf("Không", StringComparison.OrdinalIgnoreCase) >= 0));
+                (anyVert && string.Equals(p.Result, "Không Đạt", StringComparison.OrdinalIgnoreCase))
+                || (considerH && string.Equals(p.HResult, "Không Đạt", StringComparison.OrdinalIgnoreCase)));
 
             lblPileHInfo.Text = "Số trường hợp: " + cases.Count + "  |  Tổng dòng: " + preview.Count + "  |  Không đạt: " + fail;
             if (!string.IsNullOrWhiteSpace(PileReactionChecker.LastHorizontalReadDiagnostic))

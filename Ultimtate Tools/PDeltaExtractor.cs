@@ -33,13 +33,35 @@ namespace Etabs_Ultimate_Tools
             {
                 if (st.Height <= 0) continue;
 
-                double driftElastic = GetOrZero(drifts, st.Name);
-                double dr = q * driftElastic;
-                double vtot = GetOrZero(shears, st.Name);
+                bool hasDrift = drifts.TryGetValue(st.Name, out double driftElastic);
+                bool hasShear = shears.TryGetValue(st.Name, out double vtot);
+                double ptot = GetOrZero(pTot, st.Name);
+
+                // Thiếu bất kỳ dữ kiện nào (drift / lực cắt tầng / khối lượng) thì KHÔNG
+                // kết luận OK: ghi rõ "Không có dữ liệu" để phân biệt với tầng đạt thật.
+                // Trước đây các giá trị thiếu đều thành 0 -> theta = 0 -> "OK" sai.
+                if (!hasDrift || !hasShear || ptot <= 0)
+                {
+                    rows.Add(new PDeltaCheckRow
+                    {
+                        Direction = dir,
+                        Story = st.Name,
+                        Elevation = st.Elevation,
+                        Height = st.Height,
+                        ElasticDrift = hasDrift ? driftElastic : 0.0,
+                        DesignDrift = hasDrift ? q * driftElastic : 0.0,
+                        Ptot = ptot,
+                        Vtot = hasShear ? vtot : 0.0,
+                        Theta = 0.0,
+                        Amplification = 0.0,
+                        Conclusion = "Không có dữ liệu"
+                    });
+                    continue;
+                }
 
                 if (vtot <= 1.0) continue;
 
-                double ptot = GetOrZero(pTot, st.Name);
+                double dr = q * driftElastic;
                 double theta = ptot * dr / vtot;
 
                 rows.Add(new PDeltaCheckRow
@@ -120,12 +142,20 @@ namespace Etabs_Ultimate_Tools
             int n = 0;
             string[] story = null, caseName = null, stepType = null, dirArr = null, label = null;
             double[] stepNum = null, drift = null, x = null, y = null, z = null;
-            sap.Results.StoryDrifts(ref n, ref story, ref caseName, ref stepType,
+            int ret = sap.Results.StoryDrifts(ref n, ref story, ref caseName, ref stepType,
                 ref stepNum, ref dirArr, ref drift, ref label, ref x, ref y, ref z);
 
             var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < n; i++)
+            // API lỗi hoặc trả mảng thiếu -> coi như không có dữ liệu (nơi gọi sẽ đánh dấu
+            // "Không có dữ liệu") thay vì để tràn index / NullReference.
+            if (ret != 0 || story == null || caseName == null || dirArr == null || drift == null)
+                return result;
+
+            int count = Math.Min(n, Math.Min(story.Length,
+                Math.Min(caseName.Length, Math.Min(dirArr.Length, drift.Length))));
+            for (int i = 0; i < count; i++)
             {
+                if (story[i] == null || caseName[i] == null || dirArr[i] == null) continue;
                 if (!string.Equals(caseName[i], loadCase, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!dirArr[i].StartsWith(dir, StringComparison.OrdinalIgnoreCase)) continue;
 

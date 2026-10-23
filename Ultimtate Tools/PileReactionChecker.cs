@@ -77,6 +77,7 @@ namespace Etabs_Ultimate_Tools
             public string ComboMax = "";
             public string ComboMin = "";
             public double MaxH = -1.0;              // H lớn nhất trên mọi tổ hợp
+            public bool HExact = true;              // false khi H chỉ là cận dưới (envelope, không có step-by-step)
             public double Fx = 0.0;
             public double Fy = 0.0;
             public string ComboH = "";
@@ -147,9 +148,9 @@ namespace Etabs_Ultimate_Tools
             foreach (var pile in piles)
             {
                 double pmax, pmin, fxAbs, fyAbs;
-                bool multi;
+                bool multi, hExact;
                 if (!TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
-                    out pmax, out pmin, out fxAbs, out fyAbs, out multi))
+                    out pmax, out pmin, out fxAbs, out fyAbs, out multi, out hExact))
                     continue;
 
                 double h = Math.Sqrt(fxAbs * fxAbs + fyAbs * fyAbs);
@@ -167,7 +168,7 @@ namespace Etabs_Ultimate_Tools
                     }
                 }
 
-                string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (h <= horizCap ? "Đạt" : "Không Đạt");
+                string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (!hExact ? "Không xác định" : (h <= horizCap ? "Đạt" : "Không Đạt"));
 
                 if (multi)
                 {
@@ -238,9 +239,10 @@ namespace Etabs_Ultimate_Tools
                     fxAbs = 0.0;
                     fyAbs = 0.0;
                     bool multi;
+                    bool hExact = true;
                     bool hasReaction = considerH
                         ? TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
-                            out pmax, out pmin, out fxAbs, out fyAbs, out multi)
+                            out pmax, out pmin, out fxAbs, out fyAbs, out multi, out hExact)
                         : TryGetReactionRange(sap, pile.Name, combo, out pmax, out pmin, out multi);
                     if (!hasReaction)
                         continue;
@@ -251,7 +253,7 @@ namespace Etabs_Ultimate_Tools
                     if (pmin < a.Pmin) { a.Pmin = pmin; a.ComboMin = combo; }
 
                     double h = Math.Sqrt(fxAbs * fxAbs + fyAbs * fyAbs);
-                    if (h > a.MaxH) { a.MaxH = h; a.Fx = fxAbs; a.Fy = fyAbs; a.ComboH = combo; }
+                    if (h > a.MaxH) { a.MaxH = h; a.Fx = fxAbs; a.Fy = fyAbs; a.ComboH = combo; a.HExact = hExact; }
                 }
             }
 
@@ -275,7 +277,7 @@ namespace Etabs_Ultimate_Tools
                 }
 
                 double hVal = a.MaxH < 0 ? 0.0 : a.MaxH;
-                string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (hVal <= horizCap ? "Đạt" : "Không Đạt");
+                string hResult = horizCap <= 0 ? "Chưa nhập SCT" : (!a.HExact ? "Không xác định" : (hVal <= horizCap ? "Đạt" : "Không Đạt"));
 
                 // Cọc có thực sự chịu nén (Pmax > 0) và/hoặc chịu kéo (Pmin < 0)?
                 // Chỉ xét khi lựa chọn tương ứng đang bật.
@@ -545,13 +547,15 @@ namespace Etabs_Ultimate_Tools
         // ── Như TryGetReactionRange nhưng lấy thêm FX, FY tại step có H lớn nhất ──────────
         private static bool TryGetReactionRangeH(cSapModel sap, string pointName, string combo,
             bool correlateFxFy,
-            out double pmax, out double pmin, out double fxAbs, out double fyAbs, out bool multi)
+            out double pmax, out double pmin, out double fxAbs, out double fyAbs, out bool multi,
+            out bool hExact)
         {
             pmax = double.MinValue;
             pmin = double.MaxValue;
             fxAbs = 0.0;
             fyAbs = 0.0;
             multi = false;
+            hExact = true;
 
             int num = 0;
             string[] obj = new string[0], elm = new string[0];
@@ -588,24 +592,22 @@ namespace Etabs_Ultimate_Tools
 
                 double fx = (f1 != null && i < f1.Length) ? f1[i] : 0.0;
                 double fy = (f2 != null && i < f2.Length) ? f2[i] : 0.0;
-                if (!correlateFxFy)
+                // FX, FY luôn lấy THEO CÙNG một dòng (step) có H lớn nhất trong dữ liệu
+                // ETABS trả về — không trộn max |FX| của một dòng với max |FY| của dòng khác.
+                double hStep = Math.Sqrt(fx * fx + fy * fy);
+                if (hStep > maxH)
                 {
-                    fxAbs = Math.Max(fxAbs, Math.Abs(fx));
-                    fyAbs = Math.Max(fyAbs, Math.Abs(fy));
-                }
-                else
-                {
-                    double hStep = Math.Sqrt(fx * fx + fy * fy);
-                    if (hStep > maxH)
-                    {
-                        maxH = hStep;
-                        fxAbs = Math.Abs(fx);
-                        fyAbs = Math.Abs(fy);
-                    }
+                    maxH = hStep;
+                    fxAbs = Math.Abs(fx);
+                    fyAbs = Math.Abs(fy);
                 }
             }
 
             multi = count > 1;
+            // Không có step-by-step mà tổ hợp là envelope (nhiều dòng): FX/FY trong các
+            // dòng trả về là giá trị đồng hành của F3 max/min, H thật có thể lớn hơn giá
+            // trị tính được -> đánh dấu không chắc chắn để nơi gọi không kết luận Đạt/Không Đạt.
+            hExact = correlateFxFy || !multi;
             return pmax != double.MinValue && pmin != double.MaxValue;
         }
 
@@ -621,13 +623,13 @@ namespace Etabs_Ultimate_Tools
                 }
 
                 LastHorizontalReadDiagnostic = "ETABS từ chối chế độ step-by-step (return code " + ret +
-                    ") cho " + comboDescription + "; H được tính bảo thủ từ max |FX| và max |FY| riêng biệt.";
+                    ") cho " + comboDescription + "; H chỉ tính được từ các dòng envelope ETABS trả về (có thể thấp hơn thực tế) nên kết quả ngang được đánh dấu 'Không xác định'.";
                 return false;
             }
             catch (Exception ex)
             {
                 LastHorizontalReadDiagnostic = "Không bật được step-by-step cho " + comboDescription +
-                    ": " + ex.Message + "; H được tính bảo thủ từ max |FX| và max |FY| riêng biệt.";
+                    ": " + ex.Message + "; H chỉ tính được từ các dòng envelope ETABS trả về (có thể thấp hơn thực tế) nên kết quả ngang được đánh dấu 'Không xác định'.";
                 return false;
             }
         }

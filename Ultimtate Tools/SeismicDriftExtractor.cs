@@ -46,7 +46,7 @@ namespace Etabs_Ultimate_Tools
                     if (EtabsHelper.IsBaseLevel(st.Name)) continue;
                     if (st.Height <= 0) continue;
 
-                    double drift = drifts.TryGetValue(st.Name, out var d) ? d : 0.0;
+                    bool hasDrift = drifts.TryGetValue(st.Name, out double drift);
 
                     rows.Add(new SeismicDriftRow
                     {
@@ -59,7 +59,7 @@ namespace Etabs_Ultimate_Tools
                         Nu = nu,
                         Drift = drift,
                         LimitRatio = limitRatio,
-                        Check = allow > 0 && drift > allow ? "NG" : "OK"
+                        Check = !hasDrift || allow <= 0 ? "Không có dữ liệu" : (drift > allow ? "NG" : "OK")
                     });
                 }
             }
@@ -74,12 +74,20 @@ namespace Etabs_Ultimate_Tools
             int n = 0;
             string[] story = null, caseName = null, stepType = null, dirArr = null, label = null;
             double[] stepNum = null, drift = null, x = null, y = null, z = null;
-            sap.Results.StoryDrifts(ref n, ref story, ref caseName, ref stepType,
+            int ret = sap.Results.StoryDrifts(ref n, ref story, ref caseName, ref stepType,
                 ref stepNum, ref dirArr, ref drift, ref label, ref x, ref y, ref z);
 
             var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            for (int i = 0; i < n; i++)
+            // API lỗi hoặc trả mảng thiếu -> coi như không có dữ liệu (nơi gọi sẽ đánh dấu
+            // "Không có dữ liệu") thay vì để tràn index / NullReference.
+            if (ret != 0 || story == null || caseName == null || dirArr == null || drift == null)
+                return result;
+
+            int count = Math.Min(n, Math.Min(story.Length,
+                Math.Min(caseName.Length, Math.Min(dirArr.Length, drift.Length))));
+            for (int i = 0; i < count; i++)
             {
+                if (story[i] == null || caseName[i] == null || dirArr[i] == null) continue;
                 if (!string.Equals(caseName[i], loadCase, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!dirArr[i].StartsWith(dir, StringComparison.OrdinalIgnoreCase)) continue;
 

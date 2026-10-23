@@ -185,7 +185,11 @@ namespace Etabs_Ultimate_Tools
             int cols, piers;
             try
             {
-                _colRows = ColumnForceExporter.Compute(_sap, combos, out cols, out piers);
+                // Compute đổi đơn vị + lựa chọn output của ETABS -> chụp & khôi phục trạng thái.
+                using (new EtabsStateGuard(_sap))
+                {
+                    _colRows = ColumnForceExporter.Compute(_sap, combos, out cols, out piers);
+                }
             }
             catch (Exception ex)
             {

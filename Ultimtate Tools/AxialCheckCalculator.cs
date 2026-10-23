@@ -587,9 +587,13 @@ namespace Etabs_Ultimate_Tools
         {
             if (string.IsNullOrWhiteSpace(s)) return "";
             s = s.Trim();
-            int idx = s.IndexOfAny(new[] { '-', '@', ' ', '\t', ':' });
-            if (idx > 0) s = s.Substring(0, idx);
-            return s.Trim().ToUpperInvariant();
+            // Chỉ tách hậu tố "@<story>" nếu có (quy ước label@story ở một số đầu ra ETABS).
+            // Không cắt tại '-'/khoảng trắng/':' nữa: đó là phần tên pier thật —
+            // trước đây "V-1" và "V-2" đều bị cắt thành "V" nên bị gộp thành một pier,
+            // tra nhầm lực dọc và tiết diện của nhau.
+            int at = s.IndexOf('@');
+            if (at > 0) s = s.Substring(0, at).Trim();
+            return s.ToUpperInvariant();
         }
 
         private static string NormalizeStory(string s)

@@ -3,6 +3,7 @@ using ClosedXML.Excel;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Globalization;
 using System.Text;
 
 namespace Etabs_Ultimate_Tools
@@ -76,20 +77,24 @@ namespace Etabs_Ultimate_Tools
 
             foreach (ForceRow r in rows)
             {
+                // Số PHẢI format theo InvariantCulture (dấu chấm thập phân): file dùng
+                // dấu phẩy làm ký tự phân tách cột, format theo culture Windows tiếng Việt
+                // sẽ sinh "123,45" và làm lệch/hỏng cột khi phần mềm khác đọc.
                 string line =
-                    $"{r.Name}," +
-                    $"{r.PU:0.##}," +
-                    $"{r.MUXT:0.##}," +
-                    $"{r.MUYT:0.##}," +
-                    $"{r.MUXB:0.##}," +
-                    $"{r.MUYB:0.##}";
+                    r.Name + "," +
+                    r.PU.ToString("0.##", CultureInfo.InvariantCulture) + "," +
+                    r.MUXT.ToString("0.##", CultureInfo.InvariantCulture) + "," +
+                    r.MUYT.ToString("0.##", CultureInfo.InvariantCulture) + "," +
+                    r.MUXB.ToString("0.##", CultureInfo.InvariantCulture) + "," +
+                    r.MUYB.ToString("0.##", CultureInfo.InvariantCulture);
 
                 lines.Add(line);
             }
 
             string content = string.Join("\r\n", lines);
 
-            System.IO.File.WriteAllText(path, content, Encoding.ASCII);
+            // UTF-8 (có BOM) thay ASCII: giữ đúng tên tầng/pier tiếng Việt thay vì biến thành "?".
+            System.IO.File.WriteAllText(path, content, new UTF8Encoding(true));
         }
 
         public static void WriteExcel(List<ForceRow> rows, string path)
