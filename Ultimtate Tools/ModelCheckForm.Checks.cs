@@ -23,29 +23,36 @@ namespace Etabs_Ultimate_Tools
 
             if (!RequireCombo(cboCombo, "Check Model", "Chưa chọn tổ hợp kiểm tra.", out var combo)) return;
 
-            using (new EtabsStateGuard(_sap))
+            try
             {
-                _sap.SetPresentUnits(eUnits.kN_m_C);
-                _sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
+                using (new EtabsStateGuard(_sap))
+                {
+                    _sap.SetPresentUnits(eUnits.kN_m_C);
+                    _sap.Results.Setup.DeselectAllCasesAndCombosForOutput();
 
-                _rows = new List<PDeltaCheckRow>();
-                var displacementSource = GetDisplacementSource(cboPDeltaSource);
-                var aggregationMode = GetDiaphragmAggregationMode(cboPDeltaDiaphragmMode);
-                _rows.AddRange(PDeltaExtractor.Calculate(_sap, combo, combo, "X", q, displacementSource, aggregationMode));
-                _rows.AddRange(PDeltaExtractor.Calculate(_sap, combo, combo, "Y", q, displacementSource, aggregationMode));
-                _rows = _rows.OrderBy(r => r.Direction).ThenByDescending(r => r.Elevation).ToList();
+                    _rows = new List<PDeltaCheckRow>();
+                    var displacementSource = GetDisplacementSource(cboPDeltaSource);
+                    var aggregationMode = GetDiaphragmAggregationMode(cboPDeltaDiaphragmMode);
+                    _rows.AddRange(PDeltaExtractor.Calculate(_sap, combo, combo, "X", q, displacementSource, aggregationMode));
+                    _rows.AddRange(PDeltaExtractor.Calculate(_sap, combo, combo, "Y", q, displacementSource, aggregationMode));
+                    _rows = _rows.OrderBy(r => r.Direction).ThenByDescending(r => r.Elevation).ToList();
 
-                if (_rows.Count == 0)
-                    Warn("Không có kết quả P-Delta cho tổ hợp " + combo +
-                        ". Kiểm tra bảng Story Forces, Output Case và kết quả phân tích ETABS.", "Check Model");
+                    if (_rows.Count == 0)
+                        Warn("Không có kết quả P-Delta cho tổ hợp " + combo +
+                            ". Kiểm tra bảng Story Forces, Output Case và kết quả phân tích ETABS.", "Check Model");
 
-                dgv.DataSource = null;
-                dgv.DataSource = _rows;
+                    dgv.DataSource = null;
+                    dgv.DataSource = _rows;
 
-                if (_rows.Count > 0 && _rows.All(r => Math.Abs(r.Ptot) < 1e-9))
-                    Warn("Ptot vẫn bằng 0. Hãy kiểm tra Mass Summary by Story và model đã Run Analysis chưa.", "Check Model");
+                    if (_rows.Count > 0 && _rows.All(r => Math.Abs(r.Ptot) < 1e-9))
+                        Warn("Ptot vẫn bằng 0. Hãy kiểm tra Mass Summary by Story và model đã Run Analysis chưa.", "Check Model");
 
-                btnExport.Enabled = _rows.Count > 0;
+                    btnExport.Enabled = _rows.Count > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Warn(ex.Message, "Check Model");
             }
         }
 
@@ -54,34 +61,41 @@ namespace Etabs_Ultimate_Tools
             const double limit = 500.0;
             if (!RequireCombo(cboWindCombo, "Chuyển vị đỉnh", "Chưa chọn tổ hợp gió.", out var windCombo)) return;
 
-            using (new EtabsStateGuard(_sap))
+            try
             {
-                _sap.SetPresentUnits(eUnits.kN_m_C);
-                string baseStoryOverride = cboWindBaseStory != null && cboWindBaseStory.SelectedIndex >= 0
-                    ? cboWindBaseStory.Text
-                    : null;
-                if (string.Equals(baseStoryOverride, "(Tự động)", StringComparison.OrdinalIgnoreCase))
-                    baseStoryOverride = null;
+                using (new EtabsStateGuard(_sap))
+                {
+                    _sap.SetPresentUnits(eUnits.kN_m_C);
+                    string baseStoryOverride = cboWindBaseStory != null && cboWindBaseStory.SelectedIndex >= 0
+                        ? cboWindBaseStory.Text
+                        : null;
+                    if (string.Equals(baseStoryOverride, "(Tự động)", StringComparison.OrdinalIgnoreCase))
+                        baseStoryOverride = null;
 
-                var source = GetDisplacementSource(cboWindSource);
-                var aggregationMode = GetDiaphragmAggregationMode(cboWindDiaphragmMode);
-                _windRows = TopDisplacementExtractor.Calculate(_sap, windCombo, windCombo, limit,
-                    source, baseStoryOverride, aggregationMode);
+                    var source = GetDisplacementSource(cboWindSource);
+                    var aggregationMode = GetDiaphragmAggregationMode(cboWindDiaphragmMode);
+                    _windRows = TopDisplacementExtractor.Calculate(_sap, windCombo, windCombo, limit,
+                        source, baseStoryOverride, aggregationMode);
 
-                var displayRows = BuildWindDisplayRows(_windRows, source);
+                    var displayRows = BuildWindDisplayRows(_windRows, source);
 
-                dgvWind.DataSource = null;
-                dgvWind.DataSource = displayRows;
-                if (dgvWind.Columns.Contains("SourceName"))
-                    dgvWind.Columns["SourceName"].Visible = source == DisplacementSource.Diaphragm;
+                    dgvWind.DataSource = null;
+                    dgvWind.DataSource = displayRows;
+                    if (dgvWind.Columns.Contains("SourceName"))
+                        dgvWind.Columns["SourceName"].Visible = source == DisplacementSource.Diaphragm;
 
-                if (_windRows.Count == 0) Warn("Không có kết quả chuyển vị đỉnh cho tổ hợp " + windCombo + ". Kiểm tra bảng Displacements và kết quả phân tích ETABS.", "Chuyển vị đỉnh");
-                if (_windRows.Count > 0 && _windRows.All(r => Math.Abs(r.TopDisplacement) < 1e-12))
-                    Warn("Chuyển vị các tầng đang bằng 0. Hãy kiểm tra combo gió và bảng kết quả " +
-                        GetDisplacementSource(cboWindSource) + " Displacements trong ETABS.\n" +
-                        EtabsTableReader.LastDisplacementReadDiagnostic, "Chuyển vị đỉnh");
+                    if (_windRows.Count == 0) Warn("Không có kết quả chuyển vị đỉnh cho tổ hợp " + windCombo + ". Kiểm tra bảng Displacements và kết quả phân tích ETABS.", "Chuyển vị đỉnh");
+                    if (_windRows.Count > 0 && _windRows.All(r => Math.Abs(r.TopDisplacement) < 1e-12))
+                        Warn("Chuyển vị các tầng đang bằng 0. Hãy kiểm tra combo gió và bảng kết quả " +
+                            GetDisplacementSource(cboWindSource) + " Displacements trong ETABS.\n" +
+                            EtabsTableReader.LastDisplacementReadDiagnostic, "Chuyển vị đỉnh");
 
-                btnWindExport.Enabled = _windRows.Count > 0;
+                    btnWindExport.Enabled = _windRows.Count > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Warn(ex.Message, "Chuyển vị đỉnh");
             }
         }
 
@@ -90,23 +104,30 @@ namespace Etabs_Ultimate_Tools
             if (!RequireCombo(cboWindDriftCombo, "Chuyển vị lệch tầng", "Chưa chọn tổ hợp gió.", out var combo)) return;
             const double limitDen = WindDriftLimitDen;
 
-            using (new EtabsStateGuard(_sap))
+            try
             {
-                _sap.SetPresentUnits(eUnits.kN_m_C);
-                var aggregationMode = GetDiaphragmAggregationMode(cboWindDriftDiaphragmMode);
-                _windDriftRows = WindDriftExtractor.Calculate(_sap, combo, combo, limitDen,
-                    GetDisplacementSource(cboWindDriftSource), aggregationMode);
+                using (new EtabsStateGuard(_sap))
+                {
+                    _sap.SetPresentUnits(eUnits.kN_m_C);
+                    var aggregationMode = GetDiaphragmAggregationMode(cboWindDriftDiaphragmMode);
+                    _windDriftRows = WindDriftExtractor.Calculate(_sap, combo, combo, limitDen,
+                        GetDisplacementSource(cboWindDriftSource), aggregationMode);
 
-                var displayRows = BuildWindDriftDisplayRows(_windDriftRows, limitDen);
+                    var displayRows = BuildWindDriftDisplayRows(_windDriftRows, limitDen);
 
-                dgvWindDrift.DataSource = null;
-                dgvWindDrift.DataSource = displayRows;
+                    dgvWindDrift.DataSource = null;
+                    dgvWindDrift.DataSource = displayRows;
 
-                if (_windDriftRows.Count == 0) Warn("Không có kết quả drift cho tổ hợp gió " + combo + ". Kiểm tra bảng Story Drifts và kết quả phân tích ETABS.", "Chuyển vị lệch tầng");
-                if (_windDriftRows.Count > 0 && _windDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
-                    Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp gió và model đã Run Analysis chưa.", "Chuyển vị lệch tầng");
+                    if (_windDriftRows.Count == 0) Warn("Không có kết quả drift cho tổ hợp gió " + combo + ". Kiểm tra bảng Story Drifts và kết quả phân tích ETABS.", "Chuyển vị lệch tầng");
+                    if (_windDriftRows.Count > 0 && _windDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
+                        Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp gió và model đã Run Analysis chưa.", "Chuyển vị lệch tầng");
 
-                btnWindDriftExport.Enabled = _windDriftRows.Count > 0;
+                    btnWindDriftExport.Enabled = _windDriftRows.Count > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Warn(ex.Message, "Chuyển vị lệch tầng");
             }
         }
 
@@ -126,23 +147,30 @@ namespace Etabs_Ultimate_Tools
             }
             double limitRatio = GetSeismicLimit();
 
-            using (new EtabsStateGuard(_sap))
+            try
             {
-                _sap.SetPresentUnits(eUnits.kN_m_C);
-                var aggregationMode = GetDiaphragmAggregationMode(cboSeisDiaphragmMode);
-                _seismicDriftRows = SeismicDriftExtractor.Calculate(_sap, combo, combo, q, nu, limitRatio,
-                    GetDisplacementSource(cboSeisSource), aggregationMode);
+                using (new EtabsStateGuard(_sap))
+                {
+                    _sap.SetPresentUnits(eUnits.kN_m_C);
+                    var aggregationMode = GetDiaphragmAggregationMode(cboSeisDiaphragmMode);
+                    _seismicDriftRows = SeismicDriftExtractor.Calculate(_sap, combo, combo, q, nu, limitRatio,
+                        GetDisplacementSource(cboSeisSource), aggregationMode);
 
-                var displayRows = BuildSeismicDisplayRows(_seismicDriftRows, q, nu, limitRatio);
+                    var displayRows = BuildSeismicDisplayRows(_seismicDriftRows, q, nu, limitRatio);
 
-                dgvSeis.DataSource = null;
-                dgvSeis.DataSource = displayRows;
+                    dgvSeis.DataSource = null;
+                    dgvSeis.DataSource = displayRows;
 
-                if (_seismicDriftRows.Count == 0) Warn("Không có kết quả drift cho tổ hợp động đất " + combo + ". Kiểm tra bảng Story Drifts và kết quả phân tích ETABS.", "Chuyển vị lệch tầng (động đất)");
-                if (_seismicDriftRows.Count > 0 && _seismicDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
-                    Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp động đất và model đã Run Analysis chưa.", "Chuyển vị lệch tầng (động đất)");
+                    if (_seismicDriftRows.Count == 0) Warn("Không có kết quả drift cho tổ hợp động đất " + combo + ". Kiểm tra bảng Story Drifts và kết quả phân tích ETABS.", "Chuyển vị lệch tầng (động đất)");
+                    if (_seismicDriftRows.Count > 0 && _seismicDriftRows.All(r => Math.Abs(r.Drift) < 1e-12))
+                        Warn("Drift các tầng đang bằng 0. Hãy kiểm tra tổ hợp động đất và model đã Run Analysis chưa.", "Chuyển vị lệch tầng (động đất)");
 
-                btnSeisExport.Enabled = _seismicDriftRows.Count > 0;
+                    btnSeisExport.Enabled = _seismicDriftRows.Count > 0;
+                }
+            }
+            catch (Exception ex)
+            {
+                Warn(ex.Message, "Chuyển vị lệch tầng (động đất)");
             }
         }
 

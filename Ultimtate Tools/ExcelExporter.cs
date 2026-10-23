@@ -52,7 +52,11 @@ namespace Etabs_Ultimate_Tools
             ws.Column(1).Width = 3;
             for (int c = 2; c <= 8; c++) ws.Column(c).Width = 12;
             ws.Column(9).Width = 20;
-            ws.Rows().Height = 18;
+            // Chỉ đặt chiều cao cho vùng hàng ĐÃ DÙNG: ws.Rows() chạm tới mọi hàng của
+            // sheet (hơn 1 triệu hàng) khiến file phình và lưu chậm vô ích.
+            var usedRange = ws.RangeUsed();
+            if (usedRange != null)
+                ws.Rows(usedRange.FirstRow().RowNumber(), usedRange.LastRow().RowNumber()).Height = 18;
             ws.Row(1).Height = 21;
             ws.Row(2).Height = 18;
 
@@ -174,7 +178,14 @@ namespace Etabs_Ultimate_Tools
                 ws.Cell(r, 5).Value = x.Ptot;
                 ws.Cell(r, 6).Value = x.Vtot;
                 ws.Cell(r, 7).Value = x.Theta;
-                ws.Cell(r, 8).Value = x.Amplification;
+                // θ ≥ 1 -> Amplification = +Infinity: ClosedXML không lưu được số vô cực
+                // vào ô (lỗi khi SaveAs) nên ghi chuỗi "∞"; giá trị số nội bộ giữ nguyên.
+                if (double.IsInfinity(x.Amplification))
+                    ws.Cell(r, 8).Value = "∞";
+                else if (double.IsNaN(x.Amplification))
+                    ws.Cell(r, 8).Value = "—";
+                else
+                    ws.Cell(r, 8).Value = x.Amplification;
                 ws.Cell(r, 9).Value = ShortCheck(x.Theta);
                 r++;
             }

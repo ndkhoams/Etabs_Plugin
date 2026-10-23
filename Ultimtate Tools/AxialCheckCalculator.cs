@@ -22,6 +22,7 @@ namespace Etabs_Ultimate_Tools
         private Dictionary<string, SectionInfo> _frameSectionCache;
         private Dictionary<string, SectionInfo> _pierSectionCache;
         private Dictionary<string, double> _storyElevCache;
+        private Dictionary<string, List<string>> _pierAreaIndex;
 
         private sealed class SectionInfo
         {
@@ -63,6 +64,7 @@ namespace Etabs_Ultimate_Tools
 
             _frameSectionCache = new Dictionary<string, SectionInfo>(StringComparer.OrdinalIgnoreCase);
             _pierSectionCache = new Dictionary<string, SectionInfo>(StringComparer.OrdinalIgnoreCase);
+            _pierAreaIndex = null;
             _storyElevCache = null;
 
             HashSet<string> frameNames;
@@ -352,12 +354,42 @@ namespace Etabs_Ultimate_Tools
             return Math.Floor(value * 100.0) / 100.0;
         }
 
+        // ── Index pier -> các area mang pier đó, dựng MỘT lần cho cả lần chạy ──────
+        // Trước đây mỗi cặp (pier, tầng) thiếu cache lại quét toàn bộ area của model
+        // kèm một lời gọi GetPier cho từng area.
+        private Dictionary<string, List<string>> EnsurePierAreaIndex()
+        {
+            if (_pierAreaIndex != null) return _pierAreaIndex;
+            _pierAreaIndex = new Dictionary<string, List<string>>(StringComparer.OrdinalIgnoreCase);
+
+            int nAreas = 0;
+            string[] areaNames = new string[0];
+            if (_model.AreaObj.GetNameList(ref nAreas, ref areaNames) != 0 || areaNames == null)
+                return _pierAreaIndex;
+
+            foreach (string area in areaNames)
+            {
+                string p = "";
+                if (_model.AreaObj.GetPier(area, ref p) != 0) continue;
+                if (string.IsNullOrWhiteSpace(p)) continue;
+
+                string key = p.Trim();
+                List<string> bucket;
+                if (!_pierAreaIndex.TryGetValue(key, out bucket))
+                {
+                    bucket = new List<string>();
+                    _pierAreaIndex[key] = bucket;
+                }
+                bucket.Add(area);
+            }
+            return _pierAreaIndex;
+        }
+
         // ── Lấy tiết diện Pier từ API ─────────────────────────────────────────────
         private SectionInfo FetchPierSection(string pierName, string story)
         {
-            int nAreas = 0;
-            string[] areaNames = new string[0];
-            if (_model.AreaObj.GetNameList(ref nAreas, ref areaNames) != 0 || nAreas == 0)
+            List<string> areaNames;
+            if (!EnsurePierAreaIndex().TryGetValue(pierName ?? "", out areaNames) || areaNames.Count == 0)
                 return null;
 
             EnsureStoryElevCache();
@@ -369,9 +401,6 @@ namespace Etabs_Ultimate_Tools
 
             foreach (string area in areaNames)
             {
-                string p = "";
-                if (_model.AreaObj.GetPier(area, ref p) != 0) continue;
-                if (!string.Equals(p == null ? "" : p.Trim(), pierName, StringComparison.OrdinalIgnoreCase)) continue;
                 if (!AreaBelongsToStory(area, story)) continue;
 
                 double ac, thk, len; string mat;

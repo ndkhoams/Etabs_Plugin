@@ -615,6 +615,9 @@ namespace Etabs_Ultimate_Tools
 
         private void PreviewPileHReactions()
         {
+            // Quét lại danh sách cọc một lần cho cả lần xem trước này (các trường hợp
+            // tải bên trong dùng chung qua cache của PileReactionChecker).
+            PileReactionChecker.ClearPilePointCache();
             List<PileReactionCase> cases;
             try
             {

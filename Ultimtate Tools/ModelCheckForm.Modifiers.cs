@@ -229,10 +229,14 @@ namespace Etabs_Ultimate_Tools
                 return orientation == eFrameDesignOrientation.Column;
 
             string p1 = "", p2 = "";
-            _sap.FrameObj.GetPoints(frameName, ref p1, ref p2);
+            // Kiểm tra return code: đọc hụt điểm/tọa độ mà vẫn tính tiếp sẽ phân loại
+            // cột/dầm theo số 0 rác. Không đọc được hình học -> không kết luận là cột.
+            if (_sap.FrameObj.GetPoints(frameName, ref p1, ref p2) != 0)
+                return false;
             double xi = 0, yi = 0, zi = 0, xj = 0, yj = 0, zj = 0;
-            _sap.PointObj.GetCoordCartesian(p1, ref xi, ref yi, ref zi);
-            _sap.PointObj.GetCoordCartesian(p2, ref xj, ref yj, ref zj);
+            if (_sap.PointObj.GetCoordCartesian(p1, ref xi, ref yi, ref zi) != 0
+                || _sap.PointObj.GetCoordCartesian(p2, ref xj, ref yj, ref zj) != 0)
+                return false;
             double dx = Math.Abs(xj - xi), dy = Math.Abs(yj - yi), dz = Math.Abs(zj - zi);
             double horizontal = Math.Sqrt(dx * dx + dy * dy);
             return dz > horizontal;
@@ -248,15 +252,23 @@ namespace Etabs_Ultimate_Tools
 
             int n = 0;
             string[] pts = null;
-            _sap.AreaObj.GetPoints(areaName, ref n, ref pts);
+            // Kiểm tra return code: trước đây GetPoints lỗi -> n = 0 -> zMax - zMin thành
+            // -vô cực -> trị tuyệt đối thành +vô cực > 0.10 -> area bị xếp nhầm là vách.
+            // Không đọc được điểm -> không kết luận là vách theo hình học.
+            if (_sap.AreaObj.GetPoints(areaName, ref n, ref pts) != 0 || pts == null || n <= 0)
+                return false;
             double zMin = double.MaxValue, zMax = double.MinValue;
-            for (int i = 0; i < n; i++)
+            int read = 0;
+            for (int i = 0; i < n && i < pts.Length; i++)
             {
                 double x = 0, y = 0, z = 0;
-                _sap.PointObj.GetCoordCartesian(pts[i], ref x, ref y, ref z);
+                if (_sap.PointObj.GetCoordCartesian(pts[i], ref x, ref y, ref z) != 0)
+                    continue;
                 zMin = Math.Min(zMin, z);
                 zMax = Math.Max(zMax, z);
+                read++;
             }
+            if (read == 0) return false;
             return Math.Abs(zMax - zMin) > 0.10;
         }
 

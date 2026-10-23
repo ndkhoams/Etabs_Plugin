@@ -34,7 +34,7 @@ namespace Etabs_Ultimate_Tools
 
                 var drifts = source.HasValue
                     ? StoryDisplacementCalculator.ReadDrifts(sap, combo.Name, combo.Dir, stories, source.Value, aggregationMode)
-                    : ReadStoryDrifts(sap, combo.Name, combo.Dir);
+                    : EtabsHelper.ReadStoryDrifts(sap, combo.Name, combo.Dir);
 
                 foreach (var st in stories.OrderByDescending(s => s.Elevation))
                 {
@@ -60,36 +60,5 @@ namespace Etabs_Ultimate_Tools
             return rows;
         }
 
-        private static Dictionary<string, double> ReadStoryDrifts(
-            cSapModel sap, string loadCase, string dir)
-        {
-            EtabsHelper.SelectCaseOrCombo(sap, loadCase);
-
-            int n = 0;
-            string[] story = null, caseName = null, stepType = null, dirArr = null, label = null;
-            double[] stepNum = null, drift = null, x = null, y = null, z = null;
-            int ret = sap.Results.StoryDrifts(ref n, ref story, ref caseName, ref stepType,
-                ref stepNum, ref dirArr, ref drift, ref label, ref x, ref y, ref z);
-
-            var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
-            // API lỗi hoặc trả mảng thiếu -> coi như không có dữ liệu (nơi gọi sẽ đánh dấu
-            // "Không có dữ liệu") thay vì để tràn index / NullReference.
-            if (ret != 0 || story == null || caseName == null || dirArr == null || drift == null)
-                return result;
-
-            int count = Math.Min(n, Math.Min(story.Length,
-                Math.Min(caseName.Length, Math.Min(dirArr.Length, drift.Length))));
-            for (int i = 0; i < count; i++)
-            {
-                if (story[i] == null || caseName[i] == null || dirArr[i] == null) continue;
-                if (!string.Equals(caseName[i], loadCase, StringComparison.OrdinalIgnoreCase)) continue;
-                if (!dirArr[i].StartsWith(dir, StringComparison.OrdinalIgnoreCase)) continue;
-
-                double val = Math.Abs(drift[i]);
-                if (!result.TryGetValue(story[i], out var cur) || val > cur)
-                    result[story[i]] = val;
-            }
-            return result;
-        }
     }
 }

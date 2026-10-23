@@ -352,6 +352,12 @@ namespace Etabs_Ultimate_Tools
         public static List<Dictionary<string, string>> ReadTable(cSapModel sap, string tableKey, string outputCase)
         {
             TrySelectComboForDatabaseTables(sap, outputCase);
+            return ReadTableCore(sap, tableKey, outputCase);
+        }
+
+        // Đọc bảng với giả định combo đã được chọn cho Database Tables rồi (không chọn lại).
+        private static List<Dictionary<string, string>> ReadTableCore(cSapModel sap, string tableKey, string outputCase)
+        {
 
             string[] fieldKeyList = null;
             string groupName = "";
@@ -388,12 +394,25 @@ namespace Etabs_Ultimate_Tools
         public static List<Dictionary<string, string>> ReadTableWithFallback(
             cSapModel sap, string[] tableNames, string outputCase)
         {
+            // Chọn combo cho Database Tables MỘT lần cho cả đợt thử các tên bảng —
+            // trước đây mỗi alias lại chọn lại từ đầu (3 lệnh API × số alias).
+            try
+            {
+                TrySelectComboForDatabaseTables(sap, outputCase);
+            }
+            catch (Exception ex)
+            {
+                LastTableReadDiagnostic = "Không chọn được tổ hợp '" + outputCase +
+                    "' cho Database Tables: " + ex.Message;
+                return new List<Dictionary<string, string>>();
+            }
+
             var errors = new List<string>();
             foreach (var name in tableNames)
             {
                 try
                 {
-                    var table = ReadTable(sap, name, outputCase);
+                    var table = ReadTableCore(sap, name, outputCase);
                     if (table.Count > 0)
                     {
                         LastTableReadDiagnostic = errors.Count == 0

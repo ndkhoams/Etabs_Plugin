@@ -65,8 +65,15 @@ namespace Etabs_Ultimate_Tools
             foreach (string column in selectedColumns)
                 rows.AddRange(GetColumnForces(sap, column));
 
-            foreach (var pierItem in selectedPiers)
-                rows.AddRange(GetPierForces(sap, pierItem.Key, pierItem.Value));
+            if (selectedPiers.Count > 0)
+            {
+                // PierForce trả về kết quả của MỌI pier trong một lần gọi: gọi một lần
+                // duy nhất rồi tra cứu theo từng pier (trước đây gọi lại cho từng pier,
+                // mỗi lần API lại trả toàn bộ kết quả).
+                var pierData = ReadAllPierForces(sap);
+                foreach (var pierItem in selectedPiers)
+                    rows.AddRange(GetPierForces(pierData, pierItem.Key, pierItem.Value));
+            }
 
             return rows;
         }
@@ -348,23 +355,44 @@ namespace Etabs_Ultimate_Tools
             return rows;
         }
 
-        private static List<ForceRow> GetPierForces(cSapModel sap, string pierName, HashSet<string> selectedStories)
+        // Kết quả PierForce của toàn bộ pier (API trả tất cả trong một lần gọi).
+        private sealed class PierForceData
         {
-            List<ForceRow> rows = new List<ForceRow>();
+            public int NumberResults;
+            public string[] StoryName;
+            public string[] Pier;
+            public string[] LoadCase;
+            public string[] Location;
+            public double[] P;
+            public double[] V2;
+            public double[] V3;
+            public double[] T;
+            public double[] M2;
+            public double[] M3;
+        }
+
+        private static PierForceData ReadAllPierForces(cSapModel sap)
+        {
+            var data = new PierForceData
+            {
+                NumberResults = 0,
+                StoryName = Array.Empty<string>(),
+                Pier = Array.Empty<string>(),
+                LoadCase = Array.Empty<string>(),
+                Location = Array.Empty<string>(),
+                P = Array.Empty<double>(),
+                V2 = Array.Empty<double>(),
+                V3 = Array.Empty<double>(),
+                T = Array.Empty<double>(),
+                M2 = Array.Empty<double>(),
+                M3 = Array.Empty<double>()
+            };
 
             int numberResults = 0;
-
-            string[] storyName = Array.Empty<string>();
-            string[] pier = Array.Empty<string>();
-            string[] loadCase = Array.Empty<string>();
-            string[] location = Array.Empty<string>();
-
-            double[] p = Array.Empty<double>();
-            double[] v2 = Array.Empty<double>();
-            double[] v3 = Array.Empty<double>();
-            double[] t = Array.Empty<double>();
-            double[] m2 = Array.Empty<double>();
-            double[] m3 = Array.Empty<double>();
+            string[] storyName = data.StoryName, pier = data.Pier,
+                     loadCase = data.LoadCase, location = data.Location;
+            double[] p = data.P, v2 = data.V2, v3 = data.V3,
+                     tt = data.T, m2 = data.M2, m3 = data.M3;
 
             sap.Results.PierForce(
                 ref numberResults,
@@ -375,13 +403,40 @@ namespace Etabs_Ultimate_Tools
                 ref p,
                 ref v2,
                 ref v3,
-                ref t,
+                ref tt,
                 ref m2,
                 ref m3
             );
 
-            if (numberResults == 0)
+            data.NumberResults = numberResults;
+            data.StoryName = storyName;
+            data.Pier = pier;
+            data.LoadCase = loadCase;
+            data.Location = location;
+            data.P = p;
+            data.V2 = v2;
+            data.V3 = v3;
+            data.T = tt;
+            data.M2 = m2;
+            data.M3 = m3;
+            return data;
+        }
+
+        private static List<ForceRow> GetPierForces(PierForceData data, string pierName, HashSet<string> selectedStories)
+        {
+            List<ForceRow> rows = new List<ForceRow>();
+
+            if (data == null || data.NumberResults == 0)
                 return rows;
+
+            int numberResults = data.NumberResults;
+            string[] storyName = data.StoryName;
+            string[] pier = data.Pier;
+            string[] loadCase = data.LoadCase;
+            string[] location = data.Location;
+            double[] p = data.P;
+            double[] m2 = data.M2;
+            double[] m3 = data.M3;
 
             var groups = Enumerable.Range(0, numberResults)
                 .Where(i =>

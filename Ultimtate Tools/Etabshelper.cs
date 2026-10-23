@@ -182,6 +182,41 @@ namespace Etabs_Ultimate_Tools
         /// Chấp nhận "3.12", "3,12" và kiểu VN "1.234,5" (chấm = phân cách nghìn, phẩy = thập phân).
         /// Chuỗi chỉ gồm các nhóm nghìn kiểu "1.000" được hiểu là 1000.
         /// </summary>
+        /// <summary>
+        /// Đọc Story Drifts cho một case/combo + phương, trả về map tầng -> max |drift|.
+        /// Hàm dùng chung cho cả 3 extractor P-Delta / Seismic / Wind Drift (trước đây mỗi
+        /// file giữ một bản sao riêng). API lỗi hoặc mảng thiếu -> map rỗng (nơi gọi sẽ
+        /// đánh dấu tầng là "Không có dữ liệu").
+        /// </summary>
+        public static Dictionary<string, double> ReadStoryDrifts(cSapModel sap, string loadCase, string dir)
+        {
+            SelectCaseOrCombo(sap, loadCase);
+
+            int n = 0;
+            string[] story = null, caseName = null, stepType = null, dirArr = null, label = null;
+            double[] stepNum = null, drift = null, x = null, y = null, z = null;
+            int ret = sap.Results.StoryDrifts(ref n, ref story, ref caseName, ref stepType,
+                ref stepNum, ref dirArr, ref drift, ref label, ref x, ref y, ref z);
+
+            var result = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+            if (ret != 0 || story == null || caseName == null || dirArr == null || drift == null)
+                return result;
+
+            int count = Math.Min(n, Math.Min(story.Length,
+                Math.Min(caseName.Length, Math.Min(dirArr.Length, drift.Length))));
+            for (int i = 0; i < count; i++)
+            {
+                if (story[i] == null || caseName[i] == null || dirArr[i] == null) continue;
+                if (!string.Equals(caseName[i], loadCase, StringComparison.OrdinalIgnoreCase)) continue;
+                if (!dirArr[i].StartsWith(dir, StringComparison.OrdinalIgnoreCase)) continue;
+
+                double val = Math.Abs(drift[i]);
+                if (!result.TryGetValue(story[i], out var cur) || val > cur)
+                    result[story[i]] = val;
+            }
+            return result;
+        }
+
         public static bool TryParseNumber(string text, out double value)
         {
             value = 0.0;

@@ -81,6 +81,20 @@ namespace Etabs_Ultimate_Tools
             public double Fx = 0.0;
             public double Fy = 0.0;
             public string ComboH = "";
+            public string Error = "";   // lỗi đọc phản lực đầu tiên gặp (nếu có)
+        }
+
+        // Cache danh sách cọc cho MỘT lần chạy giao diện: GetPilePoints quét toàn bộ
+        // point của model (nhiều lời gọi API cho mỗi point) nên không quét lại cho từng
+        // trường hợp tải / từng lần đọc loại cọc trong cùng một lần Preview.
+        // Form gọi ClearPilePointCache() ở đầu mỗi lần Preview để luôn làm mới.
+        private static List<PilePoint> _pilePointCache;
+        private static cSapModel _pilePointCacheSap;
+
+        public static void ClearPilePointCache()
+        {
+            _pilePointCache = null;
+            _pilePointCacheSap = null;
         }
 
         // ── Liệt kê các loại point spring khai báo trong model (= loại cọc) ──────
@@ -149,8 +163,18 @@ namespace Etabs_Ultimate_Tools
             {
                 double pmax, pmin, fxAbs, fyAbs;
                 bool multi, hExact;
-                if (!TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
-                    out pmax, out pmin, out fxAbs, out fyAbs, out multi, out hExact))
+                bool hasReaction;
+                try
+                {
+                    hasReaction = TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
+                        out pmax, out pmin, out fxAbs, out fyAbs, out multi, out hExact);
+                }
+                catch (Exception)
+                {
+                    // Lỗi đọc phản lực của riêng cọc này -> bỏ qua, giữ các cọc còn lại.
+                    continue;
+                }
+                if (!hasReaction)
                     continue;
 
                 double h = Math.Sqrt(fxAbs * fxAbs + fyAbs * fyAbs);
@@ -240,10 +264,22 @@ namespace Etabs_Ultimate_Tools
                     fyAbs = 0.0;
                     bool multi;
                     bool hExact = true;
-                    bool hasReaction = considerH
-                        ? TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
-                            out pmax, out pmin, out fxAbs, out fyAbs, out multi, out hExact)
-                        : TryGetReactionRange(sap, pile.Name, combo, out pmax, out pmin, out multi);
+                    bool hasReaction;
+                    try
+                    {
+                        hasReaction = considerH
+                            ? TryGetReactionRangeH(sap, pile.Name, combo, correlateFxFy,
+                                out pmax, out pmin, out fxAbs, out fyAbs, out multi, out hExact)
+                            : TryGetReactionRange(sap, pile.Name, combo, out pmax, out pmin, out multi);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Một cọc lỗi đọc phản lực KHÔNG được làm mất cả lần kiểm tra:
+                        // ghi lại lỗi của cọc đó rồi tiếp tục các cọc còn lại.
+                        var aggErr = agg[pile.Name];
+                        if (string.IsNullOrEmpty(aggErr.Error)) aggErr.Error = ex.Message;
+                        continue;
+                    }
                     if (!hasReaction)
                         continue;
 
@@ -261,7 +297,21 @@ namespace Etabs_Ultimate_Tools
             foreach (var pile in piles)
             {
                 var a = agg[pile.Name];
-                if (!a.HasData) continue;
+                if (!a.HasData)
+                {
+                    if (!string.IsNullOrEmpty(a.Error))
+                    {
+                        rows.Add(new PileReactionRow
+                        {
+                            PileType = ResolveType(pile),
+                            PileId = pile.Label,
+                            Combo = "—",
+                            Result = "Lỗi đọc phản lực",
+                            HResult = "Lỗi đọc phản lực"
+                        });
+                    }
+                    continue;
+                }
 
                 string type = ResolveType(pile);
                 double tensCap = 0, compCap = 0, horizCap = 0;
@@ -420,6 +470,9 @@ namespace Etabs_Ultimate_Tools
         // ── Lấy danh sách điểm có gán point spring (= cọc) ─────────────────────
         private static List<PilePoint> GetPilePoints(cSapModel sap)
         {
+            if (_pilePointCache != null && ReferenceEquals(_pilePointCacheSap, sap))
+                return _pilePointCache;
+
             var list = new List<PilePoint>();
 
             int n = 0;
@@ -470,6 +523,8 @@ namespace Etabs_Ultimate_Tools
                 });
             }
 
+            _pilePointCache = list;
+            _pilePointCacheSap = sap;
             return list;
         }
 
