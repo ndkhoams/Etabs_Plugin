@@ -51,7 +51,7 @@ Mở tab **Check for Updates** trong plugin: công cụ tải file `Etabs_Tool.i
 1. Cần **Visual Studio 2022** và **ETABS 22 đã cài** trên máy (project tham chiếu `ETABSv1.dll` theo đường dẫn cài đặt mặc định `C:\Program Files\Computers and Structures\ETABS 22\`).
 2. Mở solution `Ultimtate Tools/Etabs_Ultimate_Tools.slnx`, build (F6) cấu hình Debug hoặc Release. DLL kết quả nằm trong `Ultimtate Tools/bin/<cấu hình>/`.
 3. Project là SDK-style, target `net48`, thư viện xuất báo cáo dùng ClosedXML 0.102.2 (NuGet tự restore).
-4. Mỗi lần build, csproj **tự đóng dấu thời gian build** vào hằng `currentBuild` trong `ModelCheckForm.Update.cs` (định dạng `yyyyMMdd-HHmmss`) — đây là "phiên bản" hiển thị trên tiêu đề form và dùng cho tab cập nhật. Không sửa tay hằng này.
+4. Mỗi lần build, csproj **tự đóng dấu thời gian build** vào hằng `currentBuild` trong `ModelCheckForm.Update.cs` (định dạng `yyyyMMdd-HHmmss`) — đây là "phiên bản" hiển thị trên tiêu đề form và dùng cho tab cập nhật. Không sửa tay hằng này. Đồng thời csproj tự xuất file **`version.txt`** (chứa đúng dấu build đó) vào thư mục output cạnh DLL — khi đóng gói ISO, nhặt kèm file này vào thư mục gốc của ISO (xem mục Cập nhật).
 
 ## Cấu trúc thư mục
 
