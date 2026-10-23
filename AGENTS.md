@@ -5,7 +5,7 @@ Tài liệu cho các agent/người cùng phát triển plugin **Etabs Ultimate 
 ## Giao tiếp & quyền ghi
 
 - Giao tiếp với chủ repo (owner) bằng **tiếng Việt**, ngắn gọn, kèm bằng chứng kiểm chứng cho mỗi kết quả (commit, trạng thái build...).
-- Repo này **KHÔNG có pre-approval**: mọi thao tác ghi lên GitHub (push, sửa file, đổi settings) phải được owner duyệt trước từng lần. Chỉ đọc/audit thì tự do.
+- Owner đã cấp **pre-approval cho repo này** (từ 2026-10-23): agent được push trực tiếp, không cần hỏi duyệt trước từng lần. Điều kiện đi kèm: commit chỉ chứa đúng thay đổi thuộc phạm vi công việc đã thống nhất, và sau mỗi lần push phải báo lại cho owner kèm bằng chứng kiểm chứng (commit/blob SHA, trạng thái build). Các thao tác ngoài push thông thường (xóa branch, đổi settings repo, ghi đè lịch sử...) vẫn phải hỏi trước.
 - Khi sửa lỗi: xác nhận đúng hàm/hành vi từ dữ kiện thật (đọc source, dữ liệu ETABS) trước khi kết luận — không đoán. Sửa xong phải rà soát **cả lớp lỗi tương tự** ở các file khác (ví dụ lỗi parse số theo culture thường lặp ở nhiều nơi).
 
 ## Bố cục repo — không tự ý đổi
