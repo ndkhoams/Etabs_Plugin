@@ -240,8 +240,9 @@ namespace Etabs_Ultimate_Tools
 
             try
             {
-                eUnits u = eUnits.kN_m_C;
-                if (_sap.GetPresentUnits(ref u) == 0) { _units = u; _hasUnits = true; }
+                // ETABS 22: GetPresentUnits() không có tham số, trả eUnits trực tiếp.
+                _units = _sap.GetPresentUnits();
+                _hasUnits = true;
             }
             catch { }
 
@@ -317,11 +318,11 @@ namespace Etabs_Ultimate_Tools
                 try { _sap.Results.Setup.DeselectAllCasesAndCombosForOutput(); } catch { }
                 foreach (string name in _cases)
                 {
-                    try { _sap.Results.Setup.SetCaseSelectedForOutput(name); } catch { }
+                    try { _sap.Results.Setup.SetCaseSelectedForOutput(name, true); } catch { }
                 }
                 foreach (string name in _combos)
                 {
-                    try { _sap.Results.Setup.SetComboSelectedForOutput(name); } catch { }
+                    try { _sap.Results.Setup.SetComboSelectedForOutput(name, true); } catch { }
                 }
             }
 
