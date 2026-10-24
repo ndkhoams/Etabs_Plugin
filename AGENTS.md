@@ -13,7 +13,7 @@ Tài liệu cho các agent/người cùng phát triển plugin **Etabs Ultimate 
 - Toàn bộ mã nguồn nằm trong thư mục **`Ultimtate Tools/`** (tên thư mục viết sai chính tả "Ultimtate" là lịch sử của repo — **không đổi tên**, solution/csproj và quy trình phân phối đang dựa vào nó).
 - Thư mục gốc chỉ gồm: `Etabs_Tool.iso` (bản phân phối), `README.md`, `AGENTS.md`, `.gitignore`.
 - **Không đổi tên**: class `cPlugin` và method `Main` (điểm vào ETABS nạp plugin), các public class/row type, tên 9 tab, tên sheet Excel và định dạng các file xuất ra (text lực cột...) — người dùng và phần mềm ngoài đang dựa vào chúng.
-- **Không sửa tay** hằng `currentBuild` trong `ModelCheckForm.Update.cs`: target `StampPluginBuildTimestamp` trong csproj tự ghi lại dấu thời gian mỗi lần build.
+- Hằng `currentBuild` (dấu thời gian build) **không còn nằm trong source**: target `StampPluginBuildTimestamp` trong csproj tự sinh file `BuildStamp.g.cs` trong `obj/` (thư mục gitignore) mỗi lần build — không sửa tay file sinh này, và build không còn làm bẩn cây làm việc (không còn chuyện phải Undo trước khi pull).
 - **Không đổi cơ chế cập nhật**: tab Check for Updates lấy commit mới nhất của `Etabs_Tool.iso` trên GitHub (GitHub API), tải ISO tại đúng commit đó và so bản build đang chạy với **`version.txt` đóng gói ở thư mục gốc bên trong ISO** (ISO cũ chưa có version.txt thì lùi về so theo ngày commit của file ISO). Phát hành bản mới = build → đóng gói ISO mới — bên trong **bắt buộc có `version.txt`** ở thư mục gốc: file này được csproj **tự xuất vào thư mục output cạnh DLL sau mỗi lần build** (target `WritePluginVersionFile`, chứa đúng dấu build `yyyyMMdd-HHmmss` của lần build đó), khi đóng gói chỉ cần nhặt kèm file có sẵn trong `bin/<cấu hình>/` — đè lên `Etabs_Tool.iso` ở root → push. Đóng gói thiếu version.txt là lỗi quy trình phát hành.
 
 ## Build & chuẩn "xong"
@@ -23,7 +23,7 @@ Tài liệu cho các agent/người cùng phát triển plugin **Etabs Ultimate 
 - Agent **có thể build kiểm chứng biên dịch** trên Linux (đã làm được ngày 2026-10-23) theo đúng công thức sau, và chỉ trên **bản sao** của project — tuyệt đối không sửa csproj gốc để phục vụ việc này:
   1. Cài .NET SDK 8 (gói tarball chính thức, giải nén bằng `tar --no-same-owner`; script `dotnet-install.sh` từng lỗi trên máy này).
   2. Lấy file `ETABSv1.dll` từ owner (DLL trong thư mục cài ETABS 22 của owner) — không tự chế/không dùng DLL lạ.
-  3. Trên bản sao: trỏ `HintPath` của reference ETABSv1 sang DLL đó, thêm `PackageReference Microsoft.NETFramework.ReferenceAssemblies 1.0.3` (PrivateAssets=all), gỡ target `StampPluginBuildTimestamp` (cần powershell.exe của Windows).
+  3. Trên bản sao: trỏ `HintPath` của reference ETABSv1 sang DLL đó, thêm `PackageReference Microsoft.NETFramework.ReferenceAssemblies 1.0.3` (PrivateAssets=all). (Từ 2026-10-24, target `StampPluginBuildTimestamp` đã dùng task MSBuild thuần và chạy được trên Linux, không còn cần gỡ.)
   4. `dotnet build` cả Debug và Release phải đạt 0 lỗi / 0 cảnh báo trước khi push.
 
 ## Quy tắc đúng số liệu (bài học từ audit 2026-10-23 — bắt buộc)

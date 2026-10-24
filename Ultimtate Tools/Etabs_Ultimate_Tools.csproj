@@ -34,7 +34,14 @@
     <WriteLinesToFile File="$(TargetDir)version.txt" Lines="$(PluginBuildTimestamp)" Overwrite="true" Encoding="UTF-8" />
   </Target>
 
+  <!-- Dấu build KHÔNG còn ghi vào file nguồn (từng gây "Cannot pull" sau mỗi
+       lần build): target này sinh file BuildStamp.g.cs trong obj/ (gitignore)
+       chứa đúng khai báo currentBuild cũ, code dùng nó không đổi gì. -->
   <Target Name="StampPluginBuildTimestamp" BeforeTargets="CoreCompile">
-    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -Command &quot;$path = '$(MSBuildProjectDirectory)\ModelCheckForm.Update.cs'; $text = [System.IO.File]::ReadAllText($path); $pattern = '(?m)(private const string currentBuild = \x22)[^\x22]*(\x22;)'; $match = [System.Text.RegularExpressions.Regex]::Match($text, $pattern); if (-not $match.Success) { throw 'Could not find currentBuild timestamp declaration.' }; $replacement = '${1}$(PluginBuildTimestamp)${2}'; $updated = [System.Text.RegularExpressions.Regex]::Replace($text, $pattern, $replacement); [System.IO.File]::WriteAllText($path, $updated, [System.Text.UTF8Encoding]::new($false))&quot;" />
+    <WriteLinesToFile File="$(IntermediateOutputPath)BuildStamp.g.cs" Lines="namespace Etabs_Ultimate_Tools { public partial class ModelCheckForm { private const string currentBuild = &quot;$(PluginBuildTimestamp)&quot;%3B } }" Overwrite="true" Encoding="UTF-8" />
   </Target>
+
+  <ItemGroup>
+    <Compile Include="$(IntermediateOutputPath)BuildStamp.g.cs" />
+  </ItemGroup>
 </Project>

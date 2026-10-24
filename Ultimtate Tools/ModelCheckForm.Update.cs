@@ -20,7 +20,6 @@ namespace Etabs_Ultimate_Tools
         private const string UpdateFilePath = "Etabs_Tool.iso";
         private const string UpdateBranch = "main";
         private const string UpdateVersionFileName = "version.txt";
-        private const string currentBuild = "20261010-091008";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
         // Trạng thái của lần kiểm tra cập nhật gần nhất: chỉ bật nút Tải khi ISO trên
