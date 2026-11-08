@@ -22,7 +22,7 @@ namespace EtabsLoadAssigner.Plugin;
 /// LAYOUT GON (user chot 08/11, sau anh chup build 20261108-184715):
 ///   - Thanh tren: file / Sheet / Diem / profile — dung TableLayoutPanel,
 ///     moi control can giua doc trong hang (thang hang, can doi).
-///   - Thanh duoi CO DINH: Joint ETABS + GÁN (luon thay, khong can cuon).
+///   - Thanh duoi CO DINH: bang Joint ETABS + GÁN (luon thay, khong can cuon).
 ///   - Vung cuon giua: ten diem (tieu de bang) -> thanh nut Goi y / Lam
 ///     moi pattern -> bang noi luc (gom ca 2 cot Match pattern ngay sau
 ///     cot Tai: Pattern gia tri 1 / gia tri 2) -> Phuong & chieu (1 hang
@@ -35,11 +35,13 @@ namespace EtabsLoadAssigner.Plugin;
 ///   - Gan 1 diem 1 luc. Diem gan = diem dang chon o dropdown "Điểm" tren
 ///     thanh tren (cung la diem grid dang hien) — KHONG co dropdown chon
 ///     diem rieng o muc Diem gan tai.
-///   - Joint dich chon tu DROPDOWN "Joint ETABS" (liet ke joint trong model
-///     kem toa do) hoac nut "Lấy điểm đang chọn" (joint da chon truoc khi
-///     mo plugin). KHONG co nut "Chọn điểm trong ETABS": form plugin la
-///     MODAL (ShowDialog) nen du an form chinh, ETABS van bi khoa — user
-///     khong click/chon duoc joint trong model (da user-verify 08/11).
+///   - Joint dich chon 1 dong trong BANG "Joint ETABS" o thanh duoi (chi
+///     liet ke joint DANG CHON trong ETABS — khong phai toan bo joint cua
+///     model, user chot 08/11). Mo plugin len la bang nap san joint dang
+///     chon; nut "Lấy điểm đang chọn" nap lai tu ETABS. KHONG co nut
+///     "Chọn điểm trong ETABS": form plugin la MODAL (ShowDialog) nen du
+///     an form chinh, ETABS van bi khoa — user khong click/chon duoc joint
+///     trong model (da user-verify 08/11).
 ///   - Match 2 cot: trai = gia tri 1, phai = gia tri 2 (chi khi o co 2
 ///     gia tri); chi pattern co san trong model — tool KHONG tu tao pattern.
 ///   - Khong co che do Mock/Offline o UI — plugin chi lam viec voi file
@@ -72,8 +74,8 @@ public sealed class MainForm : Form
 {
     private readonly IEtabsApi _liveApi;
     private IEtabsApi _etabs; // Luon la model ETABS dang mo — khong co che do Mock o UI (user chot 08/11).
-    // Joint dich lay tu dropdown Joint ETABS / nut "Lấy điểm đang chọn"
-    // (ten that, khong phai alias go tay).
+    // Joint dich lay tu BANG Joint ETABS (chi joint dang chon trong ETABS)
+    // / nut "Lấy điểm đang chọn" (ten that, khong phai alias go tay).
     private string _targetJointName = "";
     private string _targetJointLabel = "";
 
@@ -81,9 +83,8 @@ public sealed class MainForm : Form
     private Profile _profile = new();
     private bool _updatingSheet;
     private bool _updatingGrid; // Chan de quy khi CellValueChanged chuan hoa lai o vua sua.
-    private bool _updatingJoint; // Chan de quy khi SetTargetJoint chon lai combo joint.
     private bool _uiReady; // Chi cho luu profile mac dinh sau khi constructor xong (tranh ghi de profile cu luc khoi tao).
-    private List<PointInfo> _jointList = new();
+    private List<PointInfo> _jointList = new(); // Joint dang chon trong ETABS (hien trong bang Joint).
 
     // --- Profile mac dinh: thu muc chua plug-in, fallback AppData ---
     private static string PluginFolder
@@ -122,7 +123,15 @@ public sealed class MainForm : Form
         ColumnHeadersHeight = 36,
     };
 
-    private readonly ComboBox _jointCombo = new() { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
+    // Bang Joint ETABS (user chot 08/11, anh build 20261108-192326): chi
+    // liet ke joint DANG CHON trong ETABS (khong phai toan bo joint cua
+    // model). User chon 1 dong de gan tai tren bang noi luc.
+    private readonly DataGridView _jointGrid = new()
+    {
+        Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
+        RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+        MultiSelect = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+    };
 
     private readonly Dictionary<string, (ComboBox Axis, ComboBox Sign)> _axisControls = new();
 
@@ -147,6 +156,21 @@ public sealed class MainForm : Form
         // Gia tri pattern trong profile co the khong con trong model ETABS
         // (model doi) — hien o do thay vi nem loi khi set gia tri cell.
         _grid.DataError += (_, e) => { e.ThrowException = false; };
+        // Bang Joint ETABS: cot Name / Label / X / Y / Z. Chon 1 dong = chon
+        // joint dich de gan tai tren bang noi luc.
+        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Name", FillWeight = 18 });
+        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Label", HeaderText = "Label", FillWeight = 18 });
+        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "X", HeaderText = "X", FillWeight = 21 });
+        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Y", HeaderText = "Y", FillWeight = 21 });
+        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Z", HeaderText = "Z", FillWeight = 22 });
+        _jointGrid.SelectionChanged += (_, _) =>
+        {
+            if (_jointGrid.SelectedRows.Count == 0)
+                return;
+            int i = _jointGrid.SelectedRows[0].Index;
+            if (i >= 0 && i < _jointList.Count)
+                SetTargetJoint(_jointList[i]);
+        };
         // Mo form len: keo dai bang noi luc cho kin vung cuon.
         Load += (_, _) => LayoutGridHeight();
         TryAutoLoadProfile();
@@ -217,37 +241,41 @@ public sealed class MainForm : Form
         // Cua so doi kich thuoc -> keo dai bang noi luc cho kin vung cuon.
         _scrollPanel.Resize += (_, _) => LayoutGridHeight();
 
-        // Thanh duoi CO DINH (ngoai vung cuon): Joint ETABS + GÁN luon thay, khong can cuon.
-        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44 };
-        var bottomFlow = new FlowLayoutPanel
+        // Thanh duoi CO DINH (ngoai vung cuon): bang Joint ETABS + GÁN luon
+        // thay, khong can cuon. Bang Joint chi liet ke joint DANG CHON trong
+        // ETABS (user chot 08/11 — khong phai toan bo joint cua model);
+        // chon 1 dong trong bang = chon joint dich de gan.
+        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 140 };
+        var bottomLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
+        bottomLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F)); // Bang Joint (gian)
+        bottomLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nut
+        var jointPanel = new Panel { Dock = DockStyle.Fill };
+        jointPanel.Controls.Add(_jointGrid); // Fill truoc
+        jointPanel.Controls.Add(new Label
         {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
+            Text = "Joint ETABS — chỉ joint đang chọn trong ETABS (chọn 1 dòng để gán):",
+            Dock = DockStyle.Top, AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+        });
+        bottomLayout.Controls.Add(jointPanel, 0, 0);
+        var btnPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
             WrapContents = false, AutoSize = false,
         };
-        bottomFlow.Controls.Add(new Label { Text = "Joint ETABS:", AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
-        _jointCombo.DropDownWidth = 450; // Hien du Name/Label/toa do trong dropdown.
-        _jointCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_updatingJoint)
-                return;
-            int i = _jointCombo.SelectedIndex;
-            if (i >= 0 && i < _jointList.Count)
-                SetTargetJoint(_jointList[i]);
-        };
-        bottomFlow.Controls.Add(_jointCombo);
         var selBtn = new Button { Text = "Lấy điểm đang chọn", AutoSize = true };
         selBtn.Click += (_, _) => UseSelectedPoint();
-        bottomFlow.Controls.Add(selBtn);
+        btnPanel.Controls.Add(selBtn);
         _replaceCheck.CheckedChanged += (_, _) => SaveDefaultProfile();
-        bottomFlow.Controls.Add(_replaceCheck);
+        btnPanel.Controls.Add(_replaceCheck);
         var assignBtn = new Button
         {
             Text = "GÁN VÀO ETABS", AutoSize = true,
             Font = new Font("Segoe UI", 10F, FontStyle.Bold),
         };
         assignBtn.Click += (_, _) => Assign();
-        bottomFlow.Controls.Add(assignBtn);
-        bottom.Controls.Add(bottomFlow);
+        btnPanel.Controls.Add(assignBtn);
+        bottomLayout.Controls.Add(btnPanel, 1, 0);
+        bottom.Controls.Add(bottomLayout);
 
         // Them Fill truoc, roi Top/Bottom — Fill lay phan con lai.
         Controls.Add(_scrollPanel);
@@ -751,7 +779,7 @@ public sealed class MainForm : Form
             var pats = _etabs.PatternNames();
             var pts = _etabs.ListPoints();
             _statusLabel.Text = $"ETABS: {pats.Count} pattern, {pts.Count} point.";
-            RefreshJointCombo();
+            RefreshJointGrid();
             RefreshPatternColumns();
         }
         catch (Exception ex)
@@ -761,51 +789,51 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Nap dropdown Joint ETABS: tat ca joint trong model, xep theo Z (thap
-    /// truoc — joint mong o duoi), roi X, Y. Hien Name/Label/toa do de user
-    /// nhan ra joint can gan (vd joint o giao 92/D.1). Giu lai joint dang
-    /// chon neu van con trong model.
+    /// Nap bang Joint ETABS: chi joint DANG CHON trong ETABS (user chot
+    /// 08/11 — khong phai toan bo joint cua model), xep theo Z (thap truoc
+    /// — joint mong o duoi), roi X, Y. Cot Name / Label / X / Y / Z de user
+    /// nhan ra joint can gan (vd joint o giao 92/D.1). Giu lai dong joint
+    /// dang chon neu van con trong danh sach.
     /// </summary>
-    private void RefreshJointCombo()
-    {
-        List<PointInfo> pts;
-        try { pts = _etabs.ListPoints(); }
-        catch (Exception ex)
-        {
-            _statusLabel.Text = $"Không lấy được danh sách point từ ETABS: {ex.Message}";
-            return;
-        }
-        _jointList = pts.OrderBy(p => p.Z).ThenBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Name).ToList();
-        string cur = _targetJointName;
-        _updatingJoint = true;
-        try
-        {
-            _jointCombo.Items.Clear();
-            foreach (var p in _jointList)
-                _jointCombo.Items.Add($"Name='{p.Name}'  Label='{p.Label}'  ({p.X:0.##}, {p.Y:0.##}, {p.Z:0.##})");
-            int idx = cur == "" ? -1 : _jointList.FindIndex(p => p.Name == cur);
-            _jointCombo.SelectedIndex = idx;
-        }
-        finally { _updatingJoint = false; }
-    }
-
-    private void UseSelectedPoint()
+    private void RefreshJointGrid()
     {
         List<PointInfo> sel;
         try { sel = _etabs.GetSelectedPoints(); }
         catch (Exception ex)
         {
-            MessageBox.Show(this, ex.Message, "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            _statusLabel.Text = $"Không lấy được joint đang chọn từ ETABS: {ex.Message}";
             return;
         }
-        if (sel.Count == 0)
+        _jointList = sel.OrderBy(p => p.Z).ThenBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Name).ToList();
+        string cur = _targetJointName;
+        _jointGrid.Rows.Clear();
+        foreach (var p in _jointList)
+            _jointGrid.Rows.Add(p.Name, p.Label, p.X.ToString("0.##"), p.Y.ToString("0.##"), p.Z.ToString("0.##"));
+        int idx = cur == "" ? -1 : _jointList.FindIndex(p => p.Name == cur);
+        if (idx >= 0)
+        {
+            _jointGrid.Rows[idx].Selected = true;
+            _jointGrid.FirstDisplayedScrollingRowIndex = idx;
+        }
+        if (_jointList.Count == 0)
+            _statusLabel.Text = "Chưa chọn joint nào trong ETABS — chọn joint trong model trước khi mở plugin (bảng Joint chỉ liệt kê joint đang chọn).";
+    }
+
+    private void UseSelectedPoint()
+    {
+        // Nap lai bang Joint tu joint dang chon trong ETABS (moi chon them
+        // joint thi dong plugin roi mo lai, hoac bam nut nay de nap lai).
+        RefreshJointGrid();
+        if (_jointList.Count == 0)
         {
             MessageBox.Show(this,
-                "Chưa chọn joint nào trong ETABS.\nChọn 1 joint trong model ETABS trước khi mở plugin rồi bấm lại — hoặc chọn joint ở dropdown 'Joint ETABS' bên dưới.",
+                "Chưa chọn joint nào trong ETABS.\nChọn joint trong model ETABS trước khi mở plugin rồi bấm lại.",
                 "Chưa chọn điểm", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        SetTargetJoint(sel[0]);
+        // Mac dinh chon dong dau tien (neu chua co joint dich).
+        if (_targetJointName == "" || !_jointList.Any(p => p.Name == _targetJointName))
+            SetTargetJoint(_jointList[0]);
     }
 
     private void SetTargetJoint(PointInfo p)
@@ -813,17 +841,19 @@ public sealed class MainForm : Form
         _targetJointName = p.Name;
         _targetJointLabel = p.Label;
         _statusLabel.Text = $"Đã chọn joint ETABS: Name='{p.Name}' Label='{p.Label}' ({p.X:0.##}, {p.Y:0.##}, {p.Z:0.##}).";
-        // Dong bo dropdown Joint ETABS (neu joint co trong danh sach).
-        _updatingJoint = true;
-        try
+        // Dong bo dong dang chon trong bang Joint (neu joint co trong bang).
+        // Chi doi selection khi dong hien tai khong phai joint nay — tranh
+        // de quy SelectionChanged -> SetTargetJoint -> SelectionChanged...
+        int idx = _jointList.FindIndex(x => x.Name == p.Name);
+        if (idx >= 0 && idx < _jointGrid.Rows.Count)
         {
-            int idx = _jointList.FindIndex(x => x.Name == p.Name);
-            if (idx >= 0)
-                _jointCombo.SelectedIndex = idx;
-            else
-                _jointCombo.SelectedIndex = -1;
+            bool already = _jointGrid.SelectedRows.Count == 1 && _jointGrid.SelectedRows[0].Index == idx;
+            if (!already)
+            {
+                _jointGrid.ClearSelection();
+                _jointGrid.Rows[idx].Selected = true;
+            }
         }
-        finally { _updatingJoint = false; }
     }
 
     private (string? Point, string? Joint, BuildResult? Result) CurrentResult()
@@ -845,7 +875,7 @@ public sealed class MainForm : Form
         }
         if (_targetJointName == "")
         {
-            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nChọn joint ở dropdown 'Joint ETABS' bên dưới (hoặc chọn joint trong model trước khi mở plugin rồi bấm 'Lấy điểm đang chọn').",
+            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nChọn 1 dòng trong bảng 'Joint ETABS' bên dưới (hoặc chọn joint trong model trước khi mở plugin rồi bấm 'Lấy điểm đang chọn').",
                 "Chưa chọn joint", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return (null, null, null);
         }
