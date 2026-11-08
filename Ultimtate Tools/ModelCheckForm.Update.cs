@@ -16,7 +16,7 @@ namespace Etabs_Ultimate_Tools
         // nhat — csproj tu dong dong dau moi lan build (target
         // UpdateBuildTimestamp), title bar hien dung gia tri nay, va buoc
         // kiem tra lay gia tri moi nhat tu chinh file nay tren GitHub.
-        private const string BuildTimestamp = "20261109-004631";
+        private const string BuildTimestamp = "20261108-231923";
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
