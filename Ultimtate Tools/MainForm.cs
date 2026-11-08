@@ -25,20 +25,22 @@ namespace EtabsLoadAssigner.Plugin;
 ///     can doi). Nut "File gần nhất" mo lai file Excel mo lan cuoi (luu
 ///     duong dan vao file text nho canh DLL). KHONG co nut "Nhận diện
 ///     bảng" (thua — mo file Excel la tu nhan dien).
-///   - Thanh duoi CO DINH: Joint ETABS + Luu match + GÁN (luon thay, khong
-///     can cuon). Dropdown Joint list rong bang chinh combo (khong dat
-///     DropDownWidth rieng). Dropdown Joint dung de "Thêm điểm" vao bang
-///     load point — khong con la dich gan truc tiep nua (user chot 08/11).
-///   - Vung cuon giua: hang tieu de (2 nut chuyen bang + nut "Thêm điểm" +
-///     ten diem) -> bang noi luc / bang load point (gom ca 2 cot Match
-///     pattern ngay sau cot Tai: Pattern gia tri 1 / gia tri 2) -> Phuong
-///     & chieu (cao 80 — tang them de chu khoi bi sat).
+///   - Thanh duoi: KHONG CON (user chot 08/11 — cum nut Ghi de + "Lưu data
+///     và Excel" + "GÁN VÀO ETABS" chuyen len hang tieu de de tiet kiem
+///     dien tich). Dropdown Joint ETABS don cung da xoa (joint chon truc
+///     tiep trong bang load point).
+///   - Vung cuon giua: hang tieu de (trai: 2 nut chuyen bang + "Thêm điểm"
+///     + "Làm trắng bảng"; phai: Ghi de + "Lưu data và Excel" + "GÁN VÀO
+///     ETABS"; giua: ten diem) -> bang noi luc / bang load point (gom ca 2
+///     cot Match pattern ngay sau cot Tai: Pattern gia tri 1 / gia tri 2)
+///     -> Phuong & chieu (cao 80 — tang them de chu khoi bi sat).
 ///   - GAN HANG LOAT (user chot 08/11): nut GÁN gan TAT CA cap (Diem Excel
 ///     -> Joint ETABS) trong bang load point, moi diem dung chung profile
 ///     match pattern + phuong/chieu. Chuyen bang bang 2 nut o hang tieu de
 ///     ("Bảng load pattern" / "Bảng load point"); them diem vao bang bang
-///     nut "Thêm điểm" (lay cap Điểm + Joint dang chon o 2 dropdown) hoac
-///     go truc tiep trong bang (chon Diem Excel va Joint ETABS o tung dong).
+///     nut "Thêm điểm" (lay Diem Excel dang chon o dropdown tren, cot Joint
+///     de trong de chon trong bang) hoac go truc tiep trong bang; nut "Làm
+///     trắng bảng" xoa het dong de gan luot moi.
 ///   - KHONG co box thong tin file (user chot 08/11 — xoa).
 ///     KHONG co Preview box / nut Xem preview / Xuat preview (.txt).
 ///     GÁN xong chi hien thong bao so luong (so lieu da thay trong grid).
@@ -101,19 +103,12 @@ public sealed class MainForm : Form
 {
     private readonly IEtabsApi _liveApi;
     private IEtabsApi _etabs; // Luon la model ETABS dang mo — khong co che do Mock o UI (user chot 08/11).
-    // Joint dich lay tu DROPDOWN Joint ETABS (chi joint dang chon trong
-    // ETABS) (ten that, khong phai alias go tay). Dropdown nay dung de
-    // "Thêm điểm" vao bang load point (gan hang loat) — khong con la dich
-    // gan truc tiep nua (user chot 08/11).
-    private string _targetJointName = "";
-
     private FoundationTable? _table;
     private Profile _profile = new();
     private bool _updatingSheet;
     private bool _updatingGrid; // Chan de quy khi CellValueChanged chuan hoa lai o vua sua.
-    private bool _updatingJoint; // Chan de quy khi SetTargetJoint chon lai dropdown joint.
     private bool _uiReady; // Chi cho luu profile mac dinh sau khi constructor xong (tranh ghi de profile cu luc khoi tao).
-    private List<PointInfo> _jointList = new(); // Joint dang chon trong ETABS (hien trong bang Joint).
+    private List<PointInfo> _jointList = new(); // Joint dang chon trong ETABS (nap vao cot Joint o bang load point).
 
     // --- File Excel mo lan cuoi (nut chon nhanh, user chot 08/11) ---
     // Luu duong dan file Excel mo lan cuoi vao file text nho canh DLL
@@ -214,11 +209,6 @@ public sealed class MainForm : Form
         Visible = false,
     };
 
-    // Dropdown chon joint dich (user chot 08/11, anh build 20261108-193900):
-    // chi liet ke joint DANG CHON trong ETABS (khong phai toan bo joint cua
-    // model). User chon 1 joint trong dropdown de gan tai tren bang noi luc.
-    private readonly ComboBox _jointCombo = new() { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
-
     private readonly Dictionary<string, (ComboBox Axis, ComboBox Sign)> _axisControls = new();
 
     private readonly CheckBox _replaceCheck = new() { Text = "Xoá trắng tải cũ tại điểm này trước khi gán", Checked = true, AutoSize = true };
@@ -242,18 +232,6 @@ public sealed class MainForm : Form
         // Gia tri pattern trong profile co the khong con trong model ETABS
         // (model doi) — hien o do thay vi nem loi khi set gia tri cell.
         _grid.DataError += (_, e) => { e.ThrowException = false; };
-        // Dropdown Joint ETABS: chi joint DANG CHON trong ETABS. Chon 1 joint
-        // trong dropdown = chon joint dich de gan tai tren bang noi luc.
-        // Dropdown list rong bang chinh combo (user chot 08/11 — khong dat
-        // DropDownWidth rieng, de khoi lech nhau).
-        _jointCombo.SelectedIndexChanged += (_, _) =>
-        {
-            if (_updatingJoint)
-                return;
-            int i = _jointCombo.SelectedIndex;
-            if (i >= 0 && i < _jointList.Count)
-                SetTargetJoint(_jointList[i]);
-        };
         // Mo form len: keo dai bang noi luc cho kin vung cuon.
         Load += (_, _) => LayoutGridHeight();
         UpdateEtabsStatus();
@@ -263,7 +241,7 @@ public sealed class MainForm : Form
     // ---------------- UI ----------------
     // MOT VIEW DUY NHAT (user chot 2026-11-08): toan bo chuc nang nam trong
     // 1 panel cuon doc duy nhat, KHONG chia tab con, KHONG mo dialog phu.
-    // Thanh duoi (Joint + GÁN) co dinh ngoai vung cuon de luon thay.
+    // Cum nut GÁN (Ghi de + Luu + GÁN) nam o hang tieu de, luon thay.
     private void BuildUi()
     {
         // Thanh tren: TableLayoutPanel 1 hang — moi control can giua doc
@@ -315,64 +293,54 @@ public sealed class MainForm : Form
         _gridPanel.Controls.Add(_pointGrid);
         _axisSection = BuildSectionAxis();
 
-        // Hang tieu de (user chot 08/11 — 2 nut chuyen bang o trai, ten diem
-        // o giua): "Bảng load pattern" = bang match pattern hien tai;
-        // "Bảng load point" = bang phu (Diem Excel -> Joint ETABS) de gan
-        // nhieu diem 1 luc. Nut "Thêm điểm" them cap (Điểm, Joint) dang chon
-        // o 2 dropdown vao bang load point.
-        _titleBar = new Panel { Dock = DockStyle.Top, Height = 30 };
-        var patternBtn = new Button { Text = "Bảng load pattern", Dock = DockStyle.Left, AutoSize = true };
-        patternBtn.Click += (_, _) => ShowPatternGrid();
-        var pointBtn = new Button { Text = "Bảng load point", Dock = DockStyle.Left, AutoSize = true };
-        pointBtn.Click += (_, _) => ShowPointGrid();
+        // Hang tieu de (user chot 08/11): trai = 2 nut chuyen bang + "Thêm
+        // điểm" + "Làm trắng bảng"; phai = Ghi de + "Lưu data và Excel" +
+        // "GÁN VÀO ETABS" (cum nut duoi cu chuyen len day de tiet kiem dien
+        // tich — bo han thanh duoi, user chot 08/11); giua = ten diem.
+        // (Dock Left: them sau thi nam trai hon; Dock Right: them sau thi
+        // nam phai hon; label Fill them truoc de gian phan con lai.)
+        _titleBar = new Panel { Dock = DockStyle.Top, Height = 34 };
+        _titleBar.Controls.Add(_pointTitleLabel);
+        var clearBtn = new Button { Text = "Làm trắng bảng", Dock = DockStyle.Left, AutoSize = true };
+        clearBtn.Click += (_, _) => ClearPointGrid();
+        _titleBar.Controls.Add(clearBtn);
         var addPointBtn = new Button { Text = "Thêm điểm", Dock = DockStyle.Left, AutoSize = true };
         addPointBtn.Click += (_, _) => AddCurrentPointToPointGrid();
-        _titleBar.Controls.Add(_pointTitleLabel);
         _titleBar.Controls.Add(addPointBtn);
+        var pointBtn = new Button { Text = "Bảng load point", Dock = DockStyle.Left, AutoSize = true };
+        pointBtn.Click += (_, _) => ShowPointGrid();
         _titleBar.Controls.Add(pointBtn);
+        var patternBtn = new Button { Text = "Bảng load pattern", Dock = DockStyle.Left, AutoSize = true };
+        patternBtn.Click += (_, _) => ShowPatternGrid();
         _titleBar.Controls.Add(patternBtn);
+        _replaceCheck.Dock = DockStyle.Right;
+        _titleBar.Controls.Add(_replaceCheck);
+        var saveBtn = new Button { Text = "Lưu data và Excel", Dock = DockStyle.Right, AutoSize = true };
+        saveBtn.Click += (_, _) => SaveMatchToExcel();
+        _titleBar.Controls.Add(saveBtn);
+        var assignBtn = new Button
+        {
+            Text = "GÁN VÀO ETABS", Dock = DockStyle.Right, AutoSize = true,
+            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+        };
+        assignBtn.Click += (_, _) => Assign();
+        _titleBar.Controls.Add(assignBtn);
 
         _scrollPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         // Them theo thu tu nguoc (section cuoi them truoc) de hien dung thu tu tren->duoi:
-        // hang tieu de (nut chuyen bang + ten diem) -> bang noi luc / bang load point -> Phuong & chieu.
-        // (Thanh nut tren bang da bo — nut "Lưu data và Excel" chuyen
-        // xuong thanh duoi, canh nut GÁN, user chot 08/11.)
+        // hang tieu de (nut chuyen bang + ten diem + cum nut GÁN) -> bang noi luc / bang load point -> Phuong & chieu.
+        // (Thanh duoi da bo — cum nut Ghi de/Lưu/GÁN chuyen len hang tieu de, user chot 08/11.)
         _scrollPanel.Controls.Add(_axisSection);
         _scrollPanel.Controls.Add(_gridPanel);
         _scrollPanel.Controls.Add(_titleBar);
         // Cua so doi kich thuoc -> keo dai bang noi luc cho kin vung cuon.
         _scrollPanel.Resize += (_, _) => LayoutGridHeight();
 
-        // Thanh duoi CO DINH (ngoai vung cuon): Joint ETABS + Luu match + GÁN
-        // luon thay, khong can cuon. Dropdown Joint chi liet ke joint DANG
-        // CHON trong ETABS (user chot 08/11 — khong phai toan bo joint cua
-        // model); chon 1 joint trong dropdown = chon joint dich de gan.
-        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44 };
-        var bottomFlow = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
-            WrapContents = false, AutoSize = false,
-        };
-        bottomFlow.Controls.Add(new Label { Text = "Joint ETABS:", AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
-        bottomFlow.Controls.Add(_jointCombo);
-        bottomFlow.Controls.Add(_replaceCheck);
-        var saveBtn = new Button { Text = "Lưu data và Excel", AutoSize = true };
-        saveBtn.Click += (_, _) => SaveMatchToExcel();
-        bottomFlow.Controls.Add(saveBtn);
-        var assignBtn = new Button
-        {
-            Text = "GÁN VÀO ETABS", AutoSize = true,
-            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-        };
-        assignBtn.Click += (_, _) => Assign();
-        bottomFlow.Controls.Add(assignBtn);
-        bottom.Controls.Add(bottomFlow);
-
-        // Them Fill truoc, roi Top/Bottom — Fill lay phan con lai.
+        // Them Fill truoc, roi Top — Fill lay phan con lai. (Khong con thanh
+        // duoi — cum nut GÁN da len hang tieu de.)
         Controls.Add(_scrollPanel);
         Controls.Add(_statusLabel);
         Controls.Add(top);
-        Controls.Add(bottom);
     }
 
     /// <summary>
@@ -410,8 +378,8 @@ public sealed class MainForm : Form
         RefreshPointGrid();
         int n = PointGridMappings().Count;
         _pointTitleLabel.Text = n == 0
-            ? "Bảng load point — thêm điểm (chọn Điểm + Joint rồi bấm “Thêm điểm”, hoặc gõ trực tiếp trong bảng)."
-            : $"Bảng load point — {n} điểm sẽ gán 1 lúc.";
+            ? "Bảng load point — chưa có điểm nào."
+            : $"Bảng load point — {n} điểm.";
     }
 
     /// <summary>
@@ -491,36 +459,58 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Them cap (Điểm dang chon o dropdown tren, Joint dang chon o dropdown
-    /// duoi) vao bang load point. Trung diem thi bao va khong them.
+    /// Them 1 dong moi vao bang load point: lay Diem Excel dang chon o
+    /// dropdown "Điểm" tren thanh tren (neu co), cot Joint de trong de user
+    /// chon trong bang. Trung diem thi bao va khong them. (Dropdown Joint
+    //  ETABS don da xoa — joint chon truc tiep trong bang load point, user
+    /// chot 08/11.)
     /// </summary>
     private void AddCurrentPointToPointGrid()
     {
         string point = _pointViewCombo.Text;
-        string joint = _targetJointName;
-        if (_table is null || point == "" || !_table.Points.Contains(point))
+        if (_table is null)
         {
-            MessageBox.Show(this, "Chọn điểm Excel cần gán ở dropdown “Điểm” trên thanh trên trước.",
-                "Chưa chọn điểm", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        if (joint == "")
-        {
-            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nChọn joint trong model ETABS trước khi mở plugin, rồi chọn 1 joint ở dropdown 'Joint ETABS' bên dưới.",
-                "Chưa chọn joint", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            MessageBox.Show(this, "Import file trước.", "Chưa có bảng",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         RefreshPointGrid();
-        foreach (var (pt, _) in PointGridMappings())
+        if (point != "" && _table.Points.Contains(point))
         {
-            if (pt == point)
+            foreach (var (pt, _) in PointGridMappings())
             {
-                MessageBox.Show(this, $"Điểm '{point}' đã có trong bảng load point rồi.",
-                    "Trùng điểm", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
+                if (pt == point)
+                {
+                    MessageBox.Show(this, $"Điểm '{point}' đã có trong bảng load point rồi.",
+                        "Trùng điểm", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    ShowPointGrid();
+                    return;
+                }
             }
+            _pointGrid.Rows.Add(point, "");
         }
-        _pointGrid.Rows.Add(point, JointDisplay(_jointList.First(p => p.Name == joint)));
+        else
+        {
+            _pointGrid.Rows.Add("", "");
+        }
+        ShowPointGrid();
+    }
+
+    /// <summary>
+    /// Lam trang bang load point (user chot 08/11 — de gan luot moi): xoa
+    /// het dong da nhap trong bang. Co xac nhan vi la thao tac pha huy.
+    /// </summary>
+    private void ClearPointGrid()
+    {
+        if (PointGridMappings().Count == 0 && _pointGrid.Rows.Count <= 1)
+        {
+            ShowPointGrid();
+            return; // Bang da trang.
+        }
+        if (MessageBox.Show(this, "Xoá hết các điểm trong bảng load point để gán lượt mới?",
+                "Làm trắng bảng", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            return;
+        _pointGrid.Rows.Clear();
         ShowPointGrid();
     }
 
@@ -1030,11 +1020,11 @@ public sealed class MainForm : Form
     /// <summary>
     /// Nap bang Joint ETABS: chi joint DANG CHON trong ETABS (user chot
     /// <summary>
-    /// Nap dropdown Joint ETABS: chi joint DANG CHON trong ETABS (user chot
+    /// Nap danh sach joint ETABS: chi joint DANG CHON trong ETABS (user chot
     /// 08/11 — khong phai toan bo joint cua model), xep theo Z (thap truoc
-    /// — joint mong o duoi), roi X, Y. Hien Name/Label/toa do de user nhan ra
-    /// joint can gan (vd joint o giao 92/D.1). Giu lai joint dang chon neu
-    /// van con trong danh sach.
+    /// — joint mong o duoi), roi X, Y. Danh sach nay nap vao cot Joint o
+    /// bang load point (chon joint truc tiep trong bang — dropdown Joint don
+    /// da xoa, user chot 08/11).
     /// </summary>
     private void RefreshJointCombo()
     {
@@ -1046,38 +1036,10 @@ public sealed class MainForm : Form
             return;
         }
         _jointList = sel.OrderBy(p => p.Z).ThenBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Name).ToList();
-        string cur = _targetJointName;
-        _updatingJoint = true;
-        try
-        {
-            _jointCombo.Items.Clear();
-            foreach (var p in _jointList)
-                _jointCombo.Items.Add(JointDisplay(p));
-            int idx = cur == "" ? -1 : _jointList.FindIndex(p => p.Name == cur);
-            _jointCombo.SelectedIndex = idx;
-        }
-        finally { _updatingJoint = false; }
         if (_jointList.Count == 0)
-            _statusLabel.Text = "Chưa chọn joint nào trong ETABS — chọn joint trong model trước khi mở plugin (dropdown Joint chỉ liệt kê joint đang chọn).";
+            _statusLabel.Text = "Chưa chọn joint nào trong ETABS — chọn joint trong model trước khi mở plugin (cột Joint ở bảng load point chỉ liệt kê joint đang chọn).";
         else
             RefreshPointGrid(); // Cap nhat cot Joint o bang load point.
-    }
-
-    private void SetTargetJoint(PointInfo p)
-    {
-        _targetJointName = p.Name;
-        _statusLabel.Text = $"Đã chọn joint ETABS: Name='{p.Name}' Label='{p.Label}' ({p.X:0.##}, {p.Y:0.##}, {p.Z:0.##}).";
-        // Dong bo dropdown Joint ETABS (neu joint co trong danh sach).
-        _updatingJoint = true;
-        try
-        {
-            int idx = _jointList.FindIndex(x => x.Name == p.Name);
-            if (idx >= 0)
-                _jointCombo.SelectedIndex = idx;
-            else
-                _jointCombo.SelectedIndex = -1;
-        }
-        finally { _updatingJoint = false; }
     }
 
     /// <summary>
