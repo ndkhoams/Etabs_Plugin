@@ -19,13 +19,16 @@ namespace EtabsLoadAssigner.Plugin;
 /// (Truoc day dung TabControl 5 tab nhung header tab khong hien duoc tren
 /// ETABS, ca dang embed lan dialog, nen user khong thay/bam duoc tab 2-5.)
 ///
-/// LAYOUT GON (user chot 08/11, sau anh chup build 20261108-171010):
-///   - Thanh tren: file / Sheet / Diem / profile. Thanh duoi CO DINH:
-///     Joint ETABS + GÁN (luon thay, khong can cuon).
-///   - Vung cuon giua: ten diem (tieu de bang) -> bang noi luc -> Match
-///     pattern (ngay duoi bang, cung vung lam viec) -> Phuong & chieu
-///     (1 hang ngang, chi set 1 lan) -> thong tin file.
-///   - KHONG co Preview box / nut Xem preview / Xuat preview (.txt).
+/// LAYOUT GON (user chot 08/11, sau anh chup build 20261108-184715):
+///   - Thanh tren: file / Sheet / Diem / profile — dung TableLayoutPanel,
+///     moi control can giua doc trong hang (thang hang, can doi).
+///   - Thanh duoi CO DINH: Joint ETABS + GÁN (luon thay, khong can cuon).
+///   - Vung cuon giua: ten diem (tieu de bang) -> thanh nut Goi y / Lam
+///     moi pattern -> bang noi luc (gom ca 2 cot Match pattern ngay sau
+///     cot Tai: Pattern gia tri 1 / gia tri 2) -> Phuong & chieu (1 hang
+///     ngang, chi set 1 lan).
+///   - KHONG co box thong tin file (user chot 08/11 — xoa).
+///     KHONG co Preview box / nut Xem preview / Xuat preview (.txt).
 ///     GÁN xong chi hien thong bao so luong (so lieu da thay trong grid).
 ///
 /// QUY TAC GAN (user chot 08/11):
@@ -37,15 +40,18 @@ namespace EtabsLoadAssigner.Plugin;
 ///     mo plugin). KHONG co nut "Chọn điểm trong ETABS": form plugin la
 ///     MODAL (ShowDialog) nen du an form chinh, ETABS van bi khoa — user
 ///     khong click/chon duoc joint trong model (da user-verify 08/11).
-///   - Match 2 cot: trai = gia tri nho, phai = gia tri lon; chi pattern co
-///     san trong model — tool KHONG tu tao pattern.
+///   - Match 2 cot: trai = gia tri 1, phai = gia tri 2 (chi khi o co 2
+///     gia tri); chi pattern co san trong model — tool KHONG tu tao pattern.
 ///   - Khong co che do Mock/Offline o UI — plugin chi lam viec voi file
 ///     dang mo. Khong co vi du dien giai o Phuong & chieu.
 ///
 /// BANG NOI LUC (user chot 08/11, theo anh mau "85 / E.2"):
 ///   - Ten diem la TIEU DE rieng tren bang (khong ghi chung vao header cot).
-///   - Cot chi la: Tải | Hx [kN] | Hy [kN] | Vz [kN] (don vi [kN] o dong
-///     thu 2 cua header, nhu anh mau).
+///   - Cot: Tải | Pattern — giá trị 1 (trái) | Pattern — giá trị 2 (phải)
+///     | Hx [kN] | Hy [kN] | Vz [kN] (don vi [kN] o dong thu 2 cua header,
+///     nhu anh mau). 2 cot Pattern nam ngay sau cot Tai (user chot 08/11,
+///     anh build 20261108-184715) — moi dong tai hien luon pattern cua no,
+///     khong can panel Match rieng ben duoi bang.
 ///
 /// PROFILE MAC DINH (user chot 08/11): tu luu + tu doc trong THU MUC CHUA
 /// PLUG-IN (file LoadAssignerProfile.json canh file DLL). Mo plugin len la
@@ -70,7 +76,6 @@ public sealed class MainForm : Form
     private Profile _profile = new();
     private bool _updatingSheet;
     private bool _updatingGrid; // Chan de quy khi CellValueChanged chuan hoa lai o vua sua.
-    private bool _updatingMatch; // Chan luu profile khi RefreshMatchTab dung lai combo.
     private bool _updatingJoint; // Chan de quy khi SetTargetJoint chon lai combo joint.
     private bool _uiReady; // Chi cho luu profile mac dinh sau khi constructor xong (tranh ghi de profile cu luc khoi tao).
     private List<PointInfo> _jointList = new();
@@ -111,19 +116,10 @@ public sealed class MainForm : Form
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
         ColumnHeadersHeight = 36,
     };
-    private readonly TextBox _fileInfoBox = new() { Dock = DockStyle.Top, Height = 80, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
 
     private readonly ComboBox _jointCombo = new() { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
 
     private readonly Dictionary<string, (ComboBox Axis, ComboBox Sign)> _axisControls = new();
-
-    private readonly FlowLayoutPanel _matchPanel = new()
-    {
-        Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
-        WrapContents = false, AutoScroll = true,
-    };
-    // Match 2 cot: moi dong tai -> (combo cot trai, combo cot phai).
-    private readonly Dictionary<string, (ComboBox Left, ComboBox Right)> _patternControls = new();
 
     private readonly CheckBox _replaceCheck = new() { Text = "Ghi đè tải cũ cùng pattern tại điểm này", Checked = true, AutoSize = true };
 
@@ -136,6 +132,9 @@ public sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
         BuildUi();
         _grid.CellValueChanged += Grid_CellValueChanged;
+        // Gia tri pattern trong profile co the khong con trong model ETABS
+        // (model doi) — hien o do thay vi nem loi khi set gia tri cell.
+        _grid.DataError += (_, e) => { e.ThrowException = false; };
         TryAutoLoadProfile();
         UpdateEtabsStatus();
         _uiReady = true;
@@ -147,26 +146,46 @@ public sealed class MainForm : Form
     // Thanh duoi (Joint + GÁN) co dinh ngoai vung cuon de luon thay.
     private void BuildUi()
     {
-        var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
-        var browseBtn = new Button { Text = "Chọn file Excel...", AutoSize = true };
+        // Thanh tren: TableLayoutPanel 1 hang — moi control can giua doc
+        // trong o cua no (thang hang, can doi). Cot duong dan file gian
+        // theo chieu rong con lai; cac cot khac vua noi dung.
+        var top = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 9, RowCount = 1,
+            Padding = new Padding(3, 3, 3, 3),
+        };
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Chon file
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F)); // Duong dan (gian)
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan Sheet
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo Sheet
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan Diem
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo Diem
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan dien
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Tai profile
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Luu profile
+        top.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var browseBtn = new Button { Text = "Chọn file Excel...", AutoSize = true, Anchor = AnchorStyles.None };
         browseBtn.Click += (_, _) => ChooseFile();
-        top.Controls.Add(browseBtn);
-        top.Controls.Add(_fileTextBox);
-        top.Controls.Add(new Label { Text = "Sheet:", AutoSize = true });
+        top.Controls.Add(browseBtn, 0, 0);
+        _fileTextBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
+        top.Controls.Add(_fileTextBox, 1, 0);
+        top.Controls.Add(new Label { Text = "Sheet:", AutoSize = true, Anchor = AnchorStyles.None }, 2, 0);
+        _sheetCombo.Anchor = AnchorStyles.None;
         _sheetCombo.SelectedIndexChanged += (_, _) => { if (!_updatingSheet) Detect(); };
-        top.Controls.Add(_sheetCombo);
-        top.Controls.Add(new Label { Text = "Điểm:", AutoSize = true });
+        top.Controls.Add(_sheetCombo, 3, 0);
+        top.Controls.Add(new Label { Text = "Điểm:", AutoSize = true, Anchor = AnchorStyles.None }, 4, 0);
+        _pointViewCombo.Anchor = AnchorStyles.None;
         _pointViewCombo.SelectedIndexChanged += (_, _) => RefreshGrid();
-        top.Controls.Add(_pointViewCombo);
-        var detectBtn = new Button { Text = "Nhận diện bảng", AutoSize = true };
+        top.Controls.Add(_pointViewCombo, 5, 0);
+        var detectBtn = new Button { Text = "Nhận diện bảng", AutoSize = true, Anchor = AnchorStyles.None };
         detectBtn.Click += (_, _) => Detect();
-        top.Controls.Add(detectBtn);
-        var loadBtn = new Button { Text = "Tải profile...", AutoSize = true };
+        top.Controls.Add(detectBtn, 6, 0);
+        var loadBtn = new Button { Text = "Tải profile...", AutoSize = true, Anchor = AnchorStyles.None };
         loadBtn.Click += (_, _) => LoadProfile();
-        top.Controls.Add(loadBtn);
-        var saveBtn = new Button { Text = "Lưu profile...", AutoSize = true };
+        top.Controls.Add(loadBtn, 7, 0);
+        var saveBtn = new Button { Text = "Lưu profile...", AutoSize = true, Anchor = AnchorStyles.None };
         saveBtn.Click += (_, _) => SaveProfile();
-        top.Controls.Add(saveBtn);
+        top.Controls.Add(saveBtn, 8, 0);
         _statusLabel.Text = "Chưa import file.";
         _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel rồi bấm “Nhận diện bảng”.";
         var gridPanel = new Panel { Dock = DockStyle.Top, Height = 300 };
@@ -174,11 +193,10 @@ public sealed class MainForm : Form
 
         var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         // Them theo thu tu nguoc (section cuoi them truoc) de hien dung thu tu tren->duoi:
-        // ten diem -> bang noi luc -> Match pattern -> Phuong & chieu -> thong tin file.
-        scroll.Controls.Add(_fileInfoBox);
+        // ten diem -> thanh nut Goi y / Lam moi -> bang noi luc (gom cot Pattern) -> Phuong & chieu.
         scroll.Controls.Add(BuildSectionAxis());
-        scroll.Controls.Add(BuildSectionMatch());
         scroll.Controls.Add(gridPanel);
+        scroll.Controls.Add(BuildMatchToolbar());
         scroll.Controls.Add(_pointTitleLabel);
 
         // Thanh duoi CO DINH (ngoai vung cuon): Joint ETABS + GÁN luon thay, khong can cuon.
@@ -259,16 +277,11 @@ public sealed class MainForm : Form
         return box;
     }
 
-    private GroupBox BuildSectionMatch()
+    private Panel BuildMatchToolbar()
     {
-        // Match 2 cot (user chot 08/11): cot trai = pattern nhan gia tri nho
-        // (gia tri don / min khoang / -V hang +/-); cot phai = pattern nhan
-        // gia tri lon (max khoang / +V hang +/-). Dong khong co +/- chi can
-        // cot trai. Chi liet ke pattern CO SAN trong model — tool KHONG tu
-        // tao pattern (bo checkbox tu tao, bo 'Hang +/-', bo 'O khoang').
-        // Dat ngay duoi bang noi luc (cung vung lam viec tren cung).
-        var box = new GroupBox { Text = "Match pattern", Dock = DockStyle.Top, Height = 320 };
-        box.Controls.Add(_matchPanel);
+        // Thanh nut Goi y / Lam moi pattern — dat ngay tren bang noi luc
+        // (2 cot Pattern da nam trong grid, ngay sau cot Tai). Khong con
+        // panel Match rieng ben duoi bang (user chot 08/11).
         var bar = new Panel { Dock = DockStyle.Top, Height = 36 };
         var suggestBtn = new Button { Text = "Gợi ý tự động tất cả", Location = new Point(0, 4), AutoSize = true };
         suggestBtn.Click += (_, _) => AutoSuggestAll();
@@ -278,11 +291,10 @@ public sealed class MainForm : Form
         bar.Controls.Add(refreshBtn);
         bar.Controls.Add(new Label
         {
-            Text = "Gợi ý theo tên — CHỈ LÀ GỢI Ý, bạn chốt lại từng dòng. Pattern phải có sẵn trong model ETABS.",
+            Text = "Gợi ý theo tên — CHỈ LÀ GỢI Ý, bạn chốt lại từng dòng trong cột Pattern của bảng. Pattern phải có sẵn trong model ETABS.",
             Location = new Point(300, 8), AutoSize = true,
         });
-        box.Controls.Add(bar);
-        return box;
+        return bar;
     }
 
     // ---------------- logic (port app.py) ----------------
@@ -300,8 +312,20 @@ public sealed class MainForm : Form
                 default: _profile.Axis.VzAxis = axis; _profile.Axis.VzSign = s; break;
             }
         }
-        _profile.PatternMap = _patternControls.ToDictionary(kv => kv.Key,
-            kv => new RowPattern { Left = kv.Value.Left.Text, Right = kv.Value.Right.Text });
+        // Pattern: doc tu 2 cot Pattern trong grid (neu grid dang hien bang);
+        // neu grid chua co bang thi giu PatternMap hien tai (tranh xoa match
+        // khi doi diem hoac chua chon diem).
+        if (_table is not null && _grid.Columns.Contains("Pat1") && _grid.Rows.Count == _table.Rows.Count)
+        {
+            var map = new Dictionary<string, RowPattern>();
+            for (int i = 0; i < _table.Rows.Count; i++)
+            {
+                string left = _grid.Rows[i].Cells["Pat1"].Value?.ToString() ?? "";
+                string right = _grid.Rows[i].Cells["Pat2"].Value?.ToString() ?? "";
+                map[_table.Rows[i].Name] = new RowPattern { Left = left, Right = right };
+            }
+            _profile.PatternMap = map;
+        }
         _profile.ReplaceExisting = _replaceCheck.Checked;
     }
 
@@ -321,17 +345,7 @@ public sealed class MainForm : Form
         }
         _replaceCheck.Checked = _profile.ReplaceExisting;
         if (_table is not null)
-        {
-            RefreshMatchTab();
-            foreach (var kv in _patternControls)
-            {
-                var rp = _profile.PatternFor(kv.Key);
-                if (rp.Left != "")
-                    kv.Value.Left.Text = rp.Left;
-                if (rp.Right != "")
-                    kv.Value.Right.Text = rp.Right;
-            }
-        }
+            RefreshGrid(); // Ve lai grid — 2 cot Pattern lay tu profile vua nap.
     }
 
     /// <summary>
@@ -470,26 +484,19 @@ public sealed class MainForm : Form
         _pointViewCombo.Items.AddRange(t.Points.ToArray());
         _pointViewCombo.SelectedIndex = -1;
         RefreshGrid();
-        var info = new List<string>
-        {
-            $"Tiêu đề: {(t.Title == "" ? "(không đọc được)" : t.Title)}",
-            $"Điểm: {string.Join(", ", t.Points)}",
-            $"Pattern trong file ({t.Patterns.Count}): {string.Join(", ", t.Patterns.Take(40).Select(p => p.Name))}",
-        };
+        // Box thong tin file da xoa (user chot 08/11) — canh bao nhan dien
+        // hien bang MessageBox de user thay ro.
         if (t.Warnings.Count > 0)
-        {
-            info.Add("Cảnh báo nhận diện:");
-            info.AddRange(t.Warnings.Select(w => $"  ! {w}"));
-        }
-        _fileInfoBox.Text = string.Join("\n", info);
-        RefreshMatchTab();
+            MessageBox.Show(this, string.Join("\n", t.Warnings.Select(w => "  ! " + w)),
+                "Cảnh báo nhận diện", MessageBoxButtons.OK, MessageBoxIcon.Warning);
     }
 
     // Ve lai grid theo diem dang chon o dropdown "Điểm" (ngay sau dropdown
     // Sheet): CHI HIEN 1 DIEM, kem tieu de ghi ro ten diem. Chua chon diem
     // -> grid de trong (user chot 08/11 — khong load tat ca diem de tranh
-    // load nhieu). Ten diem chi o TIEU DE tren bang, cot chi la
-    // Tải | Hx [kN] | Hy [kN] | Vz [kN] (user chot 08/11 theo anh mau).
+    // load nhieu). Ten diem chi o TIEU DE tren bang, cot la
+    // Tải | Pattern giá trị 1 | Pattern giá trị 2 | Hx [kN] | Hy [kN] |
+    // Vz [kN] (2 cot Pattern ngay sau cot Tai — user chot 08/11).
     private void RefreshGrid()
     {
         if (_table is null)
@@ -516,13 +523,40 @@ public sealed class MainForm : Form
             _grid.Rows.Clear();
             _grid.Columns.Add("Load", "Tải");
             _grid.Columns[0].ReadOnly = true; // Cot ten tai khong sua.
+            // 2 cot Match pattern ngay sau cot Tai (user chot 08/11).
+            var choices = PatternChoices();
+            var pat1 = new DataGridViewComboBoxColumn
+            {
+                Name = "Pat1", HeaderText = "Pattern — giá trị 1 (trái)",
+                DataPropertyName = "Pat1", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+            };
+            pat1.Items.AddRange(choices.ToArray());
+            _grid.Columns.Add(pat1);
+            var pat2 = new DataGridViewComboBoxColumn
+            {
+                Name = "Pat2", HeaderText = "Pattern — giá trị 2 (phải)",
+                DataPropertyName = "Pat2", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+            };
+            pat2.Items.AddRange(choices.ToArray());
+            _grid.Columns.Add(pat2);
             // Header 2 dong: Hx / [kN] (nhu anh mau "85 / E.2").
             _grid.Columns.Add("Hx", "Hx\n[kN]");
             _grid.Columns.Add("Hy", "Hy\n[kN]");
             _grid.Columns.Add("Vz", "Vz\n[kN]");
+            List<string> available;
+            try { available = _etabs.PatternNames(); }
+            catch { available = new List<string>(); }
             foreach (var r in t.Rows)
             {
-                var vals = new List<object> { r.Name + (r.Reversible ? "  (+/-)" : "") };
+                var rp = _profile.PatternFor(r.Name);
+                string curL = rp.Left;
+                string curR = rp.Right;
+                if (curL == "")
+                    curL = Mapping.SuggestPattern(r.Name, available);
+                // Goi y cot phai khi dong co o 2 gia tri (khoang "a/b" hoac "+/-V") — cot "+/-" khong tinh.
+                if (curR == "" && r.HasRangeCell() && curL != "")
+                    curR = Mapping.SuggestPatternOpposite(curL, available);
+                var vals = new List<object> { r.Name + (r.Reversible ? "  (+/-)" : ""), curL, curR };
                 foreach (string comp in new[] { "Hx", "Hy", "Vz" })
                 {
                     string raw = "";
@@ -538,8 +572,49 @@ public sealed class MainForm : Form
         _statusLabel.Text = $"Đang xem điểm {point} — bảng {t.Sheet} ({t.Rows.Count} dòng tải). Sửa trực tiếp trong bảng; giá trị mới dùng cho Gán.";
     }
 
-    // Sua luc truc tiep trong grid: ghi nguoc vao FoundationTable (Gan doc
-    // tu bang nay) roi chuan hoa hien thi theo Raw da parse.
+    /// <summary>
+    /// Lua chon cho 2 cot Pattern trong grid: "" (khong gan) + pattern CO
+    /// SAN trong model (sorted) + cac pattern dang co trong profile (ke ca
+    /// khi khong con trong model — de khong loi DataError khi hien).
+    /// Tool KHONG tu tao pattern (user chot 08/11).
+    /// </summary>
+    private List<string> PatternChoices()
+    {
+        var choices = new List<string> { "" };
+        var set = new SortedSet<string>();
+        try { foreach (string p in _etabs.PatternNames()) set.Add(p); } catch { }
+        if (_table is not null)
+            foreach (var r in _table.Rows)
+            {
+                var rp = _profile.PatternFor(r.Name);
+                if (rp.Left != "") set.Add(rp.Left);
+                if (rp.Right != "") set.Add(rp.Right);
+            }
+        choices.AddRange(set);
+        return choices;
+    }
+
+    /// <summary>
+    /// Nap lai lua chon cho 2 cot Pattern trong grid (khi pattern trong
+    /// model ETABS thay doi). Khong doi gia tri cell dang co.
+    /// </summary>
+    private void RefreshPatternColumns()
+    {
+        if (!_grid.Columns.Contains("Pat1") || !_grid.Columns.Contains("Pat2"))
+            return;
+        var choices = PatternChoices();
+        var c1 = (DataGridViewComboBoxColumn)_grid.Columns["Pat1"];
+        var c2 = (DataGridViewComboBoxColumn)_grid.Columns["Pat2"];
+        c1.Items.Clear();
+        c1.Items.AddRange(choices.ToArray());
+        c2.Items.Clear();
+        c2.Items.AddRange(choices.ToArray());
+    }
+
+    // Sua truc tiep trong grid:
+    //  - Cot Pattern (Pat1/Pat2): ghi vao profile + tu luu profile mac dinh.
+    //  - Cot luc (Hx/Hy/Vz): ghi nguoc vao FoundationTable (Gan doc tu bang
+    //    nay) roi chuan hoa hien thi theo Raw da parse.
     // Ten cot la ten thanh phan ("Hx"/"Hy"/"Vz"); diem lay tu dropdown
     // "Điểm" tren thanh tren (grid chi hien 1 diem).
     private void Grid_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
@@ -548,13 +623,24 @@ public sealed class MainForm : Form
             return;
         if (e.RowIndex >= _table.Rows.Count)
             return;
-        string comp = _grid.Columns[e.ColumnIndex].Name;
+        string colName = _grid.Columns[e.ColumnIndex].Name;
+        var row = _table.Rows[e.RowIndex];
+        if (colName == "Pat1" || colName == "Pat2")
+        {
+            // Doi pattern trong grid: ghi vao profile + tu luu.
+            string val = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
+            var rp = _profile.PatternFor(row.Name);
+            if (colName == "Pat1") rp.Left = val; else rp.Right = val;
+            _profile.PatternMap[row.Name] = rp;
+            SaveDefaultProfile();
+            return;
+        }
+        string comp = colName;
         string point = _pointViewCombo.Text;
         if (point == "")
             return;
         string newRaw = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
         var lv = Detector.ParseCell(newRaw);
-        var row = _table.Rows[e.RowIndex];
         if (!row.Values.TryGetValue(point, out var compVals))
         {
             compVals = new Dictionary<string, LoadValue>();
@@ -569,82 +655,27 @@ public sealed class MainForm : Form
             : $"Đã sửa {row.Name} / {point} {comp} = {lv.Raw}.";
     }
 
-    private void RefreshMatchTab()
-    {
-        _updatingMatch = true;
-        try
-        {
-            _matchPanel.Controls.Clear();
-            _patternControls.Clear();
-            if (_table is null)
-                return;
-            List<string> available;
-            try { available = _etabs.PatternNames(); }
-            catch (Exception ex)
-            {
-                _statusLabel.Text = $"Không lấy được pattern từ ETABS: {ex.Message}";
-                available = new List<string>();
-            }
-            // Chi pattern CO SAN trong model (sorted) + "" (khong gan) — tool
-            // KHONG tu tao pattern (user chot 08/11).
-            var choices = new List<string> { "" };
-            choices.AddRange(new SortedSet<string>(available));
-            var header = new Panel { Height = 22, Width = 710 };
-            header.Controls.Add(new Label { Text = "Tải", Location = new Point(0, 3), Width = 380, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
-            header.Controls.Add(new Label { Text = "Pattern — giá trị 1 (trái)", Location = new Point(390, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
-            header.Controls.Add(new Label { Text = "Pattern — giá trị 2 (phải)", Location = new Point(550, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
-            _matchPanel.Controls.Add(header);
-            foreach (var r in _table.Rows)
-            {
-                var row = new Panel { Height = 30, Width = 710 };
-                row.Controls.Add(new Label
-                {
-                    Text = r.Name + (r.Reversible ? "  (+/-)" : ""),
-                    Location = new Point(0, 6), Width = 380, AutoSize = false,
-                });
-                var left = new ComboBox { Location = new Point(390, 3), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
-                left.Items.AddRange(choices.ToArray());
-                var right = new ComboBox { Location = new Point(550, 3), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
-                right.Items.AddRange(choices.ToArray());
-                var rp = _profile.PatternFor(r.Name);
-                string curL = rp.Left;
-                string curR = rp.Right;
-                if (curL == "")
-                    curL = Mapping.SuggestPattern(r.Name, available);
-                // Goi y cot phai khi dong co o 2 gia tri (khoang "a/b" hoac "+/-V") — cot "+/-" khong tinh.
-                if (curR == "" && r.HasRangeCell() && curL != "")
-                    curR = Mapping.SuggestPatternOpposite(curL, available);
-                left.Text = curL;
-                right.Text = curR;
-                // Doi match la tu luu vao profile mac dinh (thu muc plug-in).
-                left.SelectedIndexChanged += (_, _) => { if (!_updatingMatch) SaveDefaultProfile(); };
-                right.SelectedIndexChanged += (_, _) => { if (!_updatingMatch) SaveDefaultProfile(); };
-                row.Controls.Add(left);
-                row.Controls.Add(right);
-                _matchPanel.Controls.Add(row);
-                _patternControls[r.Name] = (left, right);
-            }
-        }
-        finally { _updatingMatch = false; }
-    }
-
     private void AutoSuggestAll()
     {
-        if (_table is null)
+        if (_table is null || !_grid.Columns.Contains("Pat1"))
             return;
         List<string> available;
         try { available = _etabs.PatternNames(); }
         catch { available = new List<string>(); }
-        foreach (var r in _table.Rows)
+        _updatingGrid = true;
+        try
         {
-            if (!_patternControls.TryGetValue(r.Name, out var pair))
-                continue;
-            string left = Mapping.SuggestPattern(r.Name, available);
-            pair.Left.Text = left;
-            pair.Right.Text = r.HasRangeCell() && left != ""
-                ? Mapping.SuggestPatternOpposite(left, available)
-                : "";
+            for (int i = 0; i < _table.Rows.Count; i++)
+            {
+                var r = _table.Rows[i];
+                string left = Mapping.SuggestPattern(r.Name, available);
+                _grid.Rows[i].Cells["Pat1"].Value = left;
+                _grid.Rows[i].Cells["Pat2"].Value = r.HasRangeCell() && left != ""
+                    ? Mapping.SuggestPatternOpposite(left, available)
+                    : "";
+            }
         }
+        finally { _updatingGrid = false; }
         _statusLabel.Text = "Đã gợi ý tự động — kiểm tra lại từng dòng trước khi gán.";
         SaveDefaultProfile();
     }
@@ -657,7 +688,7 @@ public sealed class MainForm : Form
             var pts = _etabs.ListPoints();
             _statusLabel.Text = $"ETABS: {pats.Count} pattern, {pts.Count} point.";
             RefreshJointCombo();
-            RefreshMatchTab();
+            RefreshPatternColumns();
         }
         catch (Exception ex)
         {

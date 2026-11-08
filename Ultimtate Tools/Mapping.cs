@@ -83,11 +83,11 @@ public sealed class AxisMapping
     }
 }
 
-/// <summary>Match pattern 2 cot + phuong/chieu. Port cua mapping.py (da bo ResolveRange — khoang gio tach min/max sang 2 cot).</summary>
+/// <summary>Match pattern 2 cot + phuong/chieu. Port cua mapping.py (da bo ResolveRange — khoang gio tach gia tri 1 / gia tri 2 sang 2 cot).</summary>
 public static class Mapping
 {
 /// <summary>
-/// Goi y pattern cot PHAI (gia tri lon) cho 1 dong co +/-: doi xung cua
+/// Goi y pattern cot PHAI (gia tri 2) cho 1 dong co 2 gia tri: doi xung cua
 /// pattern cot trai. Thu theo thu tu: "<trai>_NEG" (neu co trong model),
 /// doi dau "+" <-> "-" trong ten (WX+ -> WX-, WY+1 -> WY-1). Khong co thi
 /// tra "" — user tu chon. Tool KHONG tu tao pattern (user chot 08/11).
@@ -174,7 +174,7 @@ public static string SuggestPatternOpposite(string leftPattern, IReadOnlyList<st
     }
 }
 
-/// <summary>2 pattern match cho 1 dong tai: cot trai (gia tri nho / gia tri don), cot phai (gia tri lon, chi khi co +/-).</summary>
+/// <summary>2 pattern match cho 1 dong tai: cot trai (gia tri 1 / gia tri don), cot phai (gia tri 2, chi khi o co 2 gia tri).</summary>
 public sealed class RowPattern
 {
     public string Left { get; set; } = "";
@@ -189,11 +189,12 @@ public sealed class Profile
     public string Sheet { get; set; } = "";
     public AxisMapping Axis { get; set; } = new();
     /// <summary>
-    /// Match 2 cot (user chot 08/11): cot TRAI = pattern nhan gia tri NHO
-    /// (gia tri don, hoac min cua o khoang / -V cua hang +/-); cot PHAI =
-    /// pattern nhan gia tri LON (max cua o khoang / +V cua hang +/-). Dong
-    /// khong co dau +/- chi can cot trai. User tu dinh nghia du pattern
-    /// trong ETABS — tool KHONG tu tao pattern.
+    /// Match 2 cot (user chot 08/11): cot TRAI = pattern nhan gia tri 1
+    /// (gia tri don, hoac gia tri 1 cua o 2 gia tri "a/b" / "+/-V"); cot
+    /// PHAI = pattern nhan gia tri 2 (gia tri 2 cua o 2 gia tri). Dong chi
+    /// co 1 gia tri thi chi can cot trai. Cot "+/-" cua bang KHONG anh huong
+    /// den gia tri gan (user tu xu ly trong combo sau). User tu dinh nghia
+    /// du pattern trong ETABS — tool KHONG tu tao pattern.
     /// </summary>
     public Dictionary<string, RowPattern> PatternMap { get; set; } = new();
     public bool ReplaceExisting { get; set; } = true;
