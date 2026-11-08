@@ -73,13 +73,23 @@ public static class Assigner
                 res.Skipped.Add(("thieu so", $"'{row.Name}' ở {excelPoint}: thiếu ô Hx/Hy/Vz."));
                 continue;
             }
+            // Mo men Mx/My/Mz: TUY CHON — bang chua co thi khong co (gan 0).
+            // Khi bang co mo men, moi thanh phan cung tach (gia tri 1, gia tri 2)
+            // nhu luc, va cung anh xa phuong/chieu nhu luc (Mx theo truc Hx...).
+            comp.TryGetValue("Mx", out var mxLv);
+            comp.TryGetValue("My", out var myLv);
+            comp.TryGetValue("Mz", out var mzLv);
+            bool hasMoments = table.HasMoments && mxLv is not null && myLv is not null && mzLv is not null;
             // Tach moi thanh phan thanh (gia tri 1, gia tri 2).
             //  - So don V: (V, V) — chi 1 gia tri, cot "+/-" cua bang KHONG nhan vao.
             //  - Khoang (a, b) — "a/b" hoac "+/-V": (a, b) = (gia tri 1, gia tri 2), KHONG phai min/max.
             //  - O trong: (0, 0). - Chu: bo dong.
+            //  - Thanh phan mo men vang mat (bang chi co luc): (0, 0).
             bool hasPlusMinus = false; // Chi true khi co o 2 gia tri (khoang) — cot "+/-" khong tinh.
             var leftVals = new List<double>();
             var rightVals = new List<double>();
+            var leftMom = new List<double>();
+            var rightMom = new List<double>();
             bool ok = true;
             foreach (var lv in new[] { hxLv, hyLv, vzLv })
             {
@@ -107,10 +117,45 @@ public static class Assigner
                     rightVals.Add(v);
                 }
             }
+            if (ok && hasMoments)
+            {
+                foreach (var lv in new[] { mxLv!, myLv!, mzLv! })
+                {
+                    if (lv.Kind == LoadValueKind.Text)
+                    {
+                        res.Skipped.Add(("o khong phai so", $"'{row.Name}' ở {excelPoint}: ô '{lv.Raw}' không phải số."));
+                        ok = false;
+                        break;
+                    }
+                    if (lv.Kind == LoadValueKind.Blank)
+                    {
+                        leftMom.Add(0.0);
+                        rightMom.Add(0.0);
+                    }
+                    else if (lv.Kind == LoadValueKind.Range)
+                    {
+                        hasPlusMinus = true;
+                        leftMom.Add(lv.VMin!.Value);
+                        rightMom.Add(lv.VMax!.Value);
+                    }
+                    else
+                    {
+                        double v = lv.Value!.Value;
+                        leftMom.Add(v);
+                        rightMom.Add(v);
+                    }
+                }
+            }
             if (!ok)
                 continue;
             var (fxL, fyL, fzL) = axis.Apply(leftVals[0], leftVals[1], leftVals[2]);
             var (fxR, fyR, fzR) = axis.Apply(rightVals[0], rightVals[1], rightVals[2]);
+            var (mxL, myL, mzL) = hasMoments
+                ? axis.Apply(leftMom[0], leftMom[1], leftMom[2])
+                : (0.0, 0.0, 0.0);
+            var (mxR, myR, mzR) = hasMoments
+                ? axis.Apply(rightMom[0], rightMom[1], rightMom[2])
+                : (0.0, 0.0, 0.0);
             var leftAssignment = new Assignment
             {
                 ExcelPoint = excelPoint,
@@ -118,12 +163,14 @@ public static class Assigner
                 ExcelRow = row.Name,
                 Pattern = leftPat,
                 Fx = fxL, Fy = fyL, Fz = fzL,
+                Mx = mxL, My = myL, Mz = mzL,
                 Side = "trai",
                 Notes = hasPlusMinus ? "giá trị 1 (cột trái)" : "",
             };
             if (profile.SkipZeroRows && leftAssignment.IsZero())
             {
-                res.Skipped.Add(("dong 0", $"'{row.Name}' ở {excelPoint}: cả 3 lực = 0, bỏ qua."));
+                res.Skipped.Add(("dong 0", $"'{row.Name}' ở {excelPoint}: " +
+                    (hasMoments ? "cả lực và mô men = 0, bỏ qua." : "cả 3 lực = 0, bỏ qua.")));
                 continue;
             }
             res.Assignments.Add(leftAssignment);
@@ -144,6 +191,7 @@ public static class Assigner
                         ExcelRow = row.Name,
                         Pattern = rightPat,
                         Fx = fxR, Fy = fyR, Fz = fzR,
+                        Mx = mxR, My = myR, Mz = mzR,
                         Side = "phai",
                         Notes = "giá trị 2 (cột phải)",
                     };
@@ -160,7 +208,8 @@ public static class Assigner
         var lines = new List<string>
         {
             $"Điểm Excel: {excelPoint}  ->  Joint ETABS: {etabsJoint}",
-            $"Phương/chiều: {profile.Axis.Describe()}   (đơn vị kN, M = 0 — bảng gốc chỉ có lực)",
+            $"Phương/chiều: {profile.Axis.Describe()}   (đơn vị kN" +
+            (table.HasMoments ? ", mô men kN·m" : ", M = 0 — bảng gốc chỉ có lực") + ")",
             $"Số lượng gán: {result.Assignments.Count} | Bỏ qua: {result.Skipped.Count} | Cảnh báo: {result.Warnings.Count}",
             "",
             $"{"Pattern",-10} {"Fx",8} {"Fy",8} {"Fz",8}   Nguon (dong Excel)",

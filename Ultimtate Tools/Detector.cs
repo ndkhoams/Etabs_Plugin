@@ -33,7 +33,13 @@ namespace EtabsLoadAssigner.Core;
 /// </summary>
 public static class Detector
 {
+    // Thanh phan luc (moi diem 3 cot) + mo men (moi diem them 3 cot).
+    // Bang hien tai (LONG PHU BC-5) chi co luc — cot mo men TU AN khi file
+    // khong co Mx/My/Mz (user chot 08/11 — mo rong cho tuong lai).
+    public static readonly string[] ForceComponents = { "Hx", "Hy", "Vz" };
+    public static readonly string[] MomentComponents = { "Mx", "My", "Mz" };
     public static readonly string[] Components = { "Hx", "Hy", "Vz" };
+    public static readonly string[] AllComponents = { "Hx", "Hy", "Vz", "Mx", "My", "Mz" };
 
     private static readonly Regex RangeRegex = new(
         @"^\s*([+-]?\d+(?:[.,]\d+)?)\s*/\s*([+-]?)\s*(\d+(?:[.,]\d+)?)\s*$",
@@ -104,9 +110,14 @@ public static class Detector
         return new LoadValue { Raw = s, Kind = LoadValueKind.Text };
     }
 
-    private static bool IsComponentCell(object? v) => Norm(v) is "Hx" or "Hy" or "Vz";
+    private static bool IsComponentCell(object? v) => Norm(v) is "Hx" or "Hy" or "Vz" or "Mx" or "My" or "Mz";
 
-    private static (int Row, int FirstHxCol)? FindComponentHeader(List<List<object?>> grid)
+    /// <summary>
+    /// Tim dong tieu de thanh phan. Tra ve (dong, cot Hx dau tien, co mo men).
+    /// Co mo men khi nhom dau tien la du 6 cot Hx/Hy/Vz/Mx/My/Mz (moi diem
+    /// 6 cot); khong thi moi diem 3 cot luc nhu cu.
+    /// </summary>
+    private static (int Row, int FirstHxCol, bool HasMoments)? FindComponentHeader(List<List<object?>> grid)
     {
         for (int i = 0; i < grid.Count; i++)
         {
@@ -119,7 +130,13 @@ public static class Detector
                 continue;
             var seq = hits.Select(j => Norm(row[j])).ToList();
             if (seq.Contains("Hx") && seq.Contains("Hy") && seq.Contains("Vz"))
-                return (i, hits[0]);
+            {
+                int first = hits[0];
+                bool hasMoments = first + 5 < row.Count
+                    && Norm(row[first]) == "Hx" && Norm(row[first + 1]) == "Hy" && Norm(row[first + 2]) == "Vz"
+                    && Norm(row[first + 3]) == "Mx" && Norm(row[first + 4]) == "My" && Norm(row[first + 5]) == "Mz";
+                return (i, first, hasMoments);
+            }
         }
         return null;
     }
@@ -189,6 +206,11 @@ public static class Detector
         }
         int hdrRow = found.Value.Row;
         int firstHxCol = found.Value.FirstHxCol;
+        bool hasMoments = found.Value.HasMoments;
+        table.HasMoments = hasMoments;
+        // So cot moi diem: 3 (chi luc) hoac 6 (luc + mo men).
+        string[] comps = hasMoments ? AllComponents : ForceComponents;
+        int groupSize = comps.Length;
 
         // --- Dong ten diem: dong ngay tren dong Hx/Hy/Vz, doc ten o cot Hx ---
         var points = new List<string>();
@@ -198,24 +220,32 @@ public static class Detector
         var rowVals = grid[hdrRow];
         while (j < rowVals.Count)
         {
-            string[] Trio(int jj) => new[]
+            string[] Group(int jj)
             {
-                jj < rowVals.Count ? Norm(rowVals[jj]) : "",
-                jj + 1 < rowVals.Count ? Norm(rowVals[jj + 1]) : "",
-                jj + 2 < rowVals.Count ? Norm(rowVals[jj + 2]) : "",
-            };
-            string[] trio = Trio(j);
-            if (!(trio[0] == "Hx" && trio[1] == "Hy" && trio[2] == "Vz"))
+                var g = new string[groupSize];
+                for (int k = 0; k < groupSize; k++)
+                    g[k] = jj + k < rowVals.Count ? Norm(rowVals[jj + k]) : "";
+                return g;
+            }
+            bool MatchesGroup(string[] g)
+            {
+                for (int k = 0; k < groupSize; k++)
+                    if (g[k] != comps[k])
+                        return false;
+                return true;
+            }
+            string[] group = Group(j);
+            if (!MatchesGroup(group))
             {
                 // Nhom lech (co the co cot trong) — dich sang phai 1 cot, thu toi da 2 lan.
                 bool shifted = false;
                 foreach (int d in new[] { 1, 2 })
                 {
-                    string[] trio2 = Trio(j + d);
-                    if (trio2[0] == "Hx" && trio2[1] == "Hy" && trio2[2] == "Vz")
+                    string[] group2 = Group(j + d);
+                    if (MatchesGroup(group2))
                     {
                         j += d;
-                        trio = trio2;
+                        group = group2;
                         shifted = true;
                         break;
                     }
@@ -231,7 +261,7 @@ public static class Detector
             }
             points.Add(name);
             pointCols.Add(j);
-            j += 3;
+            j += groupSize;
         }
         if (points.Count == 0)
         {
@@ -264,7 +294,7 @@ public static class Detector
                 break;
             if (low.Contains("foundation loads") || low.Contains("long phu"))
                 break; // Bang moi (vd diem 27/D o duoi trong cung sheet).
-            if (first is "Hx" or "Hy" or "Vz")
+            if (first is "Hx" or "Hy" or "Vz" or "Mx" or "My" or "Mz")
                 continue;
             // Cot +/-: thuong la cot thu 2 (index 1), hoac ngay sau ten tai.
             bool reversible = row.Take(3).Any(c => Norm(c) is "+/-" or "±" or "+/- ");
@@ -273,10 +303,10 @@ public static class Detector
             {
                 int col = pointCols[p];
                 var comp = new Dictionary<string, LoadValue>();
-                for (int k = 0; k < Components.Length; k++)
+                for (int k = 0; k < comps.Length; k++)
                 {
                     object? cell = col + k < row.Count ? row[col + k] : null;
-                    comp[Components[k]] = ParseCell(cell);
+                    comp[comps[k]] = ParseCell(cell);
                 }
                 vals[points[p]] = comp;
             }
@@ -654,6 +684,9 @@ public sealed class FoundationTable
     public string Source { get; set; } = "";
     public string Sheet { get; set; } = "";
     public List<string> Warnings { get; set; } = new();
+    // True khi bang co cot mo men Mx/My/Mz (moi diem 6 cot). False = chi co
+    // luc Hx/Hy/Vz — cot mo men o grid TU AN (user chot 08/11).
+    public bool HasMoments { get; set; }
 
     public Dictionary<string, LoadValue>? PointValues(string point, string rowName)
     {

@@ -20,13 +20,18 @@ namespace EtabsLoadAssigner.Plugin;
 /// ETABS, ca dang embed lan dialog, nen user khong thay/bam duoc tab 2-5.)
 ///
 /// LAYOUT GON (user chot 08/11, sau anh chup build 20261108-184715):
-///   - Thanh tren: file / Sheet / Diem — dung TableLayoutPanel, moi control
-///     can giua doc trong hang (thang hang, can doi). KHONG co nut "Nhận
-///     diện bảng" (user chot 08/11 — thua, mo file Excel la tu nhan dien).
-///   - Thanh duoi CO DINH: Joint ETABS + GÁN (luon thay, khong can cuon).
-///   - Vung cuon giua: ten diem (tieu de bang) -> thanh nut Luu match ->
-///     bang noi luc (gom ca 2 cot Match pattern ngay sau cot Tai: Pattern
-///     gia tri 1 / gia tri 2) -> Phuong & chieu (1 hang ngang, chi set 1 lan).
+///   - Thanh tren: file / File gan nhat / Sheet / Diem — dung
+///     TableLayoutPanel, moi control can giua doc trong hang (thang hang,
+///     can doi). Nut "File gần nhất" mo lai file Excel mo lan cuoi (luu
+///     duong dan vao file text nho canh DLL). KHONG co nut "Nhận diện
+///     bảng" (thua — mo file Excel la tu nhan dien).
+///   - Thanh duoi CO DINH: Joint ETABS + Luu match + GÁN (luon thay, khong
+///     can cuon). Dropdown Joint list rong bang chinh combo (khong dat
+///     DropDownWidth rieng).
+///   - Vung cuon giua: ten diem (tieu de bang, cao 22 — thu hep de do
+///     trong) -> bang noi luc (gom ca 2 cot Match pattern ngay sau cot Tai:
+///     Pattern gia tri 1 / gia tri 2) -> Phuong & chieu (cao 80 — tang
+///     them de chu khoi bi sat).
 ///   - KHONG co box thong tin file (user chot 08/11 — xoa).
 ///     KHONG co Preview box / nut Xem preview / Xuat preview (.txt).
 ///     GÁN xong chi hien thong bao so luong (so lieu da thay trong grid).
@@ -102,15 +107,76 @@ public sealed class MainForm : Form
     private bool _uiReady; // Chi cho luu profile mac dinh sau khi constructor xong (tranh ghi de profile cu luc khoi tao).
     private List<PointInfo> _jointList = new(); // Joint dang chon trong ETABS (hien trong bang Joint).
 
+    // --- File Excel mo lan cuoi (nut chon nhanh, user chot 08/11) ---
+    // Luu duong dan file Excel mo lan cuoi vao file text nho canh DLL
+    // (fallback %AppData% neu thu muc plug-in khong ghi duoc). Chi luu
+    // DUONG DAN file (khong phai thong tin match — match luu trong sheet
+    // "LoadAssigner" cua file Excel).
+    private static string PluginFolder
+    {
+        get
+        {
+            try { return Path.GetDirectoryName(typeof(MainForm).Assembly.Location) ?? ""; }
+            catch { return ""; }
+        }
+    }
+    private static string RecentFilePath =>
+        PluginFolder == "" ? "" : Path.Combine(PluginFolder, "LoadAssignerRecent.txt");
+    private static string AppDataRecentPath => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "EtabsLoadAssigner", "recent.txt");
+
+    private static string? LoadRecentFile()
+    {
+        foreach (string p in new[] { RecentFilePath, AppDataRecentPath })
+        {
+            try
+            {
+                if (p != "" && File.Exists(p))
+                {
+                    string s = File.ReadAllText(p).Trim();
+                    if (s != "" && File.Exists(s))
+                        return s;
+                }
+            }
+            catch { /* bo qua — khong co file gan nhat */ }
+        }
+        return null;
+    }
+
+    private static void SaveRecentFile(string path)
+    {
+        try
+        {
+            if (RecentFilePath != "")
+            {
+                File.WriteAllText(RecentFilePath, path);
+                return;
+            }
+            throw new IOException("Không xác định được thư mục plug-in.");
+        }
+        catch
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(AppDataRecentPath)!;
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(AppDataRecentPath, path);
+            }
+            catch { /* bo qua — chi mat nut chon nhanh lan sau */ }
+        }
+    }
+
     // --- controls ---
     private readonly TextBox _fileTextBox = new() { Width = 260 };
     private readonly ComboBox _sheetCombo = new() { Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly ComboBox _pointViewCombo = new() { Width = 130, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly Label _statusLabel = new() { Dock = DockStyle.Top, Height = 26, ForeColor = Color.FromArgb(0x55, 0x55, 0x55) };
     // Ten diem lam tieu de rieng tren bang (vd "85 / E.2") — khong ghi chung vao header cot.
+    // Cao 22 (user chot 08/11 — thu hep de do trong).
     private readonly Label _pointTitleLabel = new()
     {
-        Dock = DockStyle.Top, Height = 28,
+        Dock = DockStyle.Top, Height = 22,
         Font = new Font("Segoe UI", 12F, FontStyle.Bold),
         TextAlign = ContentAlignment.MiddleCenter,
     };
@@ -137,7 +203,6 @@ public sealed class MainForm : Form
     // cuon khi cua so rong — user chot 08/11, anh build 20261108-191050).
     private Panel? _scrollPanel;
     private Panel? _gridPanel;
-    private Panel? _matchToolbar;
     private GroupBox? _axisSection;
 
     public MainForm(IEtabsApi liveApi)
@@ -154,7 +219,8 @@ public sealed class MainForm : Form
         _grid.DataError += (_, e) => { e.ThrowException = false; };
         // Dropdown Joint ETABS: chi joint DANG CHON trong ETABS. Chon 1 joint
         // trong dropdown = chon joint dich de gan tai tren bang noi luc.
-        _jointCombo.DropDownWidth = 450; // Hien du Name/Label/toa do trong dropdown.
+        // Dropdown list rong bang chinh combo (user chot 08/11 — khong dat
+        // DropDownWidth rieng, de khoi lech nhau).
         _jointCombo.SelectedIndexChanged += (_, _) =>
         {
             if (_updatingJoint)
@@ -180,10 +246,11 @@ public sealed class MainForm : Form
         // theo chieu rong con lai; cac cot khac vua noi dung.
         var top = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 6, RowCount = 1,
+            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 7, RowCount = 1,
             Padding = new Padding(3, 3, 3, 3),
         };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Chon file
+        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // File gan nhat
         top.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F)); // Duong dan (gian)
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan Sheet
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo Sheet
@@ -193,37 +260,50 @@ public sealed class MainForm : Form
         var browseBtn = new Button { Text = "Chọn file Excel...", AutoSize = true, Anchor = AnchorStyles.None };
         browseBtn.Click += (_, _) => ChooseFile();
         top.Controls.Add(browseBtn, 0, 0);
+        // Nut chon nhanh file Excel mo lan cuoi (user chot 08/11): bam la mo
+        // lai file do ngay, khoi browse lai. Mo khi khong co file gan nhat
+        // (hoac file da bi xoa/doi ten). Tooltip hien duong dan day du.
+        var recentBtn = new Button { Text = "File gần nhất", AutoSize = true, Anchor = AnchorStyles.None };
+        string? recent = LoadRecentFile();
+        recentBtn.Enabled = recent is not null;
+        if (recent is not null)
+        {
+            recentBtn.Click += (_, _) => OpenRecentFile();
+            var tip = new ToolTip();
+            tip.SetToolTip(recentBtn, recent);
+        }
+        top.Controls.Add(recentBtn, 1, 0);
         _fileTextBox.Anchor = AnchorStyles.Left | AnchorStyles.Right;
-        top.Controls.Add(_fileTextBox, 1, 0);
-        top.Controls.Add(new Label { Text = "Sheet:", AutoSize = true, Anchor = AnchorStyles.None }, 2, 0);
+        top.Controls.Add(_fileTextBox, 2, 0);
+        top.Controls.Add(new Label { Text = "Sheet:", AutoSize = true, Anchor = AnchorStyles.None }, 3, 0);
         _sheetCombo.Anchor = AnchorStyles.None;
         _sheetCombo.SelectedIndexChanged += (_, _) => { if (!_updatingSheet) Detect(); };
-        top.Controls.Add(_sheetCombo, 3, 0);
-        top.Controls.Add(new Label { Text = "Điểm:", AutoSize = true, Anchor = AnchorStyles.None }, 4, 0);
+        top.Controls.Add(_sheetCombo, 4, 0);
+        top.Controls.Add(new Label { Text = "Điểm:", AutoSize = true, Anchor = AnchorStyles.None }, 5, 0);
         _pointViewCombo.Anchor = AnchorStyles.None;
         _pointViewCombo.SelectedIndexChanged += (_, _) => RefreshGrid();
-        top.Controls.Add(_pointViewCombo, 5, 0);
+        top.Controls.Add(_pointViewCombo, 6, 0);
         _statusLabel.Text = "Chưa import file.";
         _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel để tự nhận diện bảng.";
         _gridPanel = new Panel { Dock = DockStyle.Top, Height = 300 };
         _gridPanel.Controls.Add(_grid);
         _axisSection = BuildSectionAxis();
-        _matchToolbar = BuildMatchToolbar();
 
         _scrollPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         // Them theo thu tu nguoc (section cuoi them truoc) de hien dung thu tu tren->duoi:
-        // ten diem -> thanh nut Goi y / Lam moi -> bang noi luc (gom cot Pattern) -> Phuong & chieu.
+        // ten diem -> bang noi luc (gom cot Pattern) -> Phuong & chieu.
+        // (Thanh nut tren bang da bo — nut "Lưu match vào Excel" chuyen
+        // xuong thanh duoi, canh nut GÁN, user chot 08/11.)
         _scrollPanel.Controls.Add(_axisSection);
         _scrollPanel.Controls.Add(_gridPanel);
-        _scrollPanel.Controls.Add(_matchToolbar);
         _scrollPanel.Controls.Add(_pointTitleLabel);
         // Cua so doi kich thuoc -> keo dai bang noi luc cho kin vung cuon.
         _scrollPanel.Resize += (_, _) => LayoutGridHeight();
 
-        // Thanh duoi CO DINH (ngoai vung cuon): Joint ETABS + GÁN luon thay,
-        // khong can cuon. Dropdown Joint chi liet ke joint DANG CHON trong
-        // ETABS (user chot 08/11 — khong phai toan bo joint cua model);
-        // chon 1 joint trong dropdown = chon joint dich de gan.
+        // Thanh duoi CO DINH (ngoai vung cuon): Joint ETABS + Luu match + GÁN
+        // luon thay, khong can cuon. Dropdown Joint chi liet ke joint DANG
+        // CHON trong ETABS (user chot 08/11 — khong phai toan bo joint cua
+        // model); chon 1 joint trong dropdown = chon joint dich de gan.
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44 };
         var bottomFlow = new FlowLayoutPanel
         {
@@ -233,6 +313,9 @@ public sealed class MainForm : Form
         bottomFlow.Controls.Add(new Label { Text = "Joint ETABS:", AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
         bottomFlow.Controls.Add(_jointCombo);
         bottomFlow.Controls.Add(_replaceCheck);
+        var saveBtn = new Button { Text = "Lưu match vào Excel", AutoSize = true };
+        saveBtn.Click += (_, _) => SaveMatchToExcel();
+        bottomFlow.Controls.Add(saveBtn);
         var assignBtn = new Button
         {
             Text = "GÁN VÀO ETABS", AutoSize = true,
@@ -252,14 +335,14 @@ public sealed class MainForm : Form
     /// <summary>
     /// Keo dai bang noi luc cho kin vung cuon (user chot 08/11 — khong de
     /// khoang trong duoi muc Phuong &amp; chieu bi lang phi). Chieu cao bang
-    /// = chieu cao vung cuon tru cac muc khac (tieu de, thanh nut, Phuong
-    /// &amp; chieu); toi thieu 200 de cua so nho van thay duoc bang.
+    /// = chieu cao vung cuon tru cac muc khac (tieu de, Phuong &amp; chieu);
+    /// toi thieu 200 de cua so nho van thay duoc bang.
     /// </summary>
     private void LayoutGridHeight()
     {
-        if (_scrollPanel is null || _gridPanel is null || _matchToolbar is null || _axisSection is null)
+        if (_scrollPanel is null || _gridPanel is null || _axisSection is null)
             return;
-        int other = _pointTitleLabel.Height + _matchToolbar.Height + _axisSection.Height;
+        int other = _pointTitleLabel.Height + _axisSection.Height;
         int avail = _scrollPanel.ClientSize.Height - other;
         _gridPanel.Height = Math.Max(200, avail);
     }
@@ -286,7 +369,8 @@ public sealed class MainForm : Form
     private GroupBox BuildSectionAxis()
     {
         // Phuong & chieu gon 1 hang ngang (chi set 1 lan): Hx -> [X] [-]  Hy -> [Y] [+]  Vz -> [Z] [-].
-        var box = new GroupBox { Text = "Phương & chiều", Dock = DockStyle.Top, Height = 72 };
+        // Cao 80 (user chot 08/11 — tang them de chu khoi bi sat).
+        var box = new GroupBox { Text = "Phương & chiều", Dock = DockStyle.Top, Height = 80 };
         var note = new Label
         {
             Dock = DockStyle.Top, AutoSize = true, ForeColor = Color.FromArgb(0xA3, 0x33, 0x33),
@@ -322,19 +406,6 @@ public sealed class MainForm : Form
         box.Controls.Add(note);
         box.Controls.Add(row);
         return box;
-    }
-
-    private Panel BuildMatchToolbar()
-    {
-        // Thanh nut — chi con nut "Lưu match vào Excel" (user chot 08/11):
-        // nut "Gợi ý tự động tất cả" + "Làm mới pattern" + dong goi y da
-        // xoa (thua — goi y theo ten sai nhieu, pattern nap san khi mo
-        // plugin). Luu match la thu cong: bam nut moi ghi sheet "LoadAssigner".
-        var bar = new Panel { Dock = DockStyle.Top, Height = 36 };
-        var saveBtn = new Button { Text = "Lưu match vào Excel", Location = new Point(0, 4), AutoSize = true };
-        saveBtn.Click += (_, _) => SaveMatchToExcel();
-        bar.Controls.Add(saveBtn);
-        return bar;
     }
 
     // ---------------- logic (port app.py) ----------------
@@ -427,6 +498,33 @@ public sealed class MainForm : Form
         }
     }
 
+    /// <summary>
+    /// Mo lai file Excel mo lan cuoi (nut "File gần nhất"). Neu file da bi
+    /// xoa/doi ten thi bao user chon lai bang "Chọn file Excel...".
+    /// </summary>
+    private void OpenRecentFile()
+    {
+        string? recent = LoadRecentFile();
+        if (recent is null)
+        {
+            MessageBox.Show(this, "Chưa có file Excel nào mở lần cuối.\nChọn file bằng nút “Chọn file Excel...”.",
+                "Chưa có file gần nhất", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        _fileTextBox.Text = recent;
+        _updatingSheet = true;
+        try
+        {
+            _sheetCombo.Items.Clear();
+            _sheetCombo.Items.AddRange(Detector.ListSheets(recent).ToArray());
+            if (_sheetCombo.Items.Count > 0)
+                _sheetCombo.SelectedIndex = 0;
+        }
+        catch { _sheetCombo.Items.Clear(); }
+        finally { _updatingSheet = false; }
+        Detect();
+    }
+
     private void ChooseFile()
     {
         using var dlg = new OpenFileDialog
@@ -437,6 +535,7 @@ public sealed class MainForm : Form
         if (dlg.ShowDialog(this) != DialogResult.OK)
             return;
         _fileTextBox.Text = dlg.FileName;
+        SaveRecentFile(dlg.FileName); // Luu lam file mo lan cuoi (nut chon nhanh).
         _updatingSheet = true;
         try
         {
