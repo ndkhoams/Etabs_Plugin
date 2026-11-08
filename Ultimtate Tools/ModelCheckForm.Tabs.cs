@@ -230,49 +230,34 @@ namespace Etabs_Ultimate_Tools
         // Ultimate Tools) bi ETABS bao "Not Found" khi Add — nguyen nhan chua ro
         // (plugin nap tot tren .NET Framework, LoadTest pass toan bo) — dua code vao
         // dung vo Ultimate Tools (da chung minh nap duoc) de khoi phai doan loader.
-        // 9 tab cu khong doi gi. Form gan tai (MainForm, 5 tab) mo dang dialog
-        // rieng (ShowDialog) thay vi nhuong vao tab — ban nhuong (embed) bi loi
-        // hien thi tren ETABS: khong thay duoc 5 tab con cua MainForm (chi thay
-        // noi dung tab 1), nen mo dialog de thay du ca 5 tab.
+        // 9 tab cu khong doi gi. MainForm (MOT VIEW DUY NHAT — 1 panel cuon doc,
+        // khong tab con, khong dialog) duoc NHUNG TRUC TIEP vao tab nay (TopLevel
+        // = false, Dock = Fill) ngay khi mo form, khong can bam nut, khong mo
+        // dialog phu. (Ban TabControl 5 tab truoc day bi loi hien thi tren ETABS
+        // — khong thay duoc header tab 2-5 — nen da bo han TabControl.)
         private void BuildLoadAssignerTab(TabPage tab)
         {
-            var hint = new Label
+            try
             {
-                Text = "Gán tải móng từ file Excel (bảng Foundation loads) vào model ETABS đang mở.\r\nBấm nút dưới đây để mở bảng gán tải (5 tab: File & bảng, Điểm gán tải, Phương & chiều, Match pattern, Preview & gán).",
-                AutoSize = true,
-                Location = new Point(16, 16),
-                MaximumSize = new Size(1200, 0)
-            };
-            var openBtn = new Button
+                var form = new MainForm(new RealEtabs(_sap));
+                form.TopLevel = false;
+                form.FormBorderStyle = FormBorderStyle.None;
+                form.Dock = DockStyle.Fill;
+                tab.Controls.Add(form);
+                form.Show();
+            }
+            catch (Exception ex)
             {
-                Text = "Mở bảng gán tải",
-                AutoSize = true,
-                Location = new Point(16, 64)
-            };
-            var errLabel = new Label
-            {
-                AutoSize = true,
-                Location = new Point(16, 104),
-                MaximumSize = new Size(1200, 0),
-                ForeColor = Color.Red,
-                Visible = false
-            };
-            openBtn.Click += (_, _) =>
-            {
-                try
+                var errLabel = new Label
                 {
-                    using var form = new MainForm(new RealEtabs(_sap));
-                    form.ShowDialog(this);
-                }
-                catch (Exception ex)
-                {
-                    errLabel.Text = "Không mở được bảng gán tải: " + ex.Message;
-                    errLabel.Visible = true;
-                }
-            };
-            tab.Controls.Add(hint);
-            tab.Controls.Add(openBtn);
-            tab.Controls.Add(errLabel);
+                    Text = "Không tải được bảng gán tải: " + ex.Message,
+                    AutoSize = true,
+                    Location = new Point(16, 16),
+                    MaximumSize = new Size(1200, 0),
+                    ForeColor = Color.Red
+                };
+                tab.Controls.Add(errLabel);
+            }
         }
     }
 }

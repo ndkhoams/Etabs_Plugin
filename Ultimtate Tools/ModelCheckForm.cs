@@ -118,6 +118,9 @@ namespace Etabs_Ultimate_Tools
             var tabUpdate = new TabPage("Check for Updates");
             var tabLoadAssigner = new TabPage("Load Assigner");
 
+            // Load Assigner dung DAU TIEN (user chot 2026-11-08) — tab nay la
+            // chuc nang user dung nhieu nhat hien tai.
+            tabs.TabPages.Add(tabLoadAssigner);
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
             tabs.TabPages.Add(tabWindDrift);
@@ -127,8 +130,8 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabColExport);
             tabs.TabPages.Add(tabPileH);
             tabs.TabPages.Add(tabUpdate);
-            tabs.TabPages.Add(tabLoadAssigner);
 
+            BuildLoadAssignerTab(tabLoadAssigner);
             BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
             BuildWindDriftTab(tabWindDrift);
@@ -138,7 +141,6 @@ namespace Etabs_Ultimate_Tools
             BuildColumnExportTab(tabColExport);
             BuildPileHTab(tabPileH);
             BuildUpdateTab(tabUpdate);
-            BuildLoadAssignerTab(tabLoadAssigner);
         }
 
         // ---------- Hộp thoại dùng chung ----------

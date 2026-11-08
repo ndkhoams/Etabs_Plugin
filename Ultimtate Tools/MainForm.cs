@@ -14,12 +14,11 @@ namespace EtabsLoadAssigner.Plugin;
 /// (etabs_loader/app.py) sang WinForms. UI build bằng code (không có file
 /// .Designer) để dễ review tay.
 ///
-/// 5 tab tương ứng 5 chức năng:
-///   1. File &amp; bang (tu dong nhan dien tu Excel)
-///   2. Điểm gán tải (+ alias điểm Excel -> joint ETABS)
-///   3. Phuong &amp; chieu Hx/Hy/Vz -> ETABS global
-///   4. Match pattern (dong Excel &lt;-&gt; pattern ETABS)
-///   5. Preview &amp; gan vao ETABS
+/// MOT VIEW DUY NHAT (user chot 2026-11-08): toan bo chuc nang nam trong 1
+/// panel cuon doc duy nhat — File & bang, Diem gan tai, Phuong & chieu,
+/// Match pattern, Preview & gan — KHONG chia tab con, KHONG mo dialog phu.
+/// (Truoc day dung TabControl 5 tab nhung header tab khong hien duoc tren
+/// ETABS, ca dang embed lan dialog, nen user khong thay/bam duoc tab 2-5.)
 ///
 /// Lưu ý: plugin chạy trong tiến trình ETABS — KHÔNG gọi
 /// ApplicationConfiguration.Initialize() / EnableVisualStyles().
@@ -53,7 +52,7 @@ public sealed class MainForm : Form
         Dock = DockStyle.Fill, ReadOnly = false, AllowUserToAddRows = false,
         RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
     };
-    private readonly TextBox _fileInfoBox = new() { Dock = DockStyle.Bottom, Height = 110, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
+    private readonly TextBox _fileInfoBox = new() { Dock = DockStyle.Top, Height = 110, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
 
     private readonly ComboBox _pointCombo = new() { Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly FlowLayoutPanel _aliasPanel = new()
@@ -100,6 +99,13 @@ public sealed class MainForm : Form
     }
 
     // ---------------- UI ----------------
+    // MOT VIEW DUY NHAT (user chot 2026-11-08): toan bo chuc nang nam trong
+    // 1 panel cuon doc duy nhat, KHONG chia tab con, KHONG mo dialog phu.
+    // Ly do: TabControl cua MainForm khong hien duoc header tab tren ETABS
+    // (ca dang embed lan dialog) nen user khong thay/bam duoc tab 2-5.
+    // Cac section xep doc tu tren xuong trong 1 Panel AutoScroll; moi
+    // section la 1 GroupBox/Panel Dock=Top (them vao theo thu tu NGUOC de
+    // hien dung thu tu — Dock=Top moi them se day cac section truoc xuong).
     private void BuildUi()
     {
         var top = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, FlowDirection = FlowDirection.LeftToRight };
@@ -122,33 +128,29 @@ public sealed class MainForm : Form
         var saveBtn = new Button { Text = "Lưu profile...", AutoSize = true };
         saveBtn.Click += (_, _) => SaveProfile();
         top.Controls.Add(saveBtn);
-        Controls.Add(top);
         _statusLabel.Text = "Chưa import file.";
-        Controls.Add(_statusLabel);
-
-        var tabs = new TabControl { Dock = DockStyle.Fill };
-        tabs.TabPages.Add(BuildTabFile());
-        tabs.TabPages.Add(BuildTabPoint());
-        tabs.TabPages.Add(BuildTabAxis());
-        tabs.TabPages.Add(BuildTabMatch());
-        tabs.TabPages.Add(BuildTabAssign());
-        Controls.Add(tabs);
-    }
-
-    private TabPage BuildTabFile()
-    {
-        var page = new TabPage("1. File & bảng");
-        page.Controls.Add(_grid);
-        page.Controls.Add(_fileInfoBox);
-        page.Controls.Add(_viewTitleLabel);
         _viewTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel rồi bấm “Nhận diện bảng”.";
-        return page;
+        var gridPanel = new Panel { Dock = DockStyle.Top, Height = 320 };
+        gridPanel.Controls.Add(_grid);
+
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        // Them theo thu tu nguoc (section cuoi them truoc) de hien dung thu tu tren->duoi.
+        scroll.Controls.Add(BuildSectionAssign());
+        scroll.Controls.Add(BuildSectionMatch());
+        scroll.Controls.Add(BuildSectionAxis());
+        scroll.Controls.Add(BuildSectionPoint());
+        scroll.Controls.Add(_fileInfoBox);
+        scroll.Controls.Add(gridPanel);
+        scroll.Controls.Add(_viewTitleLabel);
+        scroll.Controls.Add(_statusLabel);
+        scroll.Controls.Add(top);
+        Controls.Add(scroll);
     }
 
-    private TabPage BuildTabPoint()
+    private GroupBox BuildSectionPoint()
     {
-        var page = new TabPage("2. Điểm gán tải");
-        page.Controls.Add(_aliasPanel);
+        var box = new GroupBox { Text = "Điểm gán tải", Dock = DockStyle.Top, Height = 380 };
+        box.Controls.Add(_aliasPanel);
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 170 };
         bottom.Controls.Add(_etabsInfoBox);
         var modeBox = new GroupBox { Text = "ETABS", Dock = DockStyle.Top, Height = 70 };
@@ -162,13 +164,13 @@ public sealed class MainForm : Form
         var connectBtn = new Button { Text = "Làm mới thông tin ETABS", Dock = DockStyle.Top, Height = 28 };
         connectBtn.Click += (_, _) => RefreshEtabsInfo();
         bottom.Controls.Add(connectBtn);
-        page.Controls.Add(bottom);
+        box.Controls.Add(bottom);
         var aliasLabel = new Label
         {
             Dock = DockStyle.Top, AutoSize = true,
             Text = "Ánh xạ điểm Excel -> Joint ETABS (mặc định giống tên; sửa nếu joint trong model đặt tên khác):",
         };
-        page.Controls.Add(aliasLabel);
+        box.Controls.Add(aliasLabel);
         var row = new Panel { Dock = DockStyle.Top, Height = 36 };
         _pointCombo.Location = new Point(0, 4);
         row.Controls.Add(_pointCombo);
@@ -180,22 +182,22 @@ public sealed class MainForm : Form
             Text = "(ETABS thật: chọn joint trong model trước rồi bấm nút. Offline: dùng điểm mock.)",
             Location = new Point(400, 8), AutoSize = true,
         });
-        page.Controls.Add(row);
-        page.Controls.Add(new Label
+        box.Controls.Add(row);
+        box.Controls.Add(new Label
         {
             Dock = DockStyle.Top, AutoSize = true,
             Text = "Chọn điểm Excel cần gán (mỗi lần gán 1 điểm; profile giữ nguyên cho điểm sau):",
         });
-        return page;
+        return box;
     }
 
-    private TabPage BuildTabAxis()
+    private GroupBox BuildSectionAxis()
     {
-        var page = new TabPage("3. Phương & chiều");
-        page.Controls.Add(_axisExampleLabel);
+        var box = new GroupBox { Text = "Phương & chiều", Dock = DockStyle.Top, Height = 250 };
+        box.Controls.Add(_axisExampleLabel);
         var updateBtn = new Button { Text = "Cập nhật ví dụ", Dock = DockStyle.Top, AutoSize = true };
         updateBtn.Click += (_, _) => UpdateAxisExample();
-        page.Controls.Add(updateBtn);
+        box.Controls.Add(updateBtn);
         var axisPanel = new Panel { Dock = DockStyle.Top, Height = 110 };
         int y = 6;
         foreach (string excelAxis in new[] { "Hx", "Hy", "Vz" })
@@ -216,25 +218,25 @@ public sealed class MainForm : Form
             _axisControls[excelAxis] = (tgt, sign);
             y += 32;
         }
-        page.Controls.Add(axisPanel);
-        page.Controls.Add(new Label
+        box.Controls.Add(axisPanel);
+        box.Controls.Add(new Label
         {
             Dock = DockStyle.Top, AutoSize = true, ForeColor = Color.FromArgb(0xA3, 0x33, 0x33),
             Text = "ETABS global +Z hướng lên, nên mặc định Vz -> -Z. Dấu Hx/Hy phải kiểm tra 1 điểm thật trước khi gán hàng loạt.",
         });
-        page.Controls.Add(new Label
+        box.Controls.Add(new Label
         {
             Dock = DockStyle.Top, AutoSize = true,
             Text = "Ánh xạ phương/chiều — sơ đồ gốc: Hx mũi tên sang trái, Hy lên trên, '+z down' (Vz dương khi hướng xuống).",
         });
         UpdateAxisExample();
-        return page;
+        return box;
     }
 
-    private TabPage BuildTabMatch()
+    private GroupBox BuildSectionMatch()
     {
-        var page = new TabPage("4. Match pattern");
-        page.Controls.Add(_matchPanel);
+        var box = new GroupBox { Text = "Match pattern", Dock = DockStyle.Top, Height = 320 };
+        box.Controls.Add(_matchPanel);
         var opts = new Panel { Dock = DockStyle.Top, Height = 36 };
         opts.Controls.Add(_createMissingCheck);
         _createMissingCheck.Location = new Point(0, 8);
@@ -249,7 +251,7 @@ public sealed class MainForm : Form
         _rangeCombo.Text = "max_abs";
         _rangeCombo.Location = new Point(110, 6);
         opts.Controls.Add(_rangeCombo);
-        page.Controls.Add(opts);
+        box.Controls.Add(opts);
         var bar = new Panel { Dock = DockStyle.Top, Height = 36 };
         var suggestBtn = new Button { Text = "Gợi ý tự động tất cả", Location = new Point(0, 4), AutoSize = true };
         suggestBtn.Click += (_, _) => AutoSuggestAll();
@@ -259,14 +261,14 @@ public sealed class MainForm : Form
             Text = "Gợi ý theo tên (BC=belt conveyor, BT=belt tension, NX/NY=notional...) — CHỈ LÀ GỢI Ý, bạn chốt lại từng dòng.",
             Location = new Point(170, 8), AutoSize = true,
         });
-        page.Controls.Add(bar);
-        return page;
+        box.Controls.Add(bar);
+        return box;
     }
 
-    private TabPage BuildTabAssign()
+    private GroupBox BuildSectionAssign()
     {
-        var page = new TabPage("5. Preview & gán");
-        page.Controls.Add(_previewBox);
+        var box = new GroupBox { Text = "Preview & gán", Dock = DockStyle.Top, Height = 300 };
+        box.Controls.Add(_previewBox);
         var bar = new Panel { Dock = DockStyle.Top, Height = 36 };
         var previewBtn = new Button { Text = "Xem preview", Location = new Point(0, 4), AutoSize = true };
         previewBtn.Click += (_, _) => ShowPreview();
@@ -279,8 +281,8 @@ public sealed class MainForm : Form
         bar.Controls.Add(exportBtn);
         _replaceCheck.Location = new Point(370, 8);
         bar.Controls.Add(_replaceCheck);
-        page.Controls.Add(bar);
-        return page;
+        box.Controls.Add(bar);
+        return box;
     }
 
     // ---------------- logic (port app.py) ----------------
