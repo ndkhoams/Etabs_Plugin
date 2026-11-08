@@ -70,7 +70,6 @@ namespace Etabs_Ultimate_Tools
         private Label lblUpdateLatestDate;
         private Button btnUpdateCheck, btnUpdateDownload;
         private ProgressBar progressUpdate;
-        private string _latestUpdateCommit;
 
         private const double AxialAlphaCc = 1.0;
         private const double AxialGammaC = 1.2;
@@ -88,7 +87,7 @@ namespace Etabs_Ultimate_Tools
 
         private void InitializeComponent()
         {
-            Text = "Etabs Ultimate Tools  ©" + GetPluginBuildTimestamp() + " by KhoaND13";
+            Text = "Etabs Ultimate Tools  ©" + BuildTimestamp + " by KhoaND13";
             Width = 1480;
             Height = 780;
             MinimumSize = new Size(1360, 700);
