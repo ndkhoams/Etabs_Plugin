@@ -30,17 +30,18 @@ namespace EtabsLoadAssigner.Plugin;
 ///     dien tich). Dropdown Joint ETABS don cung da xoa (joint chon truc
 ///     tiep trong bang load point).
 ///   - Vung cuon giua: hang tieu de (trai: 2 nut chuyen bang + "Thêm điểm"
-///     + "Làm trắng bảng"; phai: Ghi de + "Lưu data và Excel" + "GÁN VÀO
-///     ETABS"; giua: ten diem) -> bang noi luc / bang load point (gom ca 2
-///     cot Match pattern ngay sau cot Tai: Pattern gia tri 1 / gia tri 2)
-///     -> Phuong & chieu (cao 80 — tang them de chu khoi bi sat).
+///     + "Xoá dòng" + "Làm trắng bảng"; phai: Ghi de + "Lưu data và Excel"
+///     + "GÁN VÀO ETABS"; giua: ten diem) -> bang noi luc / bang load point
+///     (gom ca 2 cot Match pattern ngay sau cot Tai: Pattern gia tri 1 /
+///     gia tri 2) -> Phuong & chieu (cao 80 — tang them de chu khoi bi sat).
 ///   - GAN HANG LOAT (user chot 08/11): nut GÁN gan TAT CA cap (Diem Excel
 ///     -> Joint ETABS) trong bang load point, moi diem dung chung profile
 ///     match pattern + phuong/chieu. Chuyen bang bang 2 nut o hang tieu de
 ///     ("Bảng load pattern" / "Bảng load point"); them diem vao bang bang
 ///     nut "Thêm điểm" (lay Diem Excel dang chon o dropdown tren, cot Joint
-///     de trong de chon trong bang) hoac go truc tiep trong bang; nut "Làm
-///     trắng bảng" xoa het dong de gan luot moi.
+///     de trong de chon trong bang) hoac go truc tiep trong bang; nut "Xoá
+///     dòng" xoa dong dang chon (de xoa dong thua); nut "Làm trắng bảng"
+///     xoa het dong de gan luot moi.
 ///   - KHONG co box thong tin file (user chot 08/11 — xoa).
 ///     KHONG co Preview box / nut Xem preview / Xuat preview (.txt).
 ///     GÁN xong chi hien thong bao so luong (so lieu da thay trong grid).
@@ -304,6 +305,9 @@ public sealed class MainForm : Form
         var clearBtn = new Button { Text = "Làm trắng bảng", Dock = DockStyle.Left, AutoSize = true };
         clearBtn.Click += (_, _) => ClearPointGrid();
         _titleBar.Controls.Add(clearBtn);
+        var delRowBtn = new Button { Text = "Xoá dòng", Dock = DockStyle.Left, AutoSize = true };
+        delRowBtn.Click += (_, _) => DeleteSelectedPointRows();
+        _titleBar.Controls.Add(delRowBtn);
         var addPointBtn = new Button { Text = "Thêm điểm", Dock = DockStyle.Left, AutoSize = true };
         addPointBtn.Click += (_, _) => AddCurrentPointToPointGrid();
         _titleBar.Controls.Add(addPointBtn);
@@ -511,6 +515,34 @@ public sealed class MainForm : Form
                 "Làm trắng bảng", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             return;
         _pointGrid.Rows.Clear();
+        ShowPointGrid();
+    }
+
+    /// <summary>
+    /// Xoa dong dang chon trong bang load point (user chot 08/11 — de xoa
+    /// dong thua: dong trong, dong nhap nham). Chon 1 hoac nhieu dong roi
+    /// bam nut. Khong xoa dong nhap moi (dong trong cuoi bang).
+    /// </summary>
+    private void DeleteSelectedPointRows()
+    {
+        ShowPointGrid();
+        var toDelete = new List<DataGridViewRow>();
+        foreach (DataGridViewRow row in _pointGrid.SelectedRows)
+        {
+            if (!row.IsNewRow)
+                toDelete.Add(row);
+        }
+        // Neu chi chon o (khong chon ca dong) thi lay dong cua o dang chon.
+        if (toDelete.Count == 0 && _pointGrid.CurrentRow is not null && !_pointGrid.CurrentRow.IsNewRow)
+            toDelete.Add(_pointGrid.CurrentRow);
+        if (toDelete.Count == 0)
+        {
+            MessageBox.Show(this, "Chọn dòng cần xoá trong bảng load point trước (bấm vào đầu dòng để chọn).",
+                "Chưa chọn dòng", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        foreach (var row in toDelete)
+            _pointGrid.Rows.Remove(row);
         ShowPointGrid();
     }
 
