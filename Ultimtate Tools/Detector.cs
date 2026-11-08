@@ -454,10 +454,13 @@ public static class Detector
     /// Ghi thong tin match vao sheet "LoadAssigner" trong file Excel (xoa sheet
     /// cu roi tao moi — dam bao noi dung sach). Ghi de file goc; file dang mo
     /// trong Excel thi se nem loi (file bi khoa) — caller bat va bao user dong
-    /// file truoc. Cac sheet khac giu nguyen.
+    /// file truoc. Cac sheet khac giu nguyen. TU CHOI ghi neu bang rong
+    /// (0 dong tai) — tranh ghi de sheet thanh trang nhu loi truoc day.
     /// </summary>
     public static void WriteProfileSheet(string path, Profile profile, FoundationTable table)
     {
+        if (table.Rows.Count == 0)
+            throw new InvalidOperationException("Bảng tải chưa có dòng nào — chọn đúng sheet có bảng tải trước khi lưu.");
         using var wb = new XLWorkbook(path);
         var old = wb.Worksheets.FirstOrDefault(w => string.Equals(w.Name, ProfileSheetName, StringComparison.OrdinalIgnoreCase));
         old?.Delete();

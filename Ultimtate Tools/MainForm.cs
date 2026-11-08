@@ -37,11 +37,12 @@ namespace EtabsLoadAssigner.Plugin;
 ///     diem rieng o muc Diem gan tai.
 ///   - Joint dich chon trong DROPDOWN "Joint ETABS" o thanh duoi (chi liet
 ///     ke joint DANG CHON trong ETABS — khong phai toan bo joint cua model,
-///     user chot 08/11). Mo plugin len la dropdown nap san joint dang chon;
-///     nut "Lấy điểm đang chọn" nap lai tu ETABS. KHONG co nut "Chọn điểm
-///     trong ETABS": form plugin la MODAL (ShowDialog) nen du an form chinh,
-///     ETABS van bi khoa — user khong click/chon duoc joint trong model
-///     (da user-verify 08/11).
+///     user chot 08/11). Mo plugin len la dropdown nap san joint dang chon.
+///     KHONG co nut "Chọn điểm trong ETABS" / "Lấy điểm đang chọn": form
+///     plugin la MODAL (ShowDialog) nen du an form chinh, ETABS van bi khoa
+///     — user khong click/chon duoc joint trong model (da user-verify
+///     08/11); muon doi joint dich thi dong plugin, chon lai joint trong
+///     model, mo lai plugin.
 ///   - Match 2 cot: trai = gia tri 1, phai = gia tri 2 (chi khi o co 2
 ///     gia tri); chi pattern co san trong model — tool KHONG tu tao pattern.
 ///   - Ghi de (checkbox "Xoá trắng tải cũ tại điểm này trước khi gán",
@@ -67,9 +68,11 @@ namespace EtabsLoadAssigner.Plugin;
 /// LUU MATCH (user chot 08/11): KHONG dung file .json rieng nua — thong tin
 /// match (pattern 2 cot / phuong-chieu / ghi de) luu luon vao SHEET
 /// "LoadAssigner" trong chinh file Excel noi luc. Mo file len la doc sheet
-/// do (co thi nap, khong co thi dung mac dinh); doi 1 combo la tu ghi lai
-/// sheet. File dang mo trong Excel thi khong ghi duoc — bao o thanh trang
-/// thai, dong file roi doi lai 1 dong de luu.
+/// do (co thi nap, khong co thi dung mac dinh); bam nut "Lưu match vào
+/// Excel" moi ghi lai sheet (luu THU CONG, khong tu dong — tu dong luu
+/// truoc day de ghi sheet TRONG khi bang chua nhan dien xong, vd sheet
+/// README 0 dong). File dang mo trong Excel thi khong ghi duoc — bao o
+/// thanh trang thai, dong file roi bam Luu lai.
 /// Neu thu muc plug-in khong ghi duoc (vd Program Files khong quyen admin)
 /// thi luu sang %AppData%\EtabsLoadAssigner\profile.json (vi tri cu) va
 /// ghi chu o thanh trang thai.
@@ -81,8 +84,8 @@ public sealed class MainForm : Form
 {
     private readonly IEtabsApi _liveApi;
     private IEtabsApi _etabs; // Luon la model ETABS dang mo — khong co che do Mock o UI (user chot 08/11).
-    // Joint dich lay tu BANG Joint ETABS (chi joint dang chon trong ETABS)
-    // / nut "Lấy điểm đang chọn" (ten that, khong phai alias go tay).
+    // Joint dich lay tu DROPDOWN Joint ETABS (chi joint dang chon trong
+    // ETABS) (ten that, khong phai alias go tay).
     private string _targetJointName = "";
     private string _targetJointLabel = "";
 
@@ -228,10 +231,6 @@ public sealed class MainForm : Form
         };
         bottomFlow.Controls.Add(new Label { Text = "Joint ETABS:", AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
         bottomFlow.Controls.Add(_jointCombo);
-        var selBtn = new Button { Text = "Lấy điểm đang chọn", AutoSize = true };
-        selBtn.Click += (_, _) => UseSelectedPoint();
-        bottomFlow.Controls.Add(selBtn);
-        _replaceCheck.CheckedChanged += (_, _) => SaveProfileToExcel();
         bottomFlow.Controls.Add(_replaceCheck);
         var assignBtn = new Button
         {
@@ -312,8 +311,10 @@ public sealed class MainForm : Form
             x += 55;
             _axisControls[excelAxis] = (tgt, sign);
             // Doi phuong/chieu la tu luu vao profile mac dinh (thu muc plug-in).
-            tgt.SelectedIndexChanged += (_, _) => SaveProfileToExcel();
-            sign.SelectedIndexChanged += (_, _) => SaveProfileToExcel();
+            // Doi phuong-chieu: chi cap nhat profile trong bo nho; luu bang
+            // nut "Lưu match vào Excel" (user chot 08/11 — khong tu dong luu).
+            tgt.SelectedIndexChanged += (_, _) => { };
+            sign.SelectedIndexChanged += (_, _) => { };
             x += 28; // khoang cach giua 2 anh xa
         }
         // Them nguoc (note truoc, row sau) de row o tren, note o duoi.
@@ -324,9 +325,13 @@ public sealed class MainForm : Form
 
     private Panel BuildMatchToolbar()
     {
-        // Thanh nut Goi y / Lam moi pattern — dat ngay tren bang noi luc
-        // (2 cot Pattern da nam trong grid, ngay sau cot Tai). Khong con
-        // panel Match rieng ben duoi bang (user chot 08/11).
+        // Thanh nut Goi y / Lam moi pattern / Luu match — dat ngay tren bang
+        // noi luc (2 cot Pattern da nam trong grid, ngay sau cot Tai). Khong
+        // con panel Match rieng ben duoi bang (user chot 08/11).
+        // Nut "Lưu match vào Excel" (user chot 08/11): luu THU CONG thay vi
+        // tu dong — bam nut moi ghi sheet "LoadAssigner" (luu TAT CA dong tai
+        // da match + phuong-chieu + ghi de). Tu dong luu truoc day de ghi
+        // sheet TRONG khi bang chua nhan dien xong (vd sheet README 0 dong).
         var bar = new Panel { Dock = DockStyle.Top, Height = 36 };
         var suggestBtn = new Button { Text = "Gợi ý tự động tất cả", Location = new Point(0, 4), AutoSize = true };
         suggestBtn.Click += (_, _) => AutoSuggestAll();
@@ -334,10 +339,13 @@ public sealed class MainForm : Form
         var refreshBtn = new Button { Text = "Làm mới pattern", Location = new Point(170, 4), AutoSize = true };
         refreshBtn.Click += (_, _) => UpdateEtabsStatus();
         bar.Controls.Add(refreshBtn);
+        var saveBtn = new Button { Text = "Lưu match vào Excel", Location = new Point(310, 4), AutoSize = true };
+        saveBtn.Click += (_, _) => SaveMatchToExcel();
+        bar.Controls.Add(saveBtn);
         bar.Controls.Add(new Label
         {
             Text = "Gợi ý theo tên — CHỈ LÀ GỢI Ý, bạn chốt lại từng dòng trong cột Pattern của bảng. Pattern phải có sẵn trong model ETABS.",
-            Location = new Point(300, 8), AutoSize = true,
+            Location = new Point(470, 8), AutoSize = true,
         });
         return bar;
     }
@@ -394,28 +402,41 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Tu luu thong tin match vao sheet "LoadAssigner" trong file Excel noi
-    /// luc (user chot 08/11 — KHONG dung file .json rieng nua). Luu moi khi
-    /// user doi match pattern / phuong-chieu / ghi de. Khong lam gi khi UI
-    /// chua san sang hoac chua chon file Excel (tranh ghi de luc khoi tao).
-    /// File dang mo trong Excel thi khong ghi duoc — chi bao o thanh trang
-    /// thai (khong chan cong viec hien tai).
+    /// Luu THU CONG thong tin match vao sheet "LoadAssigner" trong file Excel
+    /// noi luc (user chot 08/11 — nut "Lưu match vào Excel", KHONG tu dong
+    /// luu nua). Ghi TAT CA dong tai trong bang (ten tai + pattern 2 cot) +
+    /// phuong-chieu + ghi de. Chi luu khi bang da nhan dien xong (co dong
+    /// tai); bang rong thi bao loi va KHONG ghi — tranh ghi de sheet thanh
+    /// trang nhu truoc day (tu dong luu khi sheet README 0 dong).
+    /// File dang mo trong Excel thi khong ghi duoc — bao o thanh trang thai.
     /// </summary>
-    private void SaveProfileToExcel()
+    private void SaveMatchToExcel()
     {
-        if (!_uiReady || _table is null)
+        if (!_uiReady || _table is null || _table.Rows.Count == 0)
+        {
+            MessageBox.Show(this,
+                "Chưa có bảng tải để lưu.\nChọn file Excel rồi chọn đúng sheet có bảng tải (vd SH6-T3a) trước khi bấm Lưu.",
+                "Chưa có bảng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
+        }
         string path = _profile.SourceFile;
         if (path == "" || !File.Exists(path))
+        {
+            MessageBox.Show(this, "Chưa chọn file Excel.", "Chưa chọn file",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
+        }
         try
         {
             SyncProfileFromUi();
             Detector.WriteProfileSheet(path, _profile, _table);
+            _statusLabel.Text = $"Đã lưu match vào sheet 'LoadAssigner' trong file Excel ({_table.Rows.Count} dòng tải, sheet: {_profile.Sheet}).";
         }
         catch (Exception ex)
         {
-            _statusLabel.Text = $"Không lưu được vào sheet 'LoadAssigner' trong file Excel ({ex.Message}) — đóng file trong Excel rồi đổi lại 1 dòng để lưu.";
+            _statusLabel.Text = $"Không lưu được vào sheet 'LoadAssigner' trong file Excel ({ex.Message}) — đóng file trong Excel rồi bấm Lưu lại.";
+            MessageBox.Show(this, _statusLabel.Text, "Không lưu được",
+                MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }
 
@@ -673,12 +694,12 @@ public sealed class MainForm : Form
         var row = _table.Rows[e.RowIndex];
         if (colName == "Pat1" || colName == "Pat2")
         {
-            // Doi pattern trong grid: ghi vao profile + tu luu vao sheet Excel.
+            // Doi pattern trong grid: ghi vao profile trong bo nho (luu bang
+            // nut "Lưu match vào Excel" — user chot 08/11, khong tu dong luu).
             string val = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
             var rp = _profile.PatternFor(row.Name);
             if (colName == "Pat1") rp.Left = val; else rp.Right = val;
             _profile.PatternMap[row.Name] = rp;
-            SaveProfileToExcel();
             return;
         }
         string comp = colName;
@@ -722,8 +743,7 @@ public sealed class MainForm : Form
             }
         }
         finally { _updatingGrid = false; }
-        _statusLabel.Text = "Đã gợi ý tự động — kiểm tra lại từng dòng trước khi gán.";
-        SaveProfileToExcel();
+        _statusLabel.Text = "Đã gợi ý tự động — kiểm tra lại từng dòng trước khi gán, rồi bấm “Lưu match vào Excel”.";
     }
 
     private void UpdateEtabsStatus()
@@ -776,23 +796,6 @@ public sealed class MainForm : Form
             _statusLabel.Text = "Chưa chọn joint nào trong ETABS — chọn joint trong model trước khi mở plugin (dropdown Joint chỉ liệt kê joint đang chọn).";
     }
 
-    private void UseSelectedPoint()
-    {
-        // Nap lai dropdown Joint tu joint dang chon trong ETABS (moi chon
-        // them joint thi dong plugin roi mo lai, hoac bam nut nay de nap lai).
-        RefreshJointCombo();
-        if (_jointList.Count == 0)
-        {
-            MessageBox.Show(this,
-                "Chưa chọn joint nào trong ETABS.\nChọn joint trong model ETABS trước khi mở plugin rồi bấm lại.",
-                "Chưa chọn điểm", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        // Mac dinh chon joint dau tien (neu chua co joint dich).
-        if (_targetJointName == "" || !_jointList.Any(p => p.Name == _targetJointName))
-            SetTargetJoint(_jointList[0]);
-    }
-
     private void SetTargetJoint(PointInfo p)
     {
         _targetJointName = p.Name;
@@ -830,7 +833,7 @@ public sealed class MainForm : Form
         }
         if (_targetJointName == "")
         {
-            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nChọn 1 joint ở dropdown 'Joint ETABS' bên dưới (hoặc chọn joint trong model trước khi mở plugin rồi bấm 'Lấy điểm đang chọn').",
+            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nChọn joint trong model ETABS trước khi mở plugin, rồi chọn 1 joint ở dropdown 'Joint ETABS' bên dưới.",
                 "Chưa chọn joint", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return (null, null, null);
         }
