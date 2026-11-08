@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.102.2" />
+    <!-- Load Assigner (gop 2026-11-08): Profile luu/tai JSON dung System.Text.Json. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
   </ItemGroup>
 
   <!-- Mỗi lần build, tự xuất version.txt (chứa đúng dấu build đã đóng vào DLL)

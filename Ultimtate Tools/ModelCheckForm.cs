@@ -116,6 +116,7 @@ namespace Etabs_Ultimate_Tools
             var tabColExport = new TabPage("Column Force Exporter");
             var tabPileH = new TabPage("Pile Reactions");
             var tabUpdate = new TabPage("Check for Updates");
+            var tabLoadAssigner = new TabPage("Load Assigner");
 
             tabs.TabPages.Add(tabModifier);
             tabs.TabPages.Add(tabWind);
@@ -126,6 +127,7 @@ namespace Etabs_Ultimate_Tools
             tabs.TabPages.Add(tabColExport);
             tabs.TabPages.Add(tabPileH);
             tabs.TabPages.Add(tabUpdate);
+            tabs.TabPages.Add(tabLoadAssigner);
 
             BuildModifierTab(tabModifier);
             BuildWindTab(tabWind);
@@ -136,6 +138,7 @@ namespace Etabs_Ultimate_Tools
             BuildColumnExportTab(tabColExport);
             BuildPileHTab(tabPileH);
             BuildUpdateTab(tabUpdate);
+            BuildLoadAssignerTab(tabLoadAssigner);
         }
 
         // ---------- Hộp thoại dùng chung ----------

@@ -1,4 +1,5 @@
 using ETABSv1;
+using EtabsLoadAssigner.Plugin;
 using System;
 using System.Collections.Generic;
 using System.Drawing;
@@ -221,6 +222,68 @@ namespace Etabs_Ultimate_Tools
             AddColumn(dgvAxial, "NuD", "ʊd", 70, "0.000");
             AddColumn(dgvAxial, "VdLimit", "ʊd limit", 70, "0.00");
             AddColumn(dgvAxial, "Result", "Kết luận", 150, null, true);
+        }
+
+        // ---------- Load Assigner (gop tu plugin ETABS-Load-Assigner, 2026-11-08) ----------
+        // Tab thu 10: gan tai mong tu file Excel (bang Foundation loads LONG PHU BC-5)
+        // vao model ETABS dang mo. Ly do gop: DLL rieng (net48 + ETABSv1, giong het
+        // Ultimate Tools) bi ETABS bao "Not Found" khi Add — nguyen nhan chua ro
+        // (plugin nap tot tren .NET Framework, LoadTest pass toan bo) — dua code vao
+        // dung vo Ultimate Tools (da chung minh nap duoc) de khoi phai doan loader.
+        // 9 tab cu khong doi gi; form gan tai (MainForm, 5 tab) duoc nhuong (embed)
+        // vao tab nay khi user bam nut — mo lan dau (lazy) de khong cham luc mo form
+        // chinh, va loi (neu co) chi hien trong tab nay, khong lam hong 9 tab cu.
+
+        private MainForm _loadAssignerForm;
+        private bool _loadAssignerOpened;
+
+        private void BuildLoadAssignerTab(TabPage tab)
+        {
+            var hint = new Label
+            {
+                Text = "Gán tải móng từ file Excel (bảng Foundation loads) vào model ETABS đang mở.\r\nBấm nút dưới đây để mở bảng gán tải (5 tab: File & bảng, Điểm gán tải, Phương & chiều, Match pattern, Preview & gán).",
+                AutoSize = true,
+                Location = new Point(16, 16),
+                MaximumSize = new Size(1200, 0)
+            };
+            var openBtn = new Button
+            {
+                Text = "Mở bảng gán tải",
+                AutoSize = true,
+                Location = new Point(16, 64)
+            };
+            var errLabel = new Label
+            {
+                AutoSize = true,
+                Location = new Point(16, 104),
+                MaximumSize = new Size(1200, 0),
+                ForeColor = Color.Red,
+                Visible = false
+            };
+            openBtn.Click += (_, _) =>
+            {
+                if (_loadAssignerOpened) return;
+                try
+                {
+                    var form = new MainForm(new RealEtabs(_sap));
+                    form.TopLevel = false;
+                    form.FormBorderStyle = FormBorderStyle.None;
+                    form.Dock = DockStyle.Fill;
+                    tab.Controls.Clear();
+                    tab.Controls.Add(form);
+                    form.Show();
+                    _loadAssignerForm = form;
+                    _loadAssignerOpened = true;
+                }
+                catch (Exception ex)
+                {
+                    errLabel.Text = "Không mở được bảng gán tải: " + ex.Message;
+                    errLabel.Visible = true;
+                }
+            };
+            tab.Controls.Add(hint);
+            tab.Controls.Add(openBtn);
+            tab.Controls.Add(errLabel);
         }
     }
 }
