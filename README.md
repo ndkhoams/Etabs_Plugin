@@ -6,7 +6,7 @@ Plugin cho **ETABS 22** hỗ trợ kiểm tra kết cấu theo tiêu chuẩn Vi�
 
 ## Tính năng
 
-Form chính gồm 9 tab:
+Form chính gồm 10 tab:
 
 | Tab | Chức năng |
 |---|---|
@@ -19,6 +19,7 @@ Form chính gồm 9 tab:
 | **Column Force Exporter** | Xuất nội lực (PU, MUXT, MUYT, MUXB, MUYB) của cột/vách đang chọn theo nhiều tổ hợp cùng lúc, ra Excel hoặc file text (định dạng nạp cho CSI Col / Prokon). |
 | **Pile Reactions** | Kiểm tra khả năng chịu tải của cọc (kéo / nén / ngang H) cho 3 trường hợp tải: Tải đứng, Tải gió, Động đất. Sức chịu tải nhập theo từng loại cọc (point spring); lực ngang lấy theo step có H lớn nhất khi ETABS cho phép đọc step-by-step. |
 | **Check for Updates** | Kiểm tra bản build mới trên GitHub và tải file ISO bản phân phối mới nhất về máy. |
+| **Load Assigner** | Gán tải móng từ file Excel (bảng Foundation loads, vd LONG PHU BC-5) vào model ETABS đang mở — nhận diện bảng tự động, match pattern, gán cả 2 chiều cho hàng ± (pattern `_NEG`), tự tạo pattern thiếu. Gộp từ plugin ETABS-Load-Assigner (2026-11-08); bấm "Mở bảng gán tải" trong tab để mở form 5 tab của nó. |
 
 Hầu hết các tab đều xuất được báo cáo **Excel (.xlsx)** để lưu hồ sơ tính toán.
 
