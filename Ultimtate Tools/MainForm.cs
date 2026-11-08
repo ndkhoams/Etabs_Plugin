@@ -52,6 +52,11 @@ namespace EtabsLoadAssigner.Plugin;
 ///     nhu anh mau). 2 cot Pattern nam ngay sau cot Tai (user chot 08/11,
 ///     anh build 20261108-184715) — moi dong tai hien luon pattern cua no,
 ///     khong can panel Match rieng ben duoi bang.
+///   - Bang KEO DAI cho kin vung cuon (user chot 08/11, anh build
+///     20261108-191050) — khong de khoang trong duoi muc Phuong &amp; chieu
+///     bi lang phi. Cac cot Fill het chieu rong bang: Tai 28, Pattern 1 =
+///     26, Pattern 2 = 26 (bang nhau, du thay het ten pattern), Hx/Hy/Vz
+///     7 moi cot (rong hon truoc de thay ro gia tri).
 ///
 /// PROFILE MAC DINH (user chot 08/11): tu luu + tu doc trong THU MUC CHUA
 /// PLUG-IN (file LoadAssignerProfile.json canh file DLL). Mo plugin len la
@@ -111,7 +116,7 @@ public sealed class MainForm : Form
     private readonly DataGridView _grid = new()
     {
         Dock = DockStyle.Fill, ReadOnly = false, AllowUserToAddRows = false,
-        RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.DisplayedCells,
+        RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True },
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
         ColumnHeadersHeight = 36,
@@ -122,6 +127,13 @@ public sealed class MainForm : Form
     private readonly Dictionary<string, (ComboBox Axis, ComboBox Sign)> _axisControls = new();
 
     private readonly CheckBox _replaceCheck = new() { Text = "Ghi đè tải cũ cùng pattern tại điểm này", Checked = true, AutoSize = true };
+
+    // Vung cuon + cac muc ben trong (de keo dai bang noi luc cho kin vung
+    // cuon khi cua so rong — user chot 08/11, anh build 20261108-191050).
+    private Panel? _scrollPanel;
+    private Panel? _gridPanel;
+    private Panel? _matchToolbar;
+    private GroupBox? _axisSection;
 
     public MainForm(IEtabsApi liveApi)
     {
@@ -135,6 +147,8 @@ public sealed class MainForm : Form
         // Gia tri pattern trong profile co the khong con trong model ETABS
         // (model doi) — hien o do thay vi nem loi khi set gia tri cell.
         _grid.DataError += (_, e) => { e.ThrowException = false; };
+        // Mo form len: keo dai bang noi luc cho kin vung cuon.
+        Load += (_, _) => LayoutGridHeight();
         TryAutoLoadProfile();
         UpdateEtabsStatus();
         _uiReady = true;
@@ -188,16 +202,20 @@ public sealed class MainForm : Form
         top.Controls.Add(saveBtn, 8, 0);
         _statusLabel.Text = "Chưa import file.";
         _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel rồi bấm “Nhận diện bảng”.";
-        var gridPanel = new Panel { Dock = DockStyle.Top, Height = 300 };
-        gridPanel.Controls.Add(_grid);
+        _gridPanel = new Panel { Dock = DockStyle.Top, Height = 300 };
+        _gridPanel.Controls.Add(_grid);
+        _axisSection = BuildSectionAxis();
+        _matchToolbar = BuildMatchToolbar();
 
-        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        _scrollPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         // Them theo thu tu nguoc (section cuoi them truoc) de hien dung thu tu tren->duoi:
         // ten diem -> thanh nut Goi y / Lam moi -> bang noi luc (gom cot Pattern) -> Phuong & chieu.
-        scroll.Controls.Add(BuildSectionAxis());
-        scroll.Controls.Add(gridPanel);
-        scroll.Controls.Add(BuildMatchToolbar());
-        scroll.Controls.Add(_pointTitleLabel);
+        _scrollPanel.Controls.Add(_axisSection);
+        _scrollPanel.Controls.Add(_gridPanel);
+        _scrollPanel.Controls.Add(_matchToolbar);
+        _scrollPanel.Controls.Add(_pointTitleLabel);
+        // Cua so doi kich thuoc -> keo dai bang noi luc cho kin vung cuon.
+        _scrollPanel.Resize += (_, _) => LayoutGridHeight();
 
         // Thanh duoi CO DINH (ngoai vung cuon): Joint ETABS + GÁN luon thay, khong can cuon.
         var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44 };
@@ -232,10 +250,44 @@ public sealed class MainForm : Form
         bottom.Controls.Add(bottomFlow);
 
         // Them Fill truoc, roi Top/Bottom — Fill lay phan con lai.
-        Controls.Add(scroll);
+        Controls.Add(_scrollPanel);
         Controls.Add(_statusLabel);
         Controls.Add(top);
         Controls.Add(bottom);
+    }
+
+    /// <summary>
+    /// Keo dai bang noi luc cho kin vung cuon (user chot 08/11 — khong de
+    /// khoang trong duoi muc Phuong &amp; chieu bi lang phi). Chieu cao bang
+    /// = chieu cao vung cuon tru cac muc khac (tieu de, thanh nut, Phuong
+    /// &amp; chieu); toi thieu 200 de cua so nho van thay duoc bang.
+    /// </summary>
+    private void LayoutGridHeight()
+    {
+        if (_scrollPanel is null || _gridPanel is null || _matchToolbar is null || _axisSection is null)
+            return;
+        int other = _pointTitleLabel.Height + _matchToolbar.Height + _axisSection.Height;
+        int avail = _scrollPanel.ClientSize.Height - other;
+        _gridPanel.Height = Math.Max(200, avail);
+    }
+
+    /// <summary>
+    /// Do rong toi thieu cho 2 cot Pattern: du de thay het ten pattern dai
+    /// nhat (trong model ETABS + profile), cong them cho nut dropdown.
+    /// Dung lam MinimumWidth — cot van gian theo Fill khi cua so rong.
+    /// </summary>
+    private int PatternColumnWidth(IReadOnlyList<string> names)
+    {
+        int maxW = 0;
+        foreach (string n in names)
+        {
+            if (n == "")
+                continue;
+            int w = TextRenderer.MeasureText(n, _grid.Font).Width;
+            if (w > maxW)
+                maxW = w;
+        }
+        return Math.Max(150, maxW + 40); // 40 = nut dropdown + padding.
     }
 
     private GroupBox BuildSectionAxis()
@@ -521,14 +573,21 @@ public sealed class MainForm : Form
         {
             _grid.Columns.Clear();
             _grid.Rows.Clear();
-            _grid.Columns.Add("Load", "Tải");
-            _grid.Columns[0].ReadOnly = true; // Cot ten tai khong sua.
+            // Cac cot Fill het chieu rong bang (user chot 08/11 — khong de
+            // khoang trong xam ben phai). Ty trong: Tai 28, Pattern 1 = 26,
+            // Pattern 2 = 26 (bang nhau), Hx/Hy/Vz 7 moi cot (rong hon truoc
+            // de thay ro gia tri). 2 cot Pattern co MinimumWidth = ten
+            // pattern dai nhat de khong bi cat khi cua so hep.
+            var loadCol = new DataGridViewTextBoxColumn { Name = "Load", HeaderText = "Tải", ReadOnly = true, FillWeight = 28, MinimumWidth = 200 };
+            _grid.Columns.Add(loadCol);
             // 2 cot Match pattern ngay sau cot Tai (user chot 08/11).
             var choices = PatternChoices();
+            int patW = PatternColumnWidth(choices);
             var pat1 = new DataGridViewComboBoxColumn
             {
                 Name = "Pat1", HeaderText = "Pattern — giá trị 1 (trái)",
                 DataPropertyName = "Pat1", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+                FillWeight = 26, MinimumWidth = patW,
             };
             pat1.Items.AddRange(choices.ToArray());
             _grid.Columns.Add(pat1);
@@ -536,13 +595,14 @@ public sealed class MainForm : Form
             {
                 Name = "Pat2", HeaderText = "Pattern — giá trị 2 (phải)",
                 DataPropertyName = "Pat2", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+                FillWeight = 26, MinimumWidth = patW,
             };
             pat2.Items.AddRange(choices.ToArray());
             _grid.Columns.Add(pat2);
             // Header 2 dong: Hx / [kN] (nhu anh mau "85 / E.2").
-            _grid.Columns.Add("Hx", "Hx\n[kN]");
-            _grid.Columns.Add("Hy", "Hy\n[kN]");
-            _grid.Columns.Add("Vz", "Vz\n[kN]");
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Hx", HeaderText = "Hx\n[kN]", FillWeight = 7, MinimumWidth = 60 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Hy", HeaderText = "Hy\n[kN]", FillWeight = 7, MinimumWidth = 60 });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Vz", HeaderText = "Vz\n[kN]", FillWeight = 7, MinimumWidth = 60 });
             List<string> available;
             try { available = _etabs.PatternNames(); }
             catch { available = new List<string>(); }
@@ -596,7 +656,8 @@ public sealed class MainForm : Form
 
     /// <summary>
     /// Nap lai lua chon cho 2 cot Pattern trong grid (khi pattern trong
-    /// model ETABS thay doi). Khong doi gia tri cell dang co.
+    /// model ETABS thay doi). Khong doi gia tri cell dang co. Cap nhat ca
+    /// MinimumWidth theo ten pattern dai nhat moi.
     /// </summary>
     private void RefreshPatternColumns()
     {
@@ -609,6 +670,9 @@ public sealed class MainForm : Form
         c1.Items.AddRange(choices.ToArray());
         c2.Items.Clear();
         c2.Items.AddRange(choices.ToArray());
+        int patW = PatternColumnWidth(choices);
+        c1.MinimumWidth = patW;
+        c2.MinimumWidth = patW;
     }
 
     // Sua truc tiep trong grid:
