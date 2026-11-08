@@ -39,12 +39,14 @@
     <WriteLinesToFile File="$(TargetDir)version.txt" Lines="$(PluginBuildTimestamp)" Overwrite="true" Encoding="UTF-8" />
   </Target>
 
-  <!-- Dấu build (giong CADtools, user chot 09/11): BuildTimestamp la hang
-       trong ModelCheckForm.Update.cs — target nay dong dau moi lan build
-       (ghi de gia tri cu bang PluginBuildTimestamp). Title bar hien dung
-       hang nay, tab Check for Updates lay gia tri moi nhat tu chinh file
-       nay tren GitHub. Luu y: build se lam ban file nguon (nhu ben
-       CADtools) — commit kem khi phat hanh ban moi. -->
+  <!-- Dấu build (giong CADtools, user chot 09/11; sua 09/11: bo qua khi
+       build trong Visual Studio): BuildTimestamp la hang trong
+       ModelCheckForm.Update.cs — target nay dong dau moi lan build NGOAI
+       Visual Studio (ghi de gia tri cu bang PluginBuildTimestamp).
+       Title bar hien dung hang nay, tab Check for Updates lay gia tri
+       moi nhat tu chinh file nay tren GitHub. Build trong VS khong lam
+       ban file nguon nua; timestamp tren remote den tu lan agent push
+       moi nhat (build Linux dong dau truoc khi day). -->
   <UsingTask TaskName="UpdateBuildTimestamp" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <ParameterGroup>
       <SourceFile ParameterType="System.String" Required="true" />
@@ -65,7 +67,7 @@
       </Code>
     </Task>
   </UsingTask>
-  <Target Name="UpdateBuildTimestamp" BeforeTargets="CoreCompile" Condition="'$(DesignTimeBuild)' != 'true'">
+  <Target Name="UpdateBuildTimestamp" BeforeTargets="CoreCompile" Condition="'$(DesignTimeBuild)' != 'true' AND '$(BuildingInsideVisualStudio)' != 'true'">
     <UpdateBuildTimestamp SourceFile="$(MSBuildProjectDirectory)\ModelCheckForm.Update.cs" NewTimestamp="$(PluginBuildTimestamp)" />
   </Target>
 </Project>
