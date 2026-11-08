@@ -21,15 +21,20 @@ namespace EtabsLoadAssigner.Plugin;
 ///
 /// LAYOUT GON (user chot 08/11, sau anh chup build 20261108-184715):
 ///   - Thanh tren: file / Sheet / Diem — dung TableLayoutPanel, moi control
-///     can giua doc trong hang (thang hang, can doi).
+///     can giua doc trong hang (thang hang, can doi). KHONG co nut "Nhận
+///     diện bảng" (user chot 08/11 — thua, mo file Excel la tu nhan dien).
 ///   - Thanh duoi CO DINH: Joint ETABS + GÁN (luon thay, khong can cuon).
-///   - Vung cuon giua: ten diem (tieu de bang) -> thanh nut Goi y / Lam
-///     moi pattern -> bang noi luc (gom ca 2 cot Match pattern ngay sau
-///     cot Tai: Pattern gia tri 1 / gia tri 2) -> Phuong & chieu (1 hang
-///     ngang, chi set 1 lan).
+///   - Vung cuon giua: ten diem (tieu de bang) -> thanh nut Luu match ->
+///     bang noi luc (gom ca 2 cot Match pattern ngay sau cot Tai: Pattern
+///     gia tri 1 / gia tri 2) -> Phuong & chieu (1 hang ngang, chi set 1 lan).
 ///   - KHONG co box thong tin file (user chot 08/11 — xoa).
 ///     KHONG co Preview box / nut Xem preview / Xuat preview (.txt).
 ///     GÁN xong chi hien thong bao so luong (so lieu da thay trong grid).
+///
+/// NHAN DIEN BANG (user chot 08/11): mo file Excel la tu nhan dien (khong
+/// can bam nut). Sheet dang chon khong co data (vd README — sheet dau tien)
+/// thi tu dong chuyen sang sheet tiep theo co data; chi khi CA FILE khong
+/// co data moi hien hop thoai bao loi.
 ///
 /// QUY TAC GAN (user chot 08/11):
 ///   - Gan 1 diem 1 luc. Diem gan = diem dang chon o dropdown "Điểm" tren
@@ -175,7 +180,7 @@ public sealed class MainForm : Form
         // theo chieu rong con lai; cac cot khac vua noi dung.
         var top = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 7, RowCount = 1,
+            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 6, RowCount = 1,
             Padding = new Padding(3, 3, 3, 3),
         };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Chon file
@@ -184,7 +189,6 @@ public sealed class MainForm : Form
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo Sheet
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan Diem
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo Diem
-        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan dien
         top.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var browseBtn = new Button { Text = "Chọn file Excel...", AutoSize = true, Anchor = AnchorStyles.None };
         browseBtn.Click += (_, _) => ChooseFile();
@@ -199,11 +203,8 @@ public sealed class MainForm : Form
         _pointViewCombo.Anchor = AnchorStyles.None;
         _pointViewCombo.SelectedIndexChanged += (_, _) => RefreshGrid();
         top.Controls.Add(_pointViewCombo, 5, 0);
-        var detectBtn = new Button { Text = "Nhận diện bảng", AutoSize = true, Anchor = AnchorStyles.None };
-        detectBtn.Click += (_, _) => Detect();
-        top.Controls.Add(detectBtn, 6, 0);
         _statusLabel.Text = "Chưa import file.";
-        _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel rồi bấm “Nhận diện bảng”.";
+        _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel để tự nhận diện bảng.";
         _gridPanel = new Panel { Dock = DockStyle.Top, Height = 300 };
         _gridPanel.Controls.Add(_grid);
         _axisSection = BuildSectionAxis();
@@ -325,28 +326,14 @@ public sealed class MainForm : Form
 
     private Panel BuildMatchToolbar()
     {
-        // Thanh nut Goi y / Lam moi pattern / Luu match — dat ngay tren bang
-        // noi luc (2 cot Pattern da nam trong grid, ngay sau cot Tai). Khong
-        // con panel Match rieng ben duoi bang (user chot 08/11).
-        // Nut "Lưu match vào Excel" (user chot 08/11): luu THU CONG thay vi
-        // tu dong — bam nut moi ghi sheet "LoadAssigner" (luu TAT CA dong tai
-        // da match + phuong-chieu + ghi de). Tu dong luu truoc day de ghi
-        // sheet TRONG khi bang chua nhan dien xong (vd sheet README 0 dong).
+        // Thanh nut — chi con nut "Lưu match vào Excel" (user chot 08/11):
+        // nut "Gợi ý tự động tất cả" + "Làm mới pattern" + dong goi y da
+        // xoa (thua — goi y theo ten sai nhieu, pattern nap san khi mo
+        // plugin). Luu match la thu cong: bam nut moi ghi sheet "LoadAssigner".
         var bar = new Panel { Dock = DockStyle.Top, Height = 36 };
-        var suggestBtn = new Button { Text = "Gợi ý tự động tất cả", Location = new Point(0, 4), AutoSize = true };
-        suggestBtn.Click += (_, _) => AutoSuggestAll();
-        bar.Controls.Add(suggestBtn);
-        var refreshBtn = new Button { Text = "Làm mới pattern", Location = new Point(170, 4), AutoSize = true };
-        refreshBtn.Click += (_, _) => UpdateEtabsStatus();
-        bar.Controls.Add(refreshBtn);
-        var saveBtn = new Button { Text = "Lưu match vào Excel", Location = new Point(310, 4), AutoSize = true };
+        var saveBtn = new Button { Text = "Lưu match vào Excel", Location = new Point(0, 4), AutoSize = true };
         saveBtn.Click += (_, _) => SaveMatchToExcel();
         bar.Controls.Add(saveBtn);
-        bar.Controls.Add(new Label
-        {
-            Text = "Gợi ý theo tên — CHỈ LÀ GỢI Ý, bạn chốt lại từng dòng trong cột Pattern của bảng. Pattern phải có sẵn trong model ETABS.",
-            Location = new Point(470, 8), AutoSize = true,
-        });
         return bar;
     }
 
@@ -478,6 +465,18 @@ public sealed class MainForm : Form
             string? sheet = _sheetCombo.Text.Trim();
             if (sheet == "") sheet = null;
             t = Detector.DetectFile(path, sheet);
+            // Fallback (user chot 08/11): sheet dang chon khong co data (vd
+            // README — sheet dau tien khi mo file) thi tu dong chuyen sang
+            // sheet tiep theo co data — DetectFile(path, null) quet tat ca
+            // sheet va chon bang co nhieu dong tai nhat. Chi khi CA FILE
+            // khong co data moi hien hop thoai bao loi (o cuoi ham, qua
+            // t.Warnings).
+            if (t.Rows.Count == 0 || t.Points.Count == 0)
+            {
+                var best = Detector.DetectFile(path, null);
+                if (best.Rows.Count > 0 && best.Points.Count > 0)
+                    t = best;
+            }
         }
         catch (Exception ex)
         {
@@ -504,8 +503,10 @@ public sealed class MainForm : Form
         _table = t;
         _profile.SourceFile = path;
         _profile.Sheet = t.Sheet;
+        // Cap nhat dropdown Sheet theo sheet THUC TE da doc (neu fallback doi
+        // sheet, vd README -> SH4-T1, thi dropdown hien SH4-T1 cho user biet).
         _updatingSheet = true;
-        if (t.Sheet != "" && _sheetCombo.Text == "")
+        if (t.Sheet != "")
             _sheetCombo.Text = t.Sheet;
         _updatingSheet = false;
         _statusLabel.Text = $"Đã nhận diện: {t.Points.Count} điểm, {t.Rows.Count} dòng tải, {t.Patterns.Count} pattern (sheet: {t.Sheet}).";
@@ -558,7 +559,7 @@ public sealed class MainForm : Form
         {
             _grid.Columns.Clear();
             _grid.Rows.Clear();
-            _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel rồi bấm “Nhận diện bảng”.";
+            _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel để tự nhận diện bảng.";
             return;
         }
         var t = _table;
@@ -720,30 +721,6 @@ public sealed class MainForm : Form
         _statusLabel.Text = lv.Kind == LoadValueKind.Text
             ? $"Giá trị “{newRaw}” ở {row.Name} / {point} {comp} không phải số hay khoảng — sẽ bị bỏ qua khi gán."
             : $"Đã sửa {row.Name} / {point} {comp} = {lv.Raw}.";
-    }
-
-    private void AutoSuggestAll()
-    {
-        if (_table is null || !_grid.Columns.Contains("Pat1"))
-            return;
-        List<string> available;
-        try { available = _etabs.PatternNames(); }
-        catch { available = new List<string>(); }
-        _updatingGrid = true;
-        try
-        {
-            for (int i = 0; i < _table.Rows.Count; i++)
-            {
-                var r = _table.Rows[i];
-                string left = Mapping.SuggestPattern(r.Name, available);
-                _grid.Rows[i].Cells["Pat1"].Value = left;
-                _grid.Rows[i].Cells["Pat2"].Value = r.HasRangeCell() && left != ""
-                    ? Mapping.SuggestPatternOpposite(left, available)
-                    : "";
-            }
-        }
-        finally { _updatingGrid = false; }
-        _statusLabel.Text = "Đã gợi ý tự động — kiểm tra lại từng dòng trước khi gán, rồi bấm “Lưu match vào Excel”.";
     }
 
     private void UpdateEtabsStatus()
