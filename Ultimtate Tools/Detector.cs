@@ -36,7 +36,7 @@ public static class Detector
     public static readonly string[] Components = { "Hx", "Hy", "Vz" };
 
     private static readonly Regex RangeRegex = new(
-        @"^\s*([+-]?\d+(?:[.,]\d+)?)\s*/\s*([+-])\s*(\d+(?:[.,]\d+)?)\s*$",
+        @"^\s*([+-]?\d+(?:[.,]\d+)?)\s*/\s*([+-]?)\s*(\d+(?:[.,]\d+)?)\s*$",
         RegexOptions.Compiled);
 
     private static readonly Regex NumberRegex = new(
@@ -58,9 +58,11 @@ public static class Detector
     /// Port cua parse_cell() trong detector.py.
     /// - null / "" / "-" / "--" / "—" / "n/a" -> blank
     /// - so (ke ca so thuc trong file Excel) -> number
-    /// - o viet "+/- 1" / "-/+ 0" / "± 1" (vd bang 90/D.1): lay do lon, giu raw goc
-    /// - khoang "-3/+6", "67/-71" -> range (vmin, vmax)
+    /// - o viet "+/- 1" / "-/+ 0" / "± 1" (vd bang 90/D.1): 2 gia tri (-V, +V), giu raw goc
+    /// - khoang "-3/+6", "67/-71", "-50/48" -> range (gia tri 1, gia tri 2) — KHONG phai min/max
     /// - con lai -> text
+    /// Quy tac user chot 08/11: cot "+/-" cua bang KHONG anh huong den gia tri;
+    /// chi o tu viet "+/-V" hoac "a/b" moi co 2 gia tri.
     /// </summary>
     public static LoadValue ParseCell(object? raw)
     {
@@ -76,13 +78,14 @@ public static class Detector
         string s = Norm(raw);
         if (s is "" or "-" or "--" or "—" or "n/a" or "N/A")
             return new LoadValue { Raw = s, Kind = LoadValueKind.Blank };
-        // O viet "+/- 1" / "-/+ 0": gia tri dao chieu, lay do lon; dau +/- goc giu trong raw.
-        if (s.StartsWith("+/-") || s.StartsWith("-/+") || s.StartsWith("±"))
+        // O viet "+/- 1" / "-/+ 0" / "+ / -10" (ke ca khoang trang): gia tri 1 = -V, gia tri 2 = +V.
+        string nospace = s.Replace(" ", "");
+        if (nospace.StartsWith("+/-") || nospace.StartsWith("-/+") || nospace.StartsWith("±"))
         {
-            string rest = (s.StartsWith("+/-") || s.StartsWith("-/+")) ? s.Substring(3).Trim() : s.Substring(1).Trim();
+            string rest = nospace.StartsWith("±") ? nospace.Substring(1) : nospace.Substring(3);
             double? n = TryNum(rest);
             if (n is not null)
-                return new LoadValue { Raw = s, Kind = LoadValueKind.Number, Value = n.Value };
+                return new LoadValue { Raw = s, Kind = LoadValueKind.Range, VMin = -n.Value, VMax = n.Value };
         }
         Match m = RangeRegex.Match(s);
         if (m.Success)
@@ -488,7 +491,7 @@ public static class Detector
     }
 }
 
-/// <summary>Mot o gia tri trong bang: so, khoang '-3/+6', hoac trong.</summary>
+/// <summary>Mot o gia tri trong bang: so, khoang 'a/b' (VMin = gia tri 1, VMax = gia tri 2 — KHONG phai min/max), hoac trong.</summary>
 public sealed class LoadValue
 {
     public string Raw { get; set; } = "";
@@ -511,8 +514,20 @@ public enum LoadValueKind
 public sealed class FoundationRow
 {
     public string Name { get; set; } = "";
-    public bool Reversible { get; set; } // Cot "+/-" — tai co the dao chieu.
+    // Cot "+/-" cua bang — CHI de hien thi "(+/-)" o grid/match (user tu xu ly trong combo sau).
+    // KHONG anh huong den gia tri gan (user chot 08/11).
+    public bool Reversible { get; set; }
     public Dictionary<string, Dictionary<string, LoadValue>> Values { get; set; } = new();
+
+    /// <summary>Co o 2 gia tri (khoang "a/b" hoac "+/-V") o bat ky diem/thanh phan nao — dung de goi y pattern cot phai.</summary>
+    public bool HasRangeCell()
+    {
+        foreach (var compVals in Values.Values)
+            foreach (var lv in compVals.Values)
+                if (lv.Kind == LoadValueKind.Range)
+                    return true;
+        return false;
+    }
 
     public bool IsAllZero()
     {

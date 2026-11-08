@@ -19,10 +19,11 @@ public static class Assigner
     /// <summary>
     /// Gan tai cho 1 diem Excel (vd '20 / D') sang 1 joint ETABS (ten joint
     /// that lay tu lua chon trong ETABS — KHONG dung alias go tay nua).
-    /// Match 2 cot (user chot 08/11): cot trai = gia tri nho (gia tri don,
-    /// hoac min cua o khoang / -V cua hang +/-); cot phai = gia tri lon
-    /// (max cua o khoang / +V cua hang +/-). Dong khong co +/- chi can cot
-    /// trai. Tool KHONG tu tao pattern — pattern phai co san trong model.
+    /// Match 2 cot (user chot 08/11): cot trai = gia tri 1 (gia tri don,
+    /// hoac gia tri 1 cua o 2 gia tri); cot phai = gia tri 2 (gia tri 2 cua
+    /// o "a/b" hoac "+/-V"). Dong chi co 1 gia tri thi chi can cot trai.
+    /// Cot "+/-" cua bang KHONG anh huong den gia tri gan (user tu xu ly
+    /// trong combo sau). Tool KHONG tu tao pattern — pattern phai co san trong model.
     /// </summary>
     public static BuildResult BuildAssignments(FoundationTable table, string excelPoint, string etabsJoint, Profile profile)
     {
@@ -72,11 +73,11 @@ public static class Assigner
                 res.Skipped.Add(("thieu so", $"'{row.Name}' ở {excelPoint}: thiếu ô Hx/Hy/Vz."));
                 continue;
             }
-            // Tach moi thanh phan thanh (nho, lon).
-            //  - So don V, dong khong +/-: (V, V).
-            //  - So don V, dong +/-: (-V, +V).
-            //  - Khoang (a, b): (a, b). - O trong: (0, 0). - Chu: bo dong.
-            bool hasPlusMinus = row.Reversible;
+            // Tach moi thanh phan thanh (gia tri 1, gia tri 2).
+            //  - So don V: (V, V) — chi 1 gia tri, cot "+/-" cua bang KHONG nhan vao.
+            //  - Khoang (a, b) — "a/b" hoac "+/-V": (a, b) = (gia tri 1, gia tri 2), KHONG phai min/max.
+            //  - O trong: (0, 0). - Chu: bo dong.
+            bool hasPlusMinus = false; // Chi true khi co o 2 gia tri (khoang) — cot "+/-" khong tinh.
             var leftVals = new List<double>();
             var rightVals = new List<double>();
             bool ok = true;
@@ -102,16 +103,8 @@ public static class Assigner
                 else
                 {
                     double v = lv.Value!.Value;
-                    if (row.Reversible)
-                    {
-                        leftVals.Add(-v);
-                        rightVals.Add(v);
-                    }
-                    else
-                    {
-                        leftVals.Add(v);
-                        rightVals.Add(v);
-                    }
+                    leftVals.Add(v);
+                    rightVals.Add(v);
                 }
             }
             if (!ok)
@@ -126,7 +119,7 @@ public static class Assigner
                 Pattern = leftPat,
                 Fx = fxL, Fy = fyL, Fz = fzL,
                 Side = "trai",
-                Notes = hasPlusMinus ? "giá trị nhỏ (cột trái)" : "",
+                Notes = hasPlusMinus ? "giá trị 1 (cột trái)" : "",
             };
             if (profile.SkipZeroRows && leftAssignment.IsZero())
             {
@@ -139,8 +132,8 @@ public static class Assigner
                 if (rightPat == "")
                 {
                     res.Warnings.Add(
-                        $"'{row.Name}': có giá trị +/- nhưng chưa chọn pattern cột phải — " +
-                        "chỉ gán giá trị nhỏ (cột trái), giá trị lớn chưa được gán.");
+                        $"'{row.Name}': có 2 giá trị nhưng chưa chọn pattern cột phải — " +
+                        "chỉ gán giá trị 1 (cột trái), giá trị 2 chưa được gán.");
                 }
                 else
                 {
@@ -152,7 +145,7 @@ public static class Assigner
                         Pattern = rightPat,
                         Fx = fxR, Fy = fyR, Fz = fzR,
                         Side = "phai",
-                        Notes = "giá trị lớn (cột phải)",
+                        Notes = "giá trị 2 (cột phải)",
                     };
                     if (!(profile.SkipZeroRows && rightAssignment.IsZero()))
                         res.Assignments.Add(rightAssignment);
@@ -212,7 +205,7 @@ public sealed class Assignment
     public double My { get; set; }
     public double Mz { get; set; }
     public string Notes { get; set; } = "";
-    public string Side { get; set; } = "trai"; // "trai" = gia tri nho / gia tri don; "phai" = gia tri lon (chi khi co +/-).
+    public string Side { get; set; } = "trai"; // "trai" = gia tri 1 / gia tri don; "phai" = gia tri 2 (chi khi o co 2 gia tri).
 
     public double[] Values() => new[] { Fx, Fy, Fz, Mx, My, Mz };
 

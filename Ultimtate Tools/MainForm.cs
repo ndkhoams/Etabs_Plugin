@@ -591,8 +591,8 @@ public sealed class MainForm : Form
             choices.AddRange(new SortedSet<string>(available));
             var header = new Panel { Height = 22, Width = 710 };
             header.Controls.Add(new Label { Text = "Tải", Location = new Point(0, 3), Width = 380, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
-            header.Controls.Add(new Label { Text = "Pattern — giá trị nhỏ (trái)", Location = new Point(390, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
-            header.Controls.Add(new Label { Text = "Pattern — giá trị lớn (phải)", Location = new Point(550, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
+            header.Controls.Add(new Label { Text = "Pattern — giá trị 1 (trái)", Location = new Point(390, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
+            header.Controls.Add(new Label { Text = "Pattern — giá trị 2 (phải)", Location = new Point(550, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
             _matchPanel.Controls.Add(header);
             foreach (var r in _table.Rows)
             {
@@ -611,7 +611,8 @@ public sealed class MainForm : Form
                 string curR = rp.Right;
                 if (curL == "")
                     curL = Mapping.SuggestPattern(r.Name, available);
-                if (curR == "" && r.Reversible && curL != "")
+                // Goi y cot phai khi dong co o 2 gia tri (khoang "a/b" hoac "+/-V") — cot "+/-" khong tinh.
+                if (curR == "" && r.HasRangeCell() && curL != "")
                     curR = Mapping.SuggestPatternOpposite(curL, available);
                 left.Text = curL;
                 right.Text = curR;
@@ -640,7 +641,7 @@ public sealed class MainForm : Form
                 continue;
             string left = Mapping.SuggestPattern(r.Name, available);
             pair.Left.Text = left;
-            pair.Right.Text = r.Reversible && left != ""
+            pair.Right.Text = r.HasRangeCell() && left != ""
                 ? Mapping.SuggestPatternOpposite(left, available)
                 : "";
         }
