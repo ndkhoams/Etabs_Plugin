@@ -20,6 +20,18 @@ namespace EtabsLoadAssigner.Plugin;
 /// (Truoc day dung TabControl 5 tab nhung header tab khong hien duoc tren
 /// ETABS, ca dang embed lan dialog, nen user khong thay/bam duoc tab 2-5.)
 ///
+/// Quy tac gan (user chot 08/11, sau khi bam GAN ma khong thay noi luc):
+///   - Gan 1 diem 1 luc. Joint dich lay tu lua chon trong ETABS (ten that
+///     qua nut 'Chon diem trong ETABS' / 'Lay diem dang chon') — KHONG dung
+///     alias go tay (do la ly do lan truoc gan khong thay: alias '92 / D.1'
+///     khong khop ten joint that trong model, SetLoadForce tra loi).
+///     Truoc khi gan, tool kiem tra joint co trong model khong.
+///   - Grid chi preview 1 diem khi da chon diem (khong load tat ca).
+///   - Match 2 cot: trai = gia tri nho, phai = gia tri lon; chi pattern co
+///     san trong model — tool KHONG tu tao pattern.
+///   - Khong co che do Mock/Offline o UI — plugin chi lam viec voi file
+///     dang mo. Khong co vi du dien giai o Phuong & chieu.
+///
 /// Lưu ý: plugin chạy trong tiến trình ETABS — KHÔNG gọi
 /// ApplicationConfiguration.Initialize() / EnableVisualStyles().
 /// Cài đặt lưu ra %AppData%\EtabsLoadAssigner\profile.json (cPlugin bị hủy
@@ -28,8 +40,10 @@ namespace EtabsLoadAssigner.Plugin;
 public sealed class MainForm : Form
 {
     private readonly IEtabsApi _liveApi;
-    private readonly MockEtabs _mock = new();
-    private IEtabsApi _etabs;
+    private IEtabsApi _etabs; // Luon la model ETABS dang mo — khong co che do Mock o UI (user chot 08/11).
+    // Joint dich lay tu lua chon trong ETABS (ten that, khong phai alias go tay).
+    private string _targetJointName = "";
+    private string _targetJointLabel = "";
 
     private FoundationTable? _table;
     private Profile _profile = new();
@@ -55,28 +69,17 @@ public sealed class MainForm : Form
     private readonly TextBox _fileInfoBox = new() { Dock = DockStyle.Top, Height = 110, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
 
     private readonly ComboBox _pointCombo = new() { Width = 160, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly FlowLayoutPanel _aliasPanel = new()
-    {
-        Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
-        WrapContents = false, AutoScroll = true,
-    };
-    private readonly Dictionary<string, TextBox> _aliasControls = new();
-    private readonly TextBox _etabsInfoBox = new() { Dock = DockStyle.Fill, Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
-    private readonly RadioButton _modeLiveRadio = new() { Text = "Model ETABS đang mở", Checked = true, AutoSize = true };
-    private readonly RadioButton _modeMockRadio = new() { Text = "Offline — Mock ETABS (test, không cần ETABS)", AutoSize = true };
+    private readonly Label _targetJointLabelCtl = new() { Dock = DockStyle.Top, AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold) };
 
     private readonly Dictionary<string, (ComboBox Axis, ComboBox Sign)> _axisControls = new();
-    private readonly Label _axisExampleLabel = new() { Dock = DockStyle.Top, AutoSize = true };
 
     private readonly FlowLayoutPanel _matchPanel = new()
     {
         Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
         WrapContents = false, AutoScroll = true,
     };
-    private readonly Dictionary<string, ComboBox> _patternControls = new();
-    private readonly CheckBox _createMissingCheck = new() { Text = "Tự tạo pattern chưa có trong model", AutoSize = true, Checked = true };
-    private readonly ComboBox _reversibleCombo = new() { Width = 110, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _rangeCombo = new() { Width = 110, DropDownStyle = ComboBoxStyle.DropDownList };
+    // Match 2 cot: moi dong tai -> (combo cot trai, combo cot phai).
+    private readonly Dictionary<string, (ComboBox Left, ComboBox Right)> _patternControls = new();
 
     private readonly CheckBox _replaceCheck = new() { Text = "Ghi đè tải cũ cùng pattern tại điểm này", Checked = true, AutoSize = true };
     private readonly TextBox _previewBox = new()
@@ -95,7 +98,7 @@ public sealed class MainForm : Form
         BuildUi();
         _grid.CellValueChanged += Grid_CellValueChanged;
         TryAutoLoadProfile();
-        RefreshEtabsInfo();
+        UpdateEtabsStatus();
     }
 
     // ---------------- UI ----------------
@@ -149,38 +152,31 @@ public sealed class MainForm : Form
 
     private GroupBox BuildSectionPoint()
     {
-        var box = new GroupBox { Text = "Điểm gán tải", Dock = DockStyle.Top, Height = 380 };
-        box.Controls.Add(_aliasPanel);
-        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 170 };
-        bottom.Controls.Add(_etabsInfoBox);
-        var modeBox = new GroupBox { Text = "ETABS", Dock = DockStyle.Top, Height = 70 };
-        _modeLiveRadio.Location = new Point(10, 18);
-        _modeLiveRadio.CheckedChanged += (_, _) => { if (_modeLiveRadio.Checked) SwitchMode(); };
-        _modeMockRadio.Location = new Point(10, 42);
-        _modeMockRadio.CheckedChanged += (_, _) => { if (_modeMockRadio.Checked) SwitchMode(); };
-        modeBox.Controls.Add(_modeLiveRadio);
-        modeBox.Controls.Add(_modeMockRadio);
-        bottom.Controls.Add(modeBox);
-        var connectBtn = new Button { Text = "Làm mới thông tin ETABS", Dock = DockStyle.Top, Height = 28 };
-        connectBtn.Click += (_, _) => RefreshEtabsInfo();
-        bottom.Controls.Add(connectBtn);
-        box.Controls.Add(bottom);
-        var aliasLabel = new Label
-        {
-            Dock = DockStyle.Top, AutoSize = true,
-            Text = "Ánh xạ điểm Excel -> Joint ETABS (mặc định giống tên; sửa nếu joint trong model đặt tên khác):",
-        };
-        box.Controls.Add(aliasLabel);
+        // Gan 1 diem 1 luc (user chot 08/11). Joint dich lay tu lua chon
+        // trong ETABS (ten that) — khong con danh sach alias go tay, khong
+        // con che do Mock/Offline (plugin chi lam viec voi file dang mo).
+        var box = new GroupBox { Text = "Điểm gán tải", Dock = DockStyle.Top, Height = 150 };
+        _targetJointLabelCtl.Text = "Joint ETABS sẽ gán: (chưa chọn — bấm 'Chọn điểm trong ETABS' bên dưới).";
+        box.Controls.Add(_targetJointLabelCtl);
         var row = new Panel { Dock = DockStyle.Top, Height = 36 };
         _pointCombo.Location = new Point(0, 4);
+        _pointCombo.SelectedIndexChanged += (_, _) =>
+        {
+            // Chon diem gan -> dong bo dropdown xem (grid chi hien 1 diem nay).
+            if (_pointCombo.Text != "" && _pointViewCombo.Items.Contains(_pointCombo.Text))
+                _pointViewCombo.Text = _pointCombo.Text;
+        };
         row.Controls.Add(_pointCombo);
-        var selBtn = new Button { Text = "Lấy điểm đang chọn trong ETABS", Location = new Point(180, 2), AutoSize = true };
+        var pickBtn = new Button { Text = "Chọn điểm trong ETABS", Location = new Point(180, 2), AutoSize = true };
+        pickBtn.Click += (_, _) => PickPointInEtabs();
+        row.Controls.Add(pickBtn);
+        var selBtn = new Button { Text = "Lấy điểm đang chọn", Location = new Point(360, 2), AutoSize = true };
         selBtn.Click += (_, _) => UseSelectedPoint();
         row.Controls.Add(selBtn);
         row.Controls.Add(new Label
         {
-            Text = "(ETABS thật: chọn joint trong model trước rồi bấm nút. Offline: dùng điểm mock.)",
-            Location = new Point(400, 8), AutoSize = true,
+            Text = "('Chọn điểm trong ETABS': quay lại màn hình ETABS để chọn joint. 'Lấy điểm đang chọn': dùng joint đã chọn trước khi mở plugin.)",
+            Location = new Point(540, 8), AutoSize = true,
         });
         box.Controls.Add(row);
         box.Controls.Add(new Label
@@ -193,11 +189,8 @@ public sealed class MainForm : Form
 
     private GroupBox BuildSectionAxis()
     {
-        var box = new GroupBox { Text = "Phương & chiều", Dock = DockStyle.Top, Height = 250 };
-        box.Controls.Add(_axisExampleLabel);
-        var updateBtn = new Button { Text = "Cập nhật ví dụ", Dock = DockStyle.Top, AutoSize = true };
-        updateBtn.Click += (_, _) => UpdateAxisExample();
-        box.Controls.Add(updateBtn);
+        // Khong con vi du dien giai (user chot 08/11) — chi giu 3 hang anh xa + 2 dong ghi chu ngan.
+        var box = new GroupBox { Text = "Phương & chiều", Dock = DockStyle.Top, Height = 200 };
         var axisPanel = new Panel { Dock = DockStyle.Top, Height = 110 };
         int y = 6;
         foreach (string excelAxis in new[] { "Hx", "Hy", "Vz" })
@@ -209,10 +202,8 @@ public sealed class MainForm : Form
             tgt.Text = excelAxis switch { "Hx" => _profile.Axis.HxAxis, "Hy" => _profile.Axis.HyAxis, _ => _profile.Axis.VzAxis };
             var sign = new ComboBox { Location = new Point(210, y), Width = 55, DropDownStyle = ComboBoxStyle.DropDownList };
             sign.Items.AddRange(new object[] { "+", "-" });
-            int s = excelAxis switch { "Hx" => _profile.Axis.HxSign, "Hy" => _profile.Axis.HySign, _ => _profile.Axis.VzSign };
-            sign.Text = s > 0 ? "+" : "-";
-            tgt.SelectedIndexChanged += (_, _) => UpdateAxisExample();
-            sign.SelectedIndexChanged += (_, _) => UpdateAxisExample();
+            int sc = excelAxis switch { "Hx" => _profile.Axis.HxSign, "Hy" => _profile.Axis.HySign, _ => _profile.Axis.VzSign };
+            sign.Text = sc > 0 ? "+" : "-";
             axisPanel.Controls.Add(tgt);
             axisPanel.Controls.Add(sign);
             _axisControls[excelAxis] = (tgt, sign);
@@ -229,37 +220,29 @@ public sealed class MainForm : Form
             Dock = DockStyle.Top, AutoSize = true,
             Text = "Ánh xạ phương/chiều — sơ đồ gốc: Hx mũi tên sang trái, Hy lên trên, '+z down' (Vz dương khi hướng xuống).",
         });
-        UpdateAxisExample();
         return box;
     }
 
     private GroupBox BuildSectionMatch()
     {
+        // Match 2 cot (user chot 08/11): cot trai = pattern nhan gia tri nho
+        // (gia tri don / min khoang / -V hang +/-); cot phai = pattern nhan
+        // gia tri lon (max khoang / +V hang +/-). Dong khong co +/- chi can
+        // cot trai. Chi liet ke pattern CO SAN trong model — tool KHONG tu
+        // tao pattern (bo checkbox tu tao, bo 'Hang +/-', bo 'O khoang').
         var box = new GroupBox { Text = "Match pattern", Dock = DockStyle.Top, Height = 320 };
         box.Controls.Add(_matchPanel);
-        var opts = new Panel { Dock = DockStyle.Top, Height = 36 };
-        opts.Controls.Add(_createMissingCheck);
-        _createMissingCheck.Location = new Point(0, 8);
-        opts.Controls.Add(new Label { Text = "Hàng +/-:", Location = new Point(230, 10), AutoSize = true });
-        _reversibleCombo.Items.AddRange(new object[] { "plus_only", "both" });
-        _reversibleCombo.Text = "both";
-        _reversibleCombo.Location = new Point(300, 6);
-        opts.Controls.Add(_reversibleCombo);
-        opts.Controls.Add(new Label { Text = "(plus_only = chỉ chiều +, both = thêm pattern _NEG chiều âm)", Location = new Point(420, 10), AutoSize = true });
-        opts.Controls.Add(new Label { Text = "Ô khoảng '-3/+6':", Location = new Point(0, 10), AutoSize = true });
-        _rangeCombo.Items.AddRange(new object[] { "max_abs", "max", "min", "skip" });
-        _rangeCombo.Text = "max_abs";
-        _rangeCombo.Location = new Point(110, 6);
-        opts.Controls.Add(_rangeCombo);
-        box.Controls.Add(opts);
         var bar = new Panel { Dock = DockStyle.Top, Height = 36 };
         var suggestBtn = new Button { Text = "Gợi ý tự động tất cả", Location = new Point(0, 4), AutoSize = true };
         suggestBtn.Click += (_, _) => AutoSuggestAll();
         bar.Controls.Add(suggestBtn);
+        var refreshBtn = new Button { Text = "Làm mới pattern", Location = new Point(170, 4), AutoSize = true };
+        refreshBtn.Click += (_, _) => RefreshMatchTab();
+        bar.Controls.Add(refreshBtn);
         bar.Controls.Add(new Label
         {
-            Text = "Gợi ý theo tên (BC=belt conveyor, BT=belt tension, NX/NY=notional...) — CHỈ LÀ GỢI Ý, bạn chốt lại từng dòng.",
-            Location = new Point(170, 8), AutoSize = true,
+            Text = "Gợi ý theo tên — CHỈ LÀ GỢI Ý, bạn chốt lại từng dòng. Pattern phải có sẵn trong model ETABS.",
+            Location = new Point(300, 8), AutoSize = true,
         });
         box.Controls.Add(bar);
         return box;
@@ -300,11 +283,8 @@ public sealed class MainForm : Form
                 default: _profile.Axis.VzAxis = axis; _profile.Axis.VzSign = s; break;
             }
         }
-        _profile.PatternMap = _patternControls.ToDictionary(kv => kv.Key, kv => kv.Value.Text);
-        _profile.PointAlias = _aliasControls.ToDictionary(kv => kv.Key, kv => kv.Value.Text.Trim());
-        _profile.CreateMissingPattern = _createMissingCheck.Checked;
-        _profile.ReversibleMode = _reversibleCombo.Text;
-        _profile.RangePolicy = _rangeCombo.Text;
+        _profile.PatternMap = _patternControls.ToDictionary(kv => kv.Key,
+            kv => new RowPattern { Left = kv.Value.Left.Text, Right = kv.Value.Right.Text });
         _profile.ReplaceExisting = _replaceCheck.Checked;
     }
 
@@ -322,21 +302,19 @@ public sealed class MainForm : Form
             tgt.Text = axis;
             sign.Text = s > 0 ? "+" : "-";
         }
-        _createMissingCheck.Checked = _profile.CreateMissingPattern;
-        _reversibleCombo.Text = _profile.ReversibleMode;
-        _rangeCombo.Text = _profile.RangePolicy;
         _replaceCheck.Checked = _profile.ReplaceExisting;
         if (_table is not null)
         {
             RefreshMatchTab();
             foreach (var kv in _patternControls)
-                if (_profile.PatternFor(kv.Key) != "")
-                    kv.Value.Text = _profile.PatternFor(kv.Key);
-            foreach (var kv in _aliasControls)
-                if (_profile.PointAlias.TryGetValue(kv.Key, out string? a))
-                    kv.Value.Text = a;
+            {
+                var rp = _profile.PatternFor(kv.Key);
+                if (rp.Left != "")
+                    kv.Value.Left.Text = rp.Left;
+                if (rp.Right != "")
+                    kv.Value.Right.Text = rp.Right;
+            }
         }
-        UpdateAxisExample();
     }
 
     private void TryAutoLoadProfile()
@@ -426,10 +404,11 @@ public sealed class MainForm : Form
         _updatingSheet = false;
         _statusLabel.Text = $"Đã nhận diện: {t.Points.Count} điểm, {t.Rows.Count} dòng tải, {t.Patterns.Count} pattern (sheet: {t.Sheet}).";
         // Dropdown xem tung diem (ngay sau dropdown Sheet o thanh tren).
+        // Chi hien 1 diem khi da chon (user chot 08/11 — khong load tat ca
+        // diem de tranh load nhieu): mac dinh chua chon, grid de trong.
         _pointViewCombo.Items.Clear();
-        _pointViewCombo.Items.Add("(Tất cả điểm)");
         _pointViewCombo.Items.AddRange(t.Points.ToArray());
-        _pointViewCombo.SelectedIndex = 0;
+        _pointViewCombo.SelectedIndex = -1;
         RefreshGrid();
         var info = new List<string>
         {
@@ -443,35 +422,19 @@ public sealed class MainForm : Form
             info.AddRange(t.Warnings.Select(w => $"  ! {w}"));
         }
         _fileInfoBox.Text = string.Join("\n", info);
-        // Tab diem
+        // Diem gan: de trong cho user chon (khong tu chon diem dau — grid
+        // chi preview khi da chon diem). Chon diem gan se dong bo dropdown xem.
         _pointCombo.Items.Clear();
         _pointCombo.Items.AddRange(t.Points.ToArray());
-        if (t.Points.Count > 0 && _pointCombo.Text == "")
-            _pointCombo.SelectedIndex = 0;
-        _aliasPanel.Controls.Clear();
-        _aliasControls.Clear();
-        foreach (string p in t.Points)
-        {
-            var row = new Panel { Height = 30, Width = 600 };
-            row.Controls.Add(new Label { Text = p, Location = new Point(0, 6), Width = 90, AutoSize = false });
-            var tb = new TextBox
-            {
-                Location = new Point(100, 3), Width = 200,
-                Text = _profile.PointAlias.TryGetValue(p, out string? a) ? a : p,
-            };
-            row.Controls.Add(tb);
-            row.Controls.Add(new Label { Text = "(joint ETABS)", Location = new Point(310, 6), AutoSize = true });
-            _aliasPanel.Controls.Add(row);
-            _aliasControls[p] = tb;
-        }
+        _pointCombo.SelectedIndex = -1;
         RefreshMatchTab();
-        UpdateAxisExample();
     }
 
-    // Vẽ lại grid tab 1 theo điểm đang chọn ở dropdown "Điểm" (ngay sau
-    // dropdown Sheet): "(Tất cả điểm)" -> hiện toàn bộ điểm (mỗi điểm 3 cột
-    // Hx/Hy/Vz); chon 1 diem -> chi hien 3 cot cua diem do, kem tieu de ghi
-    // ro dang xem diem nao. Goi sau Detect() va khi doi dropdown.
+    // Ve lai grid theo diem dang chon o dropdown "Điểm" (ngay sau dropdown
+    // Sheet): CHI HIEN 1 DIEM (3 cot Hx/Hy/Vz), kem tieu de ghi ro dang xem
+    // diem nao. Chua chon diem -> grid de trong (user chot 08/11 — khong
+    // load tat ca diem de tranh load nhieu). Goi sau Detect() va khi doi
+    // dropdown "Điểm" / diem gan.
     private void RefreshGrid()
     {
         if (_table is null)
@@ -483,8 +446,14 @@ public sealed class MainForm : Form
         }
         var t = _table;
         string view = _pointViewCombo.Text;
-        bool all = view == "" || view == "(Tất cả điểm)";
-        var points = all ? t.Points : new List<string> { view };
+        if (view == "" || !t.Points.Contains(view))
+        {
+            _grid.Columns.Clear();
+            _grid.Rows.Clear();
+            _viewTitleLabel.Text = "Chọn 1 điểm ở dropdown “Điểm” để xem bảng lực (chỉ xem 1 điểm để tránh load nhiều).";
+            return;
+        }
+        string point = view;
         _updatingGrid = true;
         try
         {
@@ -492,27 +461,23 @@ public sealed class MainForm : Form
             _grid.Rows.Clear();
             _grid.Columns.Add("Load", "Tải");
             _grid.Columns[0].ReadOnly = true; // Cot ten tai khong sua.
-            foreach (string p in points)
-                foreach (string comp in new[] { "Hx", "Hy", "Vz" })
-                    _grid.Columns.Add($"{p} {comp}", $"{p} {comp}");
+            foreach (string comp in new[] { "Hx", "Hy", "Vz" })
+                _grid.Columns.Add($"{point} {comp}", $"{point} {comp}");
             foreach (var r in t.Rows)
             {
                 var vals = new List<object> { r.Name + (r.Reversible ? "  (+/-)" : "") };
-                foreach (string p in points)
-                    foreach (string comp in new[] { "Hx", "Hy", "Vz" })
-                    {
-                        string raw = "";
-                        if (r.Values.TryGetValue(p, out var compVals) && compVals.TryGetValue(comp, out var lv))
-                            raw = lv.Raw;
-                        vals.Add(raw);
-                    }
+                foreach (string comp in new[] { "Hx", "Hy", "Vz" })
+                {
+                    string raw = "";
+                    if (r.Values.TryGetValue(point, out var compVals) && compVals.TryGetValue(comp, out var lv))
+                        raw = lv.Raw;
+                    vals.Add(raw);
+                }
                 _grid.Rows.Add(vals.ToArray());
             }
         }
         finally { _updatingGrid = false; }
-        _viewTitleLabel.Text = all
-            ? $"Đang xem: Tất cả {t.Points.Count} điểm — Bảng {t.Sheet} ({t.Rows.Count} dòng tải). Sửa trực tiếp trong bảng; giá trị mới dùng cho Preview/Gán."
-            : $"Đang xem: Điểm {points[0]} — Bảng {t.Sheet} ({t.Rows.Count} dòng tải). Sửa trực tiếp trong bảng; giá trị mới dùng cho Preview/Gán.";
+        _viewTitleLabel.Text = $"Đang xem: Điểm {point} — Bảng {t.Sheet} ({t.Rows.Count} dòng tải). Sửa trực tiếp trong bảng; giá trị mới dùng cho Preview/Gán.";
     }
 
     // Sua luc truc tiep trong grid: ghi nguoc vao FoundationTable (Preview &
@@ -560,26 +525,40 @@ public sealed class MainForm : Form
             _statusLabel.Text = $"Không lấy được pattern từ ETABS: {ex.Message}";
             available = new List<string>();
         }
-        var filePats = _table.Patterns.Select(p => p.Name).ToList();
+        // Chi pattern CO SAN trong model (sorted) + "" (khong gan) — tool
+        // KHONG tu tao pattern (user chot 08/11).
         var choices = new List<string> { "" };
-        choices.AddRange(new SortedSet<string>(available.Concat(filePats)));
+        choices.AddRange(new SortedSet<string>(available));
+        var header = new Panel { Height = 22, Width = 710 };
+        header.Controls.Add(new Label { Text = "Tải", Location = new Point(0, 3), Width = 380, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
+        header.Controls.Add(new Label { Text = "Pattern — giá trị nhỏ (trái)", Location = new Point(390, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
+        header.Controls.Add(new Label { Text = "Pattern — giá trị lớn (phải)", Location = new Point(550, 3), Width = 150, AutoSize = false, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
+        _matchPanel.Controls.Add(header);
         foreach (var r in _table.Rows)
         {
-            var row = new Panel { Height = 30, Width = 700 };
+            var row = new Panel { Height = 30, Width = 710 };
             row.Controls.Add(new Label
             {
                 Text = r.Name + (r.Reversible ? "  (+/-)" : ""),
                 Location = new Point(0, 6), Width = 380, AutoSize = false,
             });
-            var combo = new ComboBox { Location = new Point(390, 3), Width = 130, DropDownStyle = ComboBoxStyle.DropDownList };
-            combo.Items.AddRange(choices.ToArray());
-            string cur = _profile.PatternFor(r.Name);
-            if (cur == "")
-                cur = Mapping.SuggestPattern(r.Name, available);
-            combo.Text = cur;
-            row.Controls.Add(combo);
+            var left = new ComboBox { Location = new Point(390, 3), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
+            left.Items.AddRange(choices.ToArray());
+            var right = new ComboBox { Location = new Point(550, 3), Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
+            right.Items.AddRange(choices.ToArray());
+            var rp = _profile.PatternFor(r.Name);
+            string curL = rp.Left;
+            string curR = rp.Right;
+            if (curL == "")
+                curL = Mapping.SuggestPattern(r.Name, available);
+            if (curR == "" && r.Reversible && curL != "")
+                curR = Mapping.SuggestPatternOpposite(curL, available);
+            left.Text = curL;
+            right.Text = curR;
+            row.Controls.Add(left);
+            row.Controls.Add(right);
             _matchPanel.Controls.Add(row);
-            _patternControls[r.Name] = combo;
+            _patternControls[r.Name] = (left, right);
         }
     }
 
@@ -591,59 +570,30 @@ public sealed class MainForm : Form
         try { available = _etabs.PatternNames(); }
         catch { available = new List<string>(); }
         foreach (var r in _table.Rows)
-            if (_patternControls.TryGetValue(r.Name, out var combo))
-                combo.Text = Mapping.SuggestPattern(r.Name, available);
+        {
+            if (!_patternControls.TryGetValue(r.Name, out var pair))
+                continue;
+            string left = Mapping.SuggestPattern(r.Name, available);
+            pair.Left.Text = left;
+            pair.Right.Text = r.Reversible && left != ""
+                ? Mapping.SuggestPatternOpposite(left, available)
+                : "";
+        }
         _statusLabel.Text = "Đã gợi ý tự động — kiểm tra lại từng dòng trước khi gán.";
     }
 
-    private void UpdateAxisExample()
-    {
-        if (_table is not null)
-            SyncProfileFromUi();
-        var ax = new AxisMapping();
-        foreach (string excelAxis in new[] { "Hx", "Hy", "Vz" })
-        {
-            var (tgt, sign) = _axisControls[excelAxis];
-            int s = sign.Text == "+" ? +1 : -1;
-            switch (excelAxis)
-            {
-                case "Hx": ax.HxAxis = tgt.Text; ax.HxSign = s; break;
-                case "Hy": ax.HyAxis = tgt.Text; ax.HySign = s; break;
-                default: ax.VzAxis = tgt.Text; ax.VzSign = s; break;
-            }
-        }
-        var errs = ax.Validate();
-        var (fx, fy, fz) = ax.Apply(1, -2, 19);
-        _axisExampleLabel.Text =
-            $"Hiện tại: {ax.Describe()}\n" +
-            $"Ví dụ — Dead loads điểm 20/D (Hx=0, Hy=-2, Vz=19) -> Fx={fx:0}, Fy={fy:0}, Fz={fz:0} kN" +
-            (errs.Count > 0 ? $"\nLỖI: {string.Join("; ", errs)}" : "  (Vz=19 hướng xuống -> Fz âm là đúng nếu +z down).");
-    }
-
-    private void SwitchMode()
-    {
-        _etabs = _modeMockRadio.Checked ? _mock : _liveApi;
-        _statusLabel.Text = _modeMockRadio.Checked
-            ? "Chế độ offline (Mock ETABS)."
-            : "Chế độ model ETABS đang mở.";
-        RefreshMatchTab();
-    }
-
-    private void RefreshEtabsInfo()
+    private void UpdateEtabsStatus()
     {
         try
         {
             var pats = _etabs.PatternNames();
             var pts = _etabs.ListPoints();
-            _etabsInfoBox.Text = _modeMockRadio.Checked
-                ? $"Mock ETABS: {pats.Count} pattern, {pts.Count} point (20/D, 20/E, 27/D, 27/E).\n"
-                : $"Đã kết nối model ETABS đang mở: {pats.Count} pattern, {pts.Count} point.\nPattern: {string.Join(", ", pats.Take(30))}";
             _statusLabel.Text = $"ETABS: {pats.Count} pattern, {pts.Count} point.";
             RefreshMatchTab();
         }
         catch (Exception ex)
         {
-            _etabsInfoBox.Text = $"Không lấy được thông tin ETABS: {ex.Message}";
+            _statusLabel.Text = $"Không lấy được thông tin ETABS: {ex.Message}";
         }
     }
 
@@ -659,47 +609,107 @@ public sealed class MainForm : Form
         if (sel.Count == 0)
         {
             MessageBox.Show(this,
-                "Chọn 1 joint trong ETABS trước (hoặc ở chế độ Mock, điểm đang chọn là '20 / D').",
+                "Chưa chọn joint nào trong ETABS.\nChọn 1 joint trong model trước rồi bấm lại — hoặc bấm 'Chọn điểm trong ETABS' để quay lại màn hình ETABS chọn.",
                 "Chưa chọn điểm", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        var p = sel[0];
-        _statusLabel.Text = $"Điểm đang chọn trong ETABS: label='{p.Label}' name='{p.Name}'. Nhập tên này vào cột Joint ETABS ở điểm Excel tương ứng.";
-        MessageBox.Show(this, $"Label: {p.Label}\nName: {p.Name}\nTọa độ: ({p.X}, {p.Y}, {p.Z})",
-            "Điểm đang chọn", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        SetTargetJoint(sel[0]);
     }
 
-    private (string? Point, BuildResult? Result) CurrentResult()
+    private void SetTargetJoint(PointInfo p)
+    {
+        _targetJointName = p.Name;
+        _targetJointLabel = p.Label;
+        _targetJointLabelCtl.Text = $"Joint ETABS sẽ gán: Name='{p.Name}'  Label='{p.Label}'  ({p.X:0.##}, {p.Y:0.##}, {p.Z:0.##})";
+        _statusLabel.Text = $"Đã chọn joint ETABS: Name='{p.Name}' Label='{p.Label}'.";
+    }
+
+    private void PickPointInEtabs()
+    {
+        var parent = FindForm();
+        if (parent is null)
+        {
+            UseSelectedPoint();
+            return;
+        }
+        // An form chinh (modal) de user chon joint trong ETABS, roi hien lai.
+        parent.Hide();
+        var pick = new PickPointForm();
+        pick.FormClosed += (_, _) =>
+        {
+            parent.Show();
+            parent.Activate();
+            if (pick.Confirmed)
+                UseSelectedPoint();
+        };
+        pick.Show();
+    }
+
+    /// <summary>Cua so nho noi tren ETABS khi chon joint (modeless, TopMost) — dong thi quay lai form chinh.</summary>
+    private sealed class PickPointForm : Form
+    {
+        public bool Confirmed { get; private set; }
+        public PickPointForm()
+        {
+            Text = "Chọn điểm trong ETABS";
+            Size = new Size(380, 150);
+            StartPosition = FormStartPosition.CenterScreen;
+            TopMost = true;
+            FormBorderStyle = FormBorderStyle.FixedDialog;
+            MaximizeBox = false;
+            MinimizeBox = false;
+            var lbl = new Label
+            {
+                Text = "Chọn 1 joint trong model ETABS rồi bấm 'Đã chọn'.\n(Bấm 'Hủy' để quay lại mà không chọn.)",
+                Dock = DockStyle.Top, Height = 50, TextAlign = ContentAlignment.MiddleLeft,
+            };
+            var okBtn = new Button { Text = "Đã chọn", Location = new Point(90, 70), AutoSize = true };
+            okBtn.Click += (_, _) => { Confirmed = true; Close(); };
+            var cancelBtn = new Button { Text = "Hủy", Location = new Point(200, 70), AutoSize = true };
+            cancelBtn.Click += (_, _) => { Confirmed = false; Close(); };
+            Controls.Add(lbl);
+            Controls.Add(okBtn);
+            Controls.Add(cancelBtn);
+        }
+    }
+
+    private (string? Point, string? Joint, BuildResult? Result) CurrentResult()
     {
         SyncProfileFromUi();
         if (_table is null)
         {
             MessageBox.Show(this, "Import file trước.", "Chưa có bảng",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return (null, null);
+            return (null, null, null);
         }
         string point = _pointCombo.Text;
         if (point == "")
         {
-            MessageBox.Show(this, "Chọn điểm Excel ở tab 2.", "Chưa chọn điểm",
+            MessageBox.Show(this, "Chọn điểm Excel cần gán.", "Chưa chọn điểm",
                 MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return (null, null);
+            return (null, null, null);
         }
-        return (point, Assigner.BuildAssignments(_table, point, _profile));
+        if (_targetJointName == "")
+        {
+            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nBấm 'Chọn điểm trong ETABS' để chọn joint cần gán (hoặc chọn joint trước khi mở plugin rồi bấm 'Lấy điểm đang chọn').",
+                "Chưa chọn joint", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return (null, null, null);
+        }
+        return (point, _targetJointName, Assigner.BuildAssignments(_table, point, _targetJointName, _profile));
     }
 
     private void ShowPreview()
     {
-        var (point, res) = CurrentResult();
-        if (res is null || point is null || _table is null)
+        var (point, joint, res) = CurrentResult();
+        if (res is null || point is null || joint is null || _table is null)
             return;
-        _previewBox.Text = Assigner.PreviewText(_table, point, _profile, res);
+        _previewBox.Text = Assigner.PreviewText(_table, point, joint, _profile, res);
     }
 
     private void Assign()
     {
-        var (point, res) = CurrentResult();
-        if (res is null || point is null)
+        var (point, joint, res) = CurrentResult();
+        if (res is null || point is null || joint is null)
             return;
         if (res.Assignments.Count == 0)
         {
@@ -707,41 +717,45 @@ public sealed class MainForm : Form
                 "Không có gì để gán", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        string joint = _profile.PointAlias.TryGetValue(point, out string? a) ? a : point;
         var pats = res.Assignments.Select(x => x.Pattern).Distinct().OrderBy(x => x).ToList();
         if (MessageBox.Show(this,
-                $"Gán {res.Assignments.Count} tải vào joint '{joint}'?\nPattern: {string.Join(", ", pats)}",
+                $"Gán {res.Assignments.Count} tải vào joint '{joint}' (Label='{_targetJointLabel}')?\nPattern: {string.Join(", ", pats)}",
                 "Xác nhận gán tải", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             return;
-        // Tao pattern thieu (neu tick) — pattern _NEG ke thua loai cua
-        // pattern goc (EX_NEG <- EX 'Seismic'), khong phai tat ca Other.
-        // Port cua app.py: lấy danh sách pattern hien co 1 lan roi tao tung
-        // pattern thieu voi ma loai tu PatternTypes.CreateTypeFor().
-        var missing = pats.Where(x => !_etabs.PatternNames().Contains(x)).ToList();
+        // Tool KHONG tu tao pattern (user chot 08/11): pattern thieu thi bao
+        // loi, user tao trong ETABS roi gan lai.
+        List<string> modelPats;
+        try { modelPats = _etabs.PatternNames(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Không lấy được pattern từ ETABS: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        var missing = pats.Where(x => !modelPats.Contains(x)).ToList();
         if (missing.Count > 0)
         {
-            if (_profile.CreateMissingPattern)
-            {
-                var existing = _etabs.ListPatterns();
-                foreach (string p in missing)
-                {
-                    try { _etabs.CreatePattern(p, typeCode: PatternTypes.CreateTypeFor(p, existing)); }
-                    catch (Exception ex)
-                    {
-                        MessageBox.Show(this, $"{p}: {ex.Message}", "Không tạo được pattern",
-                            MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        return;
-                    }
-                }
-            }
-            else
-            {
-                MessageBox.Show(this,
-                    "Pattern chưa có trong ETABS: " + string.Join(", ", missing) +
-                    "\nTick 'Tự tạo pattern...' ở tab 4, hoặc tạo tay trong ETABS rồi gán lại.",
-                    "Thiếu pattern trong model", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
+            MessageBox.Show(this,
+                "Pattern chưa có trong model ETABS: " + string.Join(", ", missing) +
+                "\nTạo pattern trong ETABS trước rồi gán lại (tool không tự tạo pattern).",
+                "Thiếu pattern trong model", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        // Kiem tra joint co trong model (tranh gan vao joint khong ton tai — day
+        // la ly do lan truoc bam GAN ma khong thay noi luc: alias go tay khong
+        // khop ten joint that trong model).
+        List<PointInfo> pts;
+        try { pts = _etabs.ListPoints(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Không lấy được danh sách point từ ETABS: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        if (!pts.Any(p => p.Name == joint))
+        {
+            MessageBox.Show(this,
+                $"Joint '{joint}' không có trong model ETABS đang mở.\nChọn lại joint trong ETABS rồi gán lại.",
+                "Joint không tồn tại", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
         }
         var errs = new List<string>();
         foreach (var assignment in res.Assignments)
@@ -754,15 +768,15 @@ public sealed class MainForm : Form
             MessageBox.Show(this, string.Join("\n", errs), "Gán lỗi một phần",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         else
-            MessageBox.Show(this, $"Đã gán {res.Assignments.Count} tải vào joint '{res.Assignments[0].EtabsJoint}'.",
+            MessageBox.Show(this, $"Đã gán {res.Assignments.Count} tải vào joint '{joint}' (Label='{_targetJointLabel}').",
                 "Xong", MessageBoxButtons.OK, MessageBoxIcon.Information);
         ShowPreview();
     }
 
     private void ExportPreview()
     {
-        var (point, res) = CurrentResult();
-        if (res is null || point is null || _table is null)
+        var (point, joint, res) = CurrentResult();
+        if (res is null || point is null || joint is null || _table is null)
             return;
         using var dlg = new SaveFileDialog
         {
@@ -772,7 +786,7 @@ public sealed class MainForm : Form
         };
         if (dlg.ShowDialog(this) != DialogResult.OK)
             return;
-        File.WriteAllText(dlg.FileName, Assigner.PreviewText(_table, point, _profile, res));
+        File.WriteAllText(dlg.FileName, Assigner.PreviewText(_table, point, joint, _profile, res));
         _statusLabel.Text = $"Đã xuất preview: {dlg.FileName}";
     }
 

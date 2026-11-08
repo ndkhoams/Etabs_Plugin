@@ -7,16 +7,24 @@ using System.Linq;
 namespace EtabsLoadAssigner.Core;
 
 /// <summary>
-/// Build danh sach gán tải tu bang da nhan dien + mapping.
-/// Port truc tiep tu etabs_loader/assigner.py.
+/// Build danh sach gán tải tu bang da nhan dien + mapping 2 cot.
+/// Port truc tiep tu etabs_loader/assigner.py (da doi theo user chot 08/11:
+/// bo co che pattern _NEG tu tao + chinh sach khoang; thay bang 2 cot
+/// trai/phai do user chon, tool khong tu tao pattern).
 /// Dau ra: list[Assignment] san sang dua vao ETABS (PointObj.SetLoadForce)
-/// hoac vao MockEtabs de test offline. Khong tu y doi dau / doi pattern:
-/// moi gia tri la, khoang, hang +/- deu ghi chu ro trong Assignment.Notes.
+/// hoac vao MockEtabs de test offline.
 /// </summary>
 public static class Assigner
 {
-    /// <summary>Gan tai cho 1 diem Excel (vd '20 / D') sang 1 joint ETABS.</summary>
-    public static BuildResult BuildAssignments(FoundationTable table, string excelPoint, Profile profile)
+    /// <summary>
+    /// Gan tai cho 1 diem Excel (vd '20 / D') sang 1 joint ETABS (ten joint
+    /// that lay tu lua chon trong ETABS — KHONG dung alias go tay nua).
+    /// Match 2 cot (user chot 08/11): cot trai = gia tri nho (gia tri don,
+    /// hoac min cua o khoang / -V cua hang +/-); cot phai = gia tri lon
+    /// (max cua o khoang / +V cua hang +/-). Dong khong co +/- chi can cot
+    /// trai. Tool KHONG tu tao pattern — pattern phai co san trong model.
+    /// </summary>
+    public static BuildResult BuildAssignments(FoundationTable table, string excelPoint, string etabsJoint, Profile profile)
     {
         var res = new BuildResult();
         if (!table.Points.Contains(excelPoint))
@@ -25,7 +33,12 @@ public static class Assigner
                 $"Điểm '{excelPoint}' không có trong bảng (có: [{string.Join(", ", table.Points.Select(p => $"'{p}'"))}])."));
             return res;
         }
-        string etabsJoint = profile.PointAlias.TryGetValue(excelPoint, out string? alias) ? alias : excelPoint;
+        if (etabsJoint == "")
+        {
+            res.Skipped.Add(("diem",
+                "Chưa chọn joint trong ETABS — bấm 'Chọn điểm trong ETABS' để chọn joint cần gán."));
+            return res;
+        }
         var axis = profile.Axis;
         var errs = axis.Validate();
         if (errs.Count > 0)
@@ -36,10 +49,17 @@ public static class Assigner
 
         foreach (var row in table.Rows)
         {
-            string pattern = (profile.PatternFor(row.Name) ?? "").Trim();
-            if (pattern == "")
+            var rp = profile.PatternFor(row.Name);
+            string leftPat = (rp.Left ?? "").Trim();
+            string rightPat = (rp.Right ?? "").Trim();
+            if (leftPat == "" && rightPat == "")
             {
-                res.Skipped.Add(("chua match pattern", $"'{row.Name}' ở {excelPoint}: chưa gán pattern ETABS."));
+                res.Skipped.Add(("chua match pattern", $"'{row.Name}' ở {excelPoint}: chưa gán pattern ETABS (cột trái)."));
+                continue;
+            }
+            if (leftPat == "")
+            {
+                res.Skipped.Add(("chua match pattern", $"'{row.Name}' ở {excelPoint}: chưa chọn pattern cột trái (bắt buộc)."));
                 continue;
             }
             row.Values.TryGetValue(excelPoint, out var comp);
@@ -52,10 +72,13 @@ public static class Assigner
                 res.Skipped.Add(("thieu so", $"'{row.Name}' ở {excelPoint}: thiếu ô Hx/Hy/Vz."));
                 continue;
             }
-            var notes = new List<string>();
-            if (row.Reversible)
-                notes.Add("hàng +/-, có thể đảo chiều");
-            var vals = new List<double>();
+            // Tach moi thanh phan thanh (nho, lon).
+            //  - So don V, dong khong +/-: (V, V).
+            //  - So don V, dong +/-: (-V, +V).
+            //  - Khoang (a, b): (a, b). - O trong: (0, 0). - Chu: bo dong.
+            bool hasPlusMinus = row.Reversible;
+            var leftVals = new List<double>();
+            var rightVals = new List<double>();
             bool ok = true;
             foreach (var lv in new[] { hxLv, hyLv, vzLv })
             {
@@ -67,73 +90,83 @@ public static class Assigner
                 }
                 if (lv.Kind == LoadValueKind.Blank)
                 {
-                    vals.Add(0.0);
+                    leftVals.Add(0.0);
+                    rightVals.Add(0.0);
                 }
                 else if (lv.Kind == LoadValueKind.Range)
                 {
-                    var (v, note) = Mapping.ResolveRange(lv, profile.RangePolicy);
-                    if (v is null)
-                    {
-                        res.Skipped.Add(("khoang", $"'{row.Name}' ở {excelPoint}: {note}."));
-                        ok = false;
-                        break;
-                    }
-                    vals.Add(v.Value);
-                    notes.Add(note);
+                    hasPlusMinus = true;
+                    leftVals.Add(lv.VMin!.Value);
+                    rightVals.Add(lv.VMax!.Value);
                 }
                 else
                 {
-                    vals.Add(lv.Value!.Value);
+                    double v = lv.Value!.Value;
+                    if (row.Reversible)
+                    {
+                        leftVals.Add(-v);
+                        rightVals.Add(v);
+                    }
+                    else
+                    {
+                        leftVals.Add(v);
+                        rightVals.Add(v);
+                    }
                 }
             }
             if (!ok)
                 continue;
-            var (fx, fy, fz) = axis.Apply(vals[0], vals[1], vals[2]);
-            var baseAssignment = new Assignment
+            var (fxL, fyL, fzL) = axis.Apply(leftVals[0], leftVals[1], leftVals[2]);
+            var (fxR, fyR, fzR) = axis.Apply(rightVals[0], rightVals[1], rightVals[2]);
+            var leftAssignment = new Assignment
             {
                 ExcelPoint = excelPoint,
                 EtabsJoint = etabsJoint,
                 ExcelRow = row.Name,
-                Pattern = pattern,
-                Fx = fx, Fy = fy, Fz = fz,
-                Notes = string.Join("; ", notes),
+                Pattern = leftPat,
+                Fx = fxL, Fy = fyL, Fz = fzL,
+                Side = "trai",
+                Notes = hasPlusMinus ? "giá trị nhỏ (cột trái)" : "",
             };
-            if (profile.SkipZeroRows && baseAssignment.IsZero())
+            if (profile.SkipZeroRows && leftAssignment.IsZero())
             {
                 res.Skipped.Add(("dong 0", $"'{row.Name}' ở {excelPoint}: cả 3 lực = 0, bỏ qua."));
                 continue;
             }
-            res.Assignments.Add(baseAssignment);
-            if (row.Reversible && profile.ReversibleMode == "both")
+            res.Assignments.Add(leftAssignment);
+            if (hasPlusMinus)
             {
-                var neg = new Assignment
+                if (rightPat == "")
                 {
-                    ExcelPoint = excelPoint,
-                    EtabsJoint = etabsJoint,
-                    ExcelRow = row.Name,
-                    Pattern = pattern + "_NEG",
-                    Fx = -fx, Fy = -fy, Fz = -fz,
-                    Negated = true,
-                    Notes = "bản đảo chiều của hàng +/- (pattern _NEG)",
-                };
-                if (!(profile.SkipZeroRows && neg.IsZero()))
-                {
-                    res.Assignments.Add(neg);
                     res.Warnings.Add(
-                        $"'{row.Name}': tạo thêm pattern '{pattern}_NEG' cho chiều âm — " +
-                        "nhớ kiểm tra pattern này có trong model không.");
+                        $"'{row.Name}': có giá trị +/- nhưng chưa chọn pattern cột phải — " +
+                        "chỉ gán giá trị nhỏ (cột trái), giá trị lớn chưa được gán.");
+                }
+                else
+                {
+                    var rightAssignment = new Assignment
+                    {
+                        ExcelPoint = excelPoint,
+                        EtabsJoint = etabsJoint,
+                        ExcelRow = row.Name,
+                        Pattern = rightPat,
+                        Fx = fxR, Fy = fyR, Fz = fzR,
+                        Side = "phai",
+                        Notes = "giá trị lớn (cột phải)",
+                    };
+                    if (!(profile.SkipZeroRows && rightAssignment.IsZero()))
+                        res.Assignments.Add(rightAssignment);
                 }
             }
         }
         return res;
     }
 
-    public static string PreviewText(FoundationTable table, string excelPoint, Profile profile, BuildResult result)
+    public static string PreviewText(FoundationTable table, string excelPoint, string etabsJoint, Profile profile, BuildResult result)
     {
-        string joint = profile.PointAlias.TryGetValue(excelPoint, out string? alias) ? alias : excelPoint;
         var lines = new List<string>
         {
-            $"Điểm Excel: {excelPoint}  ->  Joint ETABS: {joint}",
+            $"Điểm Excel: {excelPoint}  ->  Joint ETABS: {etabsJoint}",
             $"Phương/chiều: {profile.Axis.Describe()}   (đơn vị kN, M = 0 — bảng gốc chỉ có lực)",
             $"Số lượng gán: {result.Assignments.Count} | Bỏ qua: {result.Skipped.Count} | Cảnh báo: {result.Warnings.Count}",
             "",
@@ -179,7 +212,7 @@ public sealed class Assignment
     public double My { get; set; }
     public double Mz { get; set; }
     public string Notes { get; set; } = "";
-    public bool Negated { get; set; } // Ban dao chieu cua hang +/-.
+    public string Side { get; set; } = "trai"; // "trai" = gia tri nho / gia tri don; "phai" = gia tri lon (chi khi co +/-).
 
     public double[] Values() => new[] { Fx, Fy, Fz, Mx, My, Mz };
 

@@ -83,31 +83,28 @@ public sealed class AxisMapping
     }
 }
 
-/// <summary>Giai quyet o '-3/+6'. Port cua resolve_range() trong mapping.py.</summary>
+/// <summary>Match pattern 2 cot + phuong/chieu. Port cua mapping.py (da bo ResolveRange — khoang gio tach min/max sang 2 cot).</summary>
 public static class Mapping
 {
-    public static (double? Value, string Note) ResolveRange(LoadValue lv, string policy = "max_abs")
-    {
-        if (lv.Kind != LoadValueKind.Range)
-            return (lv.Value, "");
-        double a = lv.VMin!.Value, b = lv.VMax!.Value;
-        if (policy == "max_abs")
-        {
-            double v = Math.Abs(a) >= Math.Abs(b) ? a : b;
-            return (v, $"khoang {lv.Raw} -> lay {PyNum(v)} (|.| lon nhat)");
-        }
-        if (policy == "max")
-        {
-            double v = Math.Max(a, b);
-            return (v, $"khoang {lv.Raw} -> lay max {PyNum(v)}");
-        }
-        if (policy == "min")
-        {
-            double v = Math.Min(a, b);
-            return (v, $"khoang {lv.Raw} -> lay min {PyNum(v)}");
-        }
-        return (null, $"khoảng {lv.Raw} -> bỏ qua theo cài đặt");
-    }
+/// <summary>
+/// Goi y pattern cot PHAI (gia tri lon) cho 1 dong co +/-: doi xung cua
+/// pattern cot trai. Thu theo thu tu: "<trai>_NEG" (neu co trong model),
+/// doi dau "+" <-> "-" trong ten (WX+ -> WX-, WY+1 -> WY-1). Khong co thi
+/// tra "" — user tu chon. Tool KHONG tu tao pattern (user chot 08/11).
+/// </summary>
+public static string SuggestPatternOpposite(string leftPattern, IReadOnlyList<string> available)
+{
+    if (leftPattern == "" || available.Count == 0)
+        return "";
+    string neg = leftPattern + "_NEG";
+    if (available.Contains(neg))
+        return neg;
+    string swapped = leftPattern.Contains('+') ? leftPattern.Replace('+', '-')
+        : leftPattern.Contains('-') ? leftPattern.Replace('-', '+') : "";
+    if (swapped != "" && available.Contains(swapped))
+        return swapped;
+    return "";
+}
 
     /// <summary>Dinh dang so kieu Python str(float): 6.0 chu khong phai "6" (dung trong ghi chu).</summary>
     internal static string PyNum(double v) =>
@@ -177,6 +174,13 @@ public static class Mapping
     }
 }
 
+/// <summary>2 pattern match cho 1 dong tai: cot trai (gia tri nho / gia tri don), cot phai (gia tri lon, chi khi co +/-).</summary>
+public sealed class RowPattern
+{
+    public string Left { get; set; } = "";
+    public string Right { get; set; } = "";
+}
+
 /// <summary>Cai dat luu lai de gan diem moi khong phai lam lai. Port cua Profile trong mapping.py.</summary>
 public sealed class Profile
 {
@@ -184,32 +188,30 @@ public sealed class Profile
     public string SourceFile { get; set; } = "";
     public string Sheet { get; set; } = "";
     public AxisMapping Axis { get; set; } = new();
-    public Dictionary<string, string> PatternMap { get; set; } = new(); // ten dong Excel -> pattern ETABS
-    public Dictionary<string, string> PointAlias { get; set; } = new(); // diem Excel vd '20 / D' -> joint ETABS
-    public bool ReplaceExisting { get; set; } = true;
-    public bool CreateMissingPattern { get; set; } = false;
     /// <summary>
-    /// Mac dinh "both" (user chot 08/11): hang ± gan CA 2 chieu — pattern goc
-    /// + pattern_NEG dao dau. Chi chieu + thi chon "plus_only".
+    /// Match 2 cot (user chot 08/11): cot TRAI = pattern nhan gia tri NHO
+    /// (gia tri don, hoac min cua o khoang / -V cua hang +/-); cot PHAI =
+    /// pattern nhan gia tri LON (max cua o khoang / +V cua hang +/-). Dong
+    /// khong co dau +/- chi can cot trai. User tu dinh nghia du pattern
+    /// trong ETABS — tool KHONG tu tao pattern.
     /// </summary>
-    public string ReversibleMode { get; set; } = "both"; // plus_only | both
-    public string RangePolicy { get; set; } = "max_abs"; // max_abs | max | min | skip
+    public Dictionary<string, RowPattern> PatternMap { get; set; } = new();
+    public bool ReplaceExisting { get; set; } = true;
     public bool SkipZeroRows { get; set; } = true;
 
     /// <summary>
-    /// Pattern ETABS cho 1 dong tai: khop dung ten truoc, roi khop khong phan biet
-    /// hoa/thuong (profile vi du luu key chu thuong, assigner/GUI dung ten goc —
-    /// khong khop la toan bo dong bi bo).
+    /// 2 pattern ETABS cho 1 dong tai: khop dung ten truoc, roi khop khong
+    /// phan biet hoa/thuong. Tra ve RowPattern rong neu chua match.
     /// </summary>
-    public string PatternFor(string rowName)
+    public RowPattern PatternFor(string rowName)
     {
-        if (PatternMap.TryGetValue(rowName, out string? exact))
+        if (PatternMap.TryGetValue(rowName, out RowPattern? exact))
             return exact;
         string key = Mapping.NormName(rowName);
         foreach (var kv in PatternMap)
             if (Mapping.NormName(kv.Key) == key)
                 return kv.Value;
-        return "";
+        return new RowPattern();
     }
 
     public Dictionary<string, object?> ToDictionary() => new()
@@ -218,12 +220,13 @@ public sealed class Profile
         ["source_file"] = SourceFile,
         ["sheet"] = Sheet,
         ["axis"] = Axis.ToDictionary(),
-        ["pattern_map"] = PatternMap,
-        ["point_alias"] = PointAlias,
+        ["pattern_map"] = PatternMap.ToDictionary(kv => kv.Key,
+            kv => (object?)new Dictionary<string, object?>
+            {
+                ["left"] = kv.Value.Left,
+                ["right"] = kv.Value.Right,
+            }),
         ["replace_existing"] = ReplaceExisting,
-        ["create_missing_pattern"] = CreateMissingPattern,
-        ["reversible_mode"] = ReversibleMode,
-        ["range_policy"] = RangePolicy,
         ["skip_zero_rows"] = SkipZeroRows,
     };
 
@@ -239,14 +242,23 @@ public sealed class Profile
             p.Axis = AxisMapping.FromDictionary(ax);
         if (d.TryGetProperty("pattern_map", out var pm) && pm.ValueKind == JsonValueKind.Object)
             foreach (var kv in pm.EnumerateObject())
-                p.PatternMap[kv.Name] = kv.Value.GetString() ?? "";
-        if (d.TryGetProperty("point_alias", out var pa) && pa.ValueKind == JsonValueKind.Object)
-            foreach (var kv in pa.EnumerateObject())
-                p.PointAlias[kv.Name] = kv.Value.GetString() ?? "";
+            {
+                var rp = new RowPattern();
+                if (kv.Value.ValueKind == JsonValueKind.String)
+                {
+                    // Profile cu (1 cot): chuoi pattern -> cot trai.
+                    rp.Left = kv.Value.GetString() ?? "";
+                }
+                else if (kv.Value.ValueKind == JsonValueKind.Object)
+                {
+                    rp.Left = JsonHelpers.GetString(kv.Value, "left", "");
+                    rp.Right = JsonHelpers.GetString(kv.Value, "right", "");
+                }
+                p.PatternMap[kv.Name] = rp;
+            }
+        // Cac khoa cu (point_alias, create_missing_pattern, reversible_mode,
+        // range_policy) duoc bo qua — tinh nang tuong ung da bo (user chot 08/11).
         p.ReplaceExisting = JsonHelpers.GetBool(d, "replace_existing", true);
-        p.CreateMissingPattern = JsonHelpers.GetBool(d, "create_missing_pattern", false);
-        p.ReversibleMode = JsonHelpers.GetString(d, "reversible_mode", "both");
-        p.RangePolicy = JsonHelpers.GetString(d, "range_policy", "max_abs");
         p.SkipZeroRows = JsonHelpers.GetBool(d, "skip_zero_rows", true);
         return p;
     }
