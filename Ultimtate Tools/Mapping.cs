@@ -34,10 +34,10 @@ public sealed class AxisMapping
         var errs = new List<string>();
         var axes = new[] { HxAxis, HyAxis, VzAxis }.OrderBy(a => a).ToArray();
         if (!axes.SequenceEqual(new[] { "X", "Y", "Z" }))
-            errs.Add("Hx/Hy/Vz phai anh xa sang 3 truc X, Y, Z khac nhau (khong trung truc).");
+            errs.Add("Hx/Hy/Vz phải ánh xạ sang 3 trục X, Y, Z khác nhau (không trùng trục).");
         foreach (int s in new[] { HxSign, HySign, VzSign })
             if (s is not (+1 or -1))
-                errs.Add($"Dau phai +1 hoac -1, nhan duoc {s}.");
+                errs.Add($"Dấu phải +1 hoặc -1, nhận được {s}.");
         return errs;
     }
 
@@ -106,7 +106,7 @@ public static class Mapping
             double v = Math.Min(a, b);
             return (v, $"khoang {lv.Raw} -> lay min {PyNum(v)}");
         }
-        return (null, $"khoang {lv.Raw} -> bo qua theo cai dat");
+        return (null, $"khoảng {lv.Raw} -> bỏ qua theo cài đặt");
     }
 
     /// <summary>Dinh dang so kieu Python str(float): 6.0 chu khong phai "6" (dung trong ghi chu).</summary>

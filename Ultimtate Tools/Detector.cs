@@ -167,7 +167,7 @@ public static class Detector
     }
 
     /// <summary>
-    /// Nhan dien bang tai mong tu mot grid (list[list]) — dung chung cho Excel.
+    /// Nhận diện bảng tai mong tu mot grid (list[list]) — dung chung cho Excel.
     /// Port truc tiep detect_from_grid() trong detector.py.
     /// </summary>
     public static FoundationTable DetectFromGrid(List<List<object?>> grid, string source = "", string sheet = "")
@@ -178,8 +178,8 @@ public static class Detector
         if (found is null)
         {
             table.Warnings.Add(
-                "Khong tim thay dong tieu de Hx/Hy/Vz trong file. " +
-                "Kiem tra lai: bang can co cac cot Hx, Hy, Vz (moi diem 3 cot).");
+                "Không tìm thấy dòng tiêu đề Hx/Hy/Vz trong file. " +
+                "Kiểm tra lại: bảng cần có các cột Hx, Hy, Vz (mỗi điểm 3 cột).");
             return table;
         }
         int hdrRow = found.Value.Row;
@@ -222,7 +222,7 @@ public static class Detector
             if (name == "")
             {
                 name = $"Point {points.Count + 1}";
-                table.Warnings.Add($"Khong doc duoc ten diem o cot {j + 1}, tam dat '{name}'.");
+                table.Warnings.Add($"Không đọc được tên điểm ở cột {j + 1}, tạm đặt '{name}'.");
             }
             points.Add(name);
             pointCols.Add(j);
@@ -230,7 +230,7 @@ public static class Detector
         }
         if (points.Count == 0)
         {
-            table.Warnings.Add("Tim thay dong Hx/Hy/Vz nhung khong tach duoc diem nao.");
+            table.Warnings.Add("Tìm thấy dòng Hx/Hy/Vz nhưng không tách được điểm nào.");
             return table;
         }
         table.Points = points;
@@ -278,7 +278,7 @@ public static class Detector
             table.Rows.Add(new FoundationRow { Name = first, Reversible = reversible, Values = vals });
         }
         if (table.Rows.Count == 0)
-            table.Warnings.Add("Nhan duoc diem nhung khong doc duoc dong tai nao.");
+            table.Warnings.Add("Nhận được điểm nhưng không đọc được dòng tải nào.");
         return table;
     }
 
@@ -344,7 +344,7 @@ public static class Detector
             return new FoundationTable
             {
                 Source = path,
-                Warnings = { "File Excel khong co sheet nao." },
+                Warnings = { "File Excel không có sheet nào." },
             };
         // Neu chi dinh sheet: van gop bang pattern tu cac sheet con lai.
         if (sheet is not null)
@@ -366,11 +366,11 @@ public static class Detector
             return DetectExcel(path, sheet);
         if (low.EndsWith(".pdf"))
             throw new NotSupportedException(
-                "Plugin chi doc file Excel (.xlsx). File PDF ban ve la anh scan — " +
-                "chuyen sang Excel truoc bang script pdf_to_excel/ o repo app Python.");
+                "Plugin chỉ đọc file Excel (.xlsx). File PDF bản vẽ là ảnh scan — " +
+                "chuyển sang Excel trước bằng script pdf_to_excel/ ở repo app Python.");
         if (low.EndsWith(".xls"))
-            throw new NotSupportedException("File .xls cu khong doc duoc — luu lai thanh .xlsx roi import.");
-        throw new NotSupportedException($"Khong ho tro dinh dang file: {path} (chi .xlsx).");
+            throw new NotSupportedException("File .xls cũ không đọc được — lưu lại thành .xlsx rồi import.");
+        throw new NotSupportedException($"Không hỗ trợ định dạng file: {path} (chỉ .xlsx).");
     }
 }
 

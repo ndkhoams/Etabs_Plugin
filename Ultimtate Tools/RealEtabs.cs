@@ -41,14 +41,14 @@ public sealed class RealEtabs : IEtabsApi
     {
         if (ret != 0)
             throw new EtabsError($"ETABS tra ret={ret} khi {what} (0 = OK). " +
-                "Doi chieu 'CSI API ETABS v1.chm' trong thu muc cai ETABS.");
+                "Đối chiếu 'CSI API ETABS v1.chm' trong thư mục cài ETABS.");
     }
 
     public List<PatternDef> ListPatterns()
     {
         int n = 0;
         string[] names = Array.Empty<string>();
-        CheckRet(_sap.LoadPatterns.GetNameList(ref n, ref names), "lay danh sach pattern");
+        CheckRet(_sap.LoadPatterns.GetNameList(ref n, ref names), "lấy danh sách pattern");
         var list = new List<PatternDef>();
         foreach (string nm in names ?? Array.Empty<string>())
         {
@@ -93,7 +93,7 @@ public sealed class RealEtabs : IEtabsApi
         // Fallback: GetNameList + GetCoordCartesian tung diem.
         int n2 = 0;
         string[] names2 = Array.Empty<string>();
-        CheckRet(_sap.PointObj.GetNameList(ref n2, ref names2), "lay danh sach point");
+        CheckRet(_sap.PointObj.GetNameList(ref n2, ref names2), "lấy danh sách point");
         var labels2 = GetLabels(names2 ?? Array.Empty<string>());
         var pts2 = new List<PointInfo>();
         foreach (string nm in names2 ?? Array.Empty<string>())
@@ -144,7 +144,7 @@ public sealed class RealEtabs : IEtabsApi
         int n = 0;
         int[] types = Array.Empty<int>();
         string[] names = Array.Empty<string>();
-        CheckRet(_sap.SelectObj.GetSelected(ref n, ref types, ref names), "lay diem dang chon");
+        CheckRet(_sap.SelectObj.GetSelected(ref n, ref types, ref names), "lấy điểm đang chọn");
         names ??= Array.Empty<string>();
         types ??= Array.Empty<int>();
         var pts = ListPoints().ToDictionary(p => p.Name);
@@ -167,7 +167,7 @@ public sealed class RealEtabs : IEtabsApi
         int ret = _sap.LoadPatterns.Add(name, type, 0, true);
         if (ret != 0 && code != (int)eLoadPatternType.Other)
             ret = _sap.LoadPatterns.Add(name, eLoadPatternType.Other, 0, true);
-        CheckRet(ret, $"tao pattern '{name}' (type {typeStr})");
+        CheckRet(ret, $"tạo pattern '{name}' (type {typeStr})");
         return true;
     }
 
@@ -179,7 +179,7 @@ public sealed class RealEtabs : IEtabsApi
         // LUU Y: tham so Replace cua API mac dinh la FALSE — phai truyen ro.
         double[] v = values.ToArray();
         int ret = _sap.PointObj.SetLoadForce(joint, pattern, ref v, replace);
-        CheckRet(ret, $"gan tai {pattern} tai joint '{joint}'");
+        CheckRet(ret, $"gán tải {pattern} tại joint '{joint}'");
         return true;
     }
 

@@ -190,9 +190,9 @@ public sealed class MockEtabs : IEtabsApi
     public bool AssignForce(string joint, string pattern, double[] values, bool replace = true)
     {
         if (!Points.ContainsKey(joint))
-            throw new EtabsError($"Mock: khong co joint '{joint}' (co: [{string.Join(", ", Points.Keys.OrderBy(k => k))}]).");
+            throw new EtabsError($"Mock: không có joint '{joint}' (có: [{string.Join(", ", Points.Keys.OrderBy(k => k))}]).");
         if (!PatternNames().Contains(pattern))
-            throw new EtabsError($"Mock: khong co pattern '{pattern}'. Tick 'tu tao pattern' hoac match lai.");
+            throw new EtabsError($"Mock: không có pattern '{pattern}'. Tick 'tự tạo pattern' hoặc match lại.");
         if (replace)
             Assignments.RemoveAll(a => a.Joint == joint && a.Pattern == pattern);
         Assignments.Add((joint, pattern, values.ToArray()));

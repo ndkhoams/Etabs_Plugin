@@ -230,13 +230,10 @@ namespace Etabs_Ultimate_Tools
         // Ultimate Tools) bi ETABS bao "Not Found" khi Add — nguyen nhan chua ro
         // (plugin nap tot tren .NET Framework, LoadTest pass toan bo) — dua code vao
         // dung vo Ultimate Tools (da chung minh nap duoc) de khoi phai doan loader.
-        // 9 tab cu khong doi gi; form gan tai (MainForm, 5 tab) duoc nhuong (embed)
-        // vao tab nay khi user bam nut — mo lan dau (lazy) de khong cham luc mo form
-        // chinh, va loi (neu co) chi hien trong tab nay, khong lam hong 9 tab cu.
-
-        private MainForm _loadAssignerForm;
-        private bool _loadAssignerOpened;
-
+        // 9 tab cu khong doi gi. Form gan tai (MainForm, 5 tab) mo dang dialog
+        // rieng (ShowDialog) thay vi nhuong vao tab — ban nhuong (embed) bi loi
+        // hien thi tren ETABS: khong thay duoc 5 tab con cua MainForm (chi thay
+        // noi dung tab 1), nen mo dialog de thay du ca 5 tab.
         private void BuildLoadAssignerTab(TabPage tab)
         {
             var hint = new Label
@@ -262,18 +259,10 @@ namespace Etabs_Ultimate_Tools
             };
             openBtn.Click += (_, _) =>
             {
-                if (_loadAssignerOpened) return;
                 try
                 {
-                    var form = new MainForm(new RealEtabs(_sap));
-                    form.TopLevel = false;
-                    form.FormBorderStyle = FormBorderStyle.None;
-                    form.Dock = DockStyle.Fill;
-                    tab.Controls.Clear();
-                    tab.Controls.Add(form);
-                    form.Show();
-                    _loadAssignerForm = form;
-                    _loadAssignerOpened = true;
+                    using var form = new MainForm(new RealEtabs(_sap));
+                    form.ShowDialog(this);
                 }
                 catch (Exception ex)
                 {
