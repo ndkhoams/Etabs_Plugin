@@ -25,6 +25,14 @@ public interface IEtabsApi
     List<PointInfo> GetSelectedPoints();
     bool CreatePattern(string name, string typeStr = "Other", int? typeCode = null);
     bool AssignForce(string joint, string pattern, double[] values, bool replace = true);
+    /// <summary>Xoa tai cua 1 pattern tai joint. Tra false neu khong co tai de xoa (hoac loi).</summary>
+    bool DeleteLoadForce(string joint, string pattern);
+    /// <summary>
+    /// Xoa trang MOI tai tai joint (tat ca pattern trong model) — de diem chi
+    /// con tai do plugin gan vao sau do (user chot 08/11). Tra so pattern da
+    /// xoa duoc (pattern khong co tai thi bo qua).
+    /// </summary>
+    int ClearJointLoads(string joint);
     bool RefreshView();
 }
 
@@ -197,6 +205,18 @@ public sealed class MockEtabs : IEtabsApi
             Assignments.RemoveAll(a => a.Joint == joint && a.Pattern == pattern);
         Assignments.Add((joint, pattern, values.ToArray()));
         return true;
+    }
+
+    public bool DeleteLoadForce(string joint, string pattern)
+    {
+        int removed = Assignments.RemoveAll(a => a.Joint == joint && a.Pattern == pattern);
+        return removed > 0;
+    }
+
+    public int ClearJointLoads(string joint)
+    {
+        int removed = Assignments.RemoveAll(a => a.Joint == joint);
+        return removed;
     }
 
     public double[]? GetAssignment(string joint, string pattern)

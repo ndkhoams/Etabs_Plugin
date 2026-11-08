@@ -402,6 +402,96 @@ public static class Detector
         return wb.Worksheets.Select(ws => ws.Name).ToList();
     }
 
+    /// <summary>Ten sheet luu thong tin match trong file Excel noi luc (user chot 08/11 — thay file .json rieng).</summary>
+    public const string ProfileSheetName = "LoadAssigner";
+
+    /// <summary>
+    /// Doc thong tin match tu sheet "LoadAssigner" trong file Excel (neu co).
+    /// Tra null neu khong co sheet. Doc kieu chiu dung: quet tat ca dong, phan
+    /// loai theo cot A (ten tai / Hx-Hy-Vz / "Ghi de tai cu" / tieu de bo qua).
+    /// </summary>
+    public static Profile? ReadProfileSheet(string path)
+    {
+        using var wb = new XLWorkbook(path);
+        var ws = wb.Worksheets.FirstOrDefault(w => string.Equals(w.Name, ProfileSheetName, StringComparison.OrdinalIgnoreCase));
+        if (ws is null)
+            return null;
+        var p = new Profile();
+        foreach (var row in ws.RowsUsed())
+        {
+            string a = (row.Cell(1).GetString() ?? "").Trim();
+            if (a == "")
+                continue;
+            if (a == "LoadAssignerProfile" || a == "Tải" || a == "Phuong & chieu")
+                continue;
+            string b = (row.Cell(2).GetString() ?? "").Trim();
+            string c = (row.Cell(3).GetString() ?? "").Trim();
+            if (a == "Hx" || a == "Hy" || a == "Vz")
+            {
+                string axis = b == "" ? (a == "Hx" ? "X" : a == "Hy" ? "Y" : "Z") : b;
+                int sign = c == "-" ? -1 : +1;
+                switch (a)
+                {
+                    case "Hx": p.Axis.HxAxis = axis; p.Axis.HxSign = sign; break;
+                    case "Hy": p.Axis.HyAxis = axis; p.Axis.HySign = sign; break;
+                    default: p.Axis.VzAxis = axis; p.Axis.VzSign = sign; break;
+                }
+                continue;
+            }
+            if (a == "Ghi de tai cu")
+            {
+                p.ReplaceExisting = b.Equals("TRUE", StringComparison.OrdinalIgnoreCase)
+                    || b == "1" || b.Equals("Có", StringComparison.OrdinalIgnoreCase)
+                    || b.Equals("Yes", StringComparison.OrdinalIgnoreCase);
+                continue;
+            }
+            p.PatternMap[a] = new RowPattern { Left = b, Right = c };
+        }
+        return p;
+    }
+
+    /// <summary>
+    /// Ghi thong tin match vao sheet "LoadAssigner" trong file Excel (xoa sheet
+    /// cu roi tao moi — dam bao noi dung sach). Ghi de file goc; file dang mo
+    /// trong Excel thi se nem loi (file bi khoa) — caller bat va bao user dong
+    /// file truoc. Cac sheet khac giu nguyen.
+    /// </summary>
+    public static void WriteProfileSheet(string path, Profile profile, FoundationTable table)
+    {
+        using var wb = new XLWorkbook(path);
+        var old = wb.Worksheets.FirstOrDefault(w => string.Equals(w.Name, ProfileSheetName, StringComparison.OrdinalIgnoreCase));
+        old?.Delete();
+        var ws = wb.AddWorksheet(ProfileSheetName);
+        ws.Cell(1, 1).Value = "LoadAssignerProfile";
+        ws.Cell(1, 2).Value = "Match pattern & cai dat — plugin tu ghi, khong sua tay neu khong ro.";
+        ws.Cell(3, 1).Value = "Tải";
+        ws.Cell(3, 2).Value = "Pattern — giá trị 1 (trái)";
+        ws.Cell(3, 3).Value = "Pattern — giá trị 2 (phải)";
+        int r = 4;
+        foreach (var row in table.Rows)
+        {
+            var rp = profile.PatternFor(row.Name);
+            ws.Cell(r, 1).Value = row.Name;
+            ws.Cell(r, 2).Value = rp.Left;
+            ws.Cell(r, 3).Value = rp.Right;
+            r++;
+        }
+        r++; // dong trong
+        ws.Cell(r, 1).Value = "Phuong & chieu";
+        r++;
+        ws.Cell(r, 1).Value = "Hx"; ws.Cell(r, 2).Value = profile.Axis.HxAxis; ws.Cell(r, 3).Value = profile.Axis.HxSign < 0 ? "-" : "+";
+        r++;
+        ws.Cell(r, 1).Value = "Hy"; ws.Cell(r, 2).Value = profile.Axis.HyAxis; ws.Cell(r, 3).Value = profile.Axis.HySign < 0 ? "-" : "+";
+        r++;
+        ws.Cell(r, 1).Value = "Vz"; ws.Cell(r, 2).Value = profile.Axis.VzAxis; ws.Cell(r, 3).Value = profile.Axis.VzSign < 0 ? "-" : "+";
+        r++;
+        ws.Cell(r, 1).Value = "Ghi de tai cu"; ws.Cell(r, 2).Value = profile.ReplaceExisting ? "TRUE" : "FALSE";
+        ws.Column(1).Width = 45;
+        ws.Column(2).Width = 40;
+        ws.Column(3).Width = 40;
+        wb.Save();
+    }
+
     /// <summary>Doc ten sheet tu xl/workbook.xml (zip). Tra null neu khong doc duoc.</summary>
     private static List<string>? ReadSheetNamesFromZip(string path)
     {

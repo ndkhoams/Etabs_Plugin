@@ -183,6 +183,38 @@ public sealed class RealEtabs : IEtabsApi
         return true;
     }
 
+    public bool DeleteLoadForce(string joint, string pattern)
+    {
+        // PointObj.DeleteLoadForce(Name, LoadPat, ItemType=Objects).
+        // Khong dung CheckRet: pattern khong co tai tai joint thi tra loi
+        // (khong phai loi) — caller bo qua.
+        int ret = _sap.PointObj.DeleteLoadForce(joint, pattern);
+        return ret == 0;
+    }
+
+    public int ClearJointLoads(string joint)
+    {
+        // Xoa trang MOI tai tai joint (user chot 08/11): lap qua tat ca
+        // pattern trong model, goi DeleteLoadForce cho tung pattern.
+        // Pattern khong co tai tai joint thi DeleteLoadForce tra loi — bo
+        // qua, chi dem so pattern xoa duoc. De diem chi con tai do plugin
+        // gan vao sau do (ca tai khong co trong file Excel cung bi xoa).
+        int cleared = 0;
+        List<string> pats;
+        try { pats = PatternNames(); }
+        catch { return 0; }
+        foreach (string pat in pats)
+        {
+            try
+            {
+                if (DeleteLoadForce(joint, pat))
+                    cleared++;
+            }
+            catch { /* bo qua — tiep tuc xoa pattern khac */ }
+        }
+        return cleared;
+    }
+
     public bool RefreshView()
     {
         try { _sap.View.RefreshView(); } catch { /* bo qua */ }

@@ -20,9 +20,9 @@ namespace EtabsLoadAssigner.Plugin;
 /// ETABS, ca dang embed lan dialog, nen user khong thay/bam duoc tab 2-5.)
 ///
 /// LAYOUT GON (user chot 08/11, sau anh chup build 20261108-184715):
-///   - Thanh tren: file / Sheet / Diem / profile — dung TableLayoutPanel,
-///     moi control can giua doc trong hang (thang hang, can doi).
-///   - Thanh duoi CO DINH: bang Joint ETABS + GÁN (luon thay, khong can cuon).
+///   - Thanh tren: file / Sheet / Diem — dung TableLayoutPanel, moi control
+///     can giua doc trong hang (thang hang, can doi).
+///   - Thanh duoi CO DINH: Joint ETABS + GÁN (luon thay, khong can cuon).
 ///   - Vung cuon giua: ten diem (tieu de bang) -> thanh nut Goi y / Lam
 ///     moi pattern -> bang noi luc (gom ca 2 cot Match pattern ngay sau
 ///     cot Tai: Pattern gia tri 1 / gia tri 2) -> Phuong & chieu (1 hang
@@ -35,15 +35,19 @@ namespace EtabsLoadAssigner.Plugin;
 ///   - Gan 1 diem 1 luc. Diem gan = diem dang chon o dropdown "Điểm" tren
 ///     thanh tren (cung la diem grid dang hien) — KHONG co dropdown chon
 ///     diem rieng o muc Diem gan tai.
-///   - Joint dich chon 1 dong trong BANG "Joint ETABS" o thanh duoi (chi
-///     liet ke joint DANG CHON trong ETABS — khong phai toan bo joint cua
-///     model, user chot 08/11). Mo plugin len la bang nap san joint dang
-///     chon; nut "Lấy điểm đang chọn" nap lai tu ETABS. KHONG co nut
-///     "Chọn điểm trong ETABS": form plugin la MODAL (ShowDialog) nen du
-///     an form chinh, ETABS van bi khoa — user khong click/chon duoc joint
-///     trong model (da user-verify 08/11).
+///   - Joint dich chon trong DROPDOWN "Joint ETABS" o thanh duoi (chi liet
+///     ke joint DANG CHON trong ETABS — khong phai toan bo joint cua model,
+///     user chot 08/11). Mo plugin len la dropdown nap san joint dang chon;
+///     nut "Lấy điểm đang chọn" nap lai tu ETABS. KHONG co nut "Chọn điểm
+///     trong ETABS": form plugin la MODAL (ShowDialog) nen du an form chinh,
+///     ETABS van bi khoa — user khong click/chon duoc joint trong model
+///     (da user-verify 08/11).
 ///   - Match 2 cot: trai = gia tri 1, phai = gia tri 2 (chi khi o co 2
 ///     gia tri); chi pattern co san trong model — tool KHONG tu tao pattern.
+///   - Ghi de (checkbox "Xoá trắng tải cũ tại điểm này trước khi gán",
+///     user chot 08/11): truoc khi gan moi, XOA TRANG moi tai cu tai joint
+///     — ca tai khong co trong file Excel cung bi xoa, de diem chi con tai
+///     do plugin nhap vao. Khong tick thi chi ghi de/ghi them tung pattern.
 ///   - Khong co che do Mock/Offline o UI — plugin chi lam viec voi file
 ///     dang mo. Khong co vi du dien giai o Phuong & chieu.
 ///
@@ -60,9 +64,12 @@ namespace EtabsLoadAssigner.Plugin;
 ///     26, Pattern 2 = 26 (bang nhau, du thay het ten pattern), Hx/Hy/Vz
 ///     7 moi cot (rong hon truoc de thay ro gia tri).
 ///
-/// PROFILE MAC DINH (user chot 08/11): tu luu + tu doc trong THU MUC CHUA
-/// PLUG-IN (file LoadAssignerProfile.json canh file DLL). Mo plugin len la
-/// co ngay match pattern + phuong/chieu lan truoc; doi 1 combo la tu luu.
+/// LUU MATCH (user chot 08/11): KHONG dung file .json rieng nua — thong tin
+/// match (pattern 2 cot / phuong-chieu / ghi de) luu luon vao SHEET
+/// "LoadAssigner" trong chinh file Excel noi luc. Mo file len la doc sheet
+/// do (co thi nap, khong co thi dung mac dinh); doi 1 combo la tu ghi lai
+/// sheet. File dang mo trong Excel thi khong ghi duoc — bao o thanh trang
+/// thai, dong file roi doi lai 1 dong de luu.
 /// Neu thu muc plug-in khong ghi duoc (vd Program Files khong quyen admin)
 /// thi luu sang %AppData%\EtabsLoadAssigner\profile.json (vi tri cu) va
 /// ghi chu o thanh trang thai.
@@ -83,23 +90,9 @@ public sealed class MainForm : Form
     private Profile _profile = new();
     private bool _updatingSheet;
     private bool _updatingGrid; // Chan de quy khi CellValueChanged chuan hoa lai o vua sua.
+    private bool _updatingJoint; // Chan de quy khi SetTargetJoint chon lai dropdown joint.
     private bool _uiReady; // Chi cho luu profile mac dinh sau khi constructor xong (tranh ghi de profile cu luc khoi tao).
     private List<PointInfo> _jointList = new(); // Joint dang chon trong ETABS (hien trong bang Joint).
-
-    // --- Profile mac dinh: thu muc chua plug-in, fallback AppData ---
-    private static string PluginFolder
-    {
-        get
-        {
-            try { return Path.GetDirectoryName(typeof(MainForm).Assembly.Location) ?? ""; }
-            catch { return ""; }
-        }
-    }
-    private static string PluginProfilePath =>
-        PluginFolder == "" ? "" : Path.Combine(PluginFolder, "LoadAssignerProfile.json");
-    private static string AppDataProfilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "EtabsLoadAssigner", "profile.json");
 
     // --- controls ---
     private readonly TextBox _fileTextBox = new() { Width = 260 };
@@ -123,19 +116,14 @@ public sealed class MainForm : Form
         ColumnHeadersHeight = 36,
     };
 
-    // Bang Joint ETABS (user chot 08/11, anh build 20261108-192326): chi
-    // liet ke joint DANG CHON trong ETABS (khong phai toan bo joint cua
-    // model). User chon 1 dong de gan tai tren bang noi luc.
-    private readonly DataGridView _jointGrid = new()
-    {
-        Dock = DockStyle.Fill, ReadOnly = true, AllowUserToAddRows = false,
-        RowHeadersVisible = false, SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-        MultiSelect = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-    };
+    // Dropdown chon joint dich (user chot 08/11, anh build 20261108-193900):
+    // chi liet ke joint DANG CHON trong ETABS (khong phai toan bo joint cua
+    // model). User chon 1 joint trong dropdown de gan tai tren bang noi luc.
+    private readonly ComboBox _jointCombo = new() { Width = 300, DropDownStyle = ComboBoxStyle.DropDownList };
 
     private readonly Dictionary<string, (ComboBox Axis, ComboBox Sign)> _axisControls = new();
 
-    private readonly CheckBox _replaceCheck = new() { Text = "Ghi đè tải cũ cùng pattern tại điểm này", Checked = true, AutoSize = true };
+    private readonly CheckBox _replaceCheck = new() { Text = "Xoá trắng tải cũ tại điểm này trước khi gán", Checked = true, AutoSize = true };
 
     // Vung cuon + cac muc ben trong (de keo dai bang noi luc cho kin vung
     // cuon khi cua so rong — user chot 08/11, anh build 20261108-191050).
@@ -156,24 +144,19 @@ public sealed class MainForm : Form
         // Gia tri pattern trong profile co the khong con trong model ETABS
         // (model doi) — hien o do thay vi nem loi khi set gia tri cell.
         _grid.DataError += (_, e) => { e.ThrowException = false; };
-        // Bang Joint ETABS: cot Name / Label / X / Y / Z. Chon 1 dong = chon
-        // joint dich de gan tai tren bang noi luc.
-        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Name", HeaderText = "Name", FillWeight = 18 });
-        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Label", HeaderText = "Label", FillWeight = 18 });
-        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "X", HeaderText = "X", FillWeight = 21 });
-        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Y", HeaderText = "Y", FillWeight = 21 });
-        _jointGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Z", HeaderText = "Z", FillWeight = 22 });
-        _jointGrid.SelectionChanged += (_, _) =>
+        // Dropdown Joint ETABS: chi joint DANG CHON trong ETABS. Chon 1 joint
+        // trong dropdown = chon joint dich de gan tai tren bang noi luc.
+        _jointCombo.DropDownWidth = 450; // Hien du Name/Label/toa do trong dropdown.
+        _jointCombo.SelectedIndexChanged += (_, _) =>
         {
-            if (_jointGrid.SelectedRows.Count == 0)
+            if (_updatingJoint)
                 return;
-            int i = _jointGrid.SelectedRows[0].Index;
+            int i = _jointCombo.SelectedIndex;
             if (i >= 0 && i < _jointList.Count)
                 SetTargetJoint(_jointList[i]);
         };
         // Mo form len: keo dai bang noi luc cho kin vung cuon.
         Load += (_, _) => LayoutGridHeight();
-        TryAutoLoadProfile();
         UpdateEtabsStatus();
         _uiReady = true;
     }
@@ -189,7 +172,7 @@ public sealed class MainForm : Form
         // theo chieu rong con lai; cac cot khac vua noi dung.
         var top = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 9, RowCount = 1,
+            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 7, RowCount = 1,
             Padding = new Padding(3, 3, 3, 3),
         };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Chon file
@@ -199,8 +182,6 @@ public sealed class MainForm : Form
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan Diem
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Combo Diem
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nhan dien
-        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Tai profile
-        top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Luu profile
         top.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         var browseBtn = new Button { Text = "Chọn file Excel...", AutoSize = true, Anchor = AnchorStyles.None };
         browseBtn.Click += (_, _) => ChooseFile();
@@ -218,12 +199,6 @@ public sealed class MainForm : Form
         var detectBtn = new Button { Text = "Nhận diện bảng", AutoSize = true, Anchor = AnchorStyles.None };
         detectBtn.Click += (_, _) => Detect();
         top.Controls.Add(detectBtn, 6, 0);
-        var loadBtn = new Button { Text = "Tải profile...", AutoSize = true, Anchor = AnchorStyles.None };
-        loadBtn.Click += (_, _) => LoadProfile();
-        top.Controls.Add(loadBtn, 7, 0);
-        var saveBtn = new Button { Text = "Lưu profile...", AutoSize = true, Anchor = AnchorStyles.None };
-        saveBtn.Click += (_, _) => SaveProfile();
-        top.Controls.Add(saveBtn, 8, 0);
         _statusLabel.Text = "Chưa import file.";
         _pointTitleLabel.Text = "Chưa nhận diện bảng — chọn file Excel rồi bấm “Nhận diện bảng”.";
         _gridPanel = new Panel { Dock = DockStyle.Top, Height = 300 };
@@ -241,41 +216,31 @@ public sealed class MainForm : Form
         // Cua so doi kich thuoc -> keo dai bang noi luc cho kin vung cuon.
         _scrollPanel.Resize += (_, _) => LayoutGridHeight();
 
-        // Thanh duoi CO DINH (ngoai vung cuon): bang Joint ETABS + GÁN luon
-        // thay, khong can cuon. Bang Joint chi liet ke joint DANG CHON trong
+        // Thanh duoi CO DINH (ngoai vung cuon): Joint ETABS + GÁN luon thay,
+        // khong can cuon. Dropdown Joint chi liet ke joint DANG CHON trong
         // ETABS (user chot 08/11 — khong phai toan bo joint cua model);
-        // chon 1 dong trong bang = chon joint dich de gan.
-        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 140 };
-        var bottomLayout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
-        bottomLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F)); // Bang Joint (gian)
-        bottomLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Nut
-        var jointPanel = new Panel { Dock = DockStyle.Fill };
-        jointPanel.Controls.Add(_jointGrid); // Fill truoc
-        jointPanel.Controls.Add(new Label
+        // chon 1 joint trong dropdown = chon joint dich de gan.
+        var bottom = new Panel { Dock = DockStyle.Bottom, Height = 44 };
+        var bottomFlow = new FlowLayoutPanel
         {
-            Text = "Joint ETABS — chỉ joint đang chọn trong ETABS (chọn 1 dòng để gán):",
-            Dock = DockStyle.Top, AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold),
-        });
-        bottomLayout.Controls.Add(jointPanel, 0, 0);
-        var btnPanel = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown,
+            Dock = DockStyle.Fill, FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false, AutoSize = false,
         };
+        bottomFlow.Controls.Add(new Label { Text = "Joint ETABS:", AutoSize = true, Font = new Font("Segoe UI", 9F, FontStyle.Bold) });
+        bottomFlow.Controls.Add(_jointCombo);
         var selBtn = new Button { Text = "Lấy điểm đang chọn", AutoSize = true };
         selBtn.Click += (_, _) => UseSelectedPoint();
-        btnPanel.Controls.Add(selBtn);
-        _replaceCheck.CheckedChanged += (_, _) => SaveDefaultProfile();
-        btnPanel.Controls.Add(_replaceCheck);
+        bottomFlow.Controls.Add(selBtn);
+        _replaceCheck.CheckedChanged += (_, _) => SaveProfileToExcel();
+        bottomFlow.Controls.Add(_replaceCheck);
         var assignBtn = new Button
         {
             Text = "GÁN VÀO ETABS", AutoSize = true,
             Font = new Font("Segoe UI", 10F, FontStyle.Bold),
         };
         assignBtn.Click += (_, _) => Assign();
-        btnPanel.Controls.Add(assignBtn);
-        bottomLayout.Controls.Add(btnPanel, 1, 0);
-        bottom.Controls.Add(bottomLayout);
+        bottomFlow.Controls.Add(assignBtn);
+        bottom.Controls.Add(bottomFlow);
 
         // Them Fill truoc, roi Top/Bottom — Fill lay phan con lai.
         Controls.Add(_scrollPanel);
@@ -347,8 +312,8 @@ public sealed class MainForm : Form
             x += 55;
             _axisControls[excelAxis] = (tgt, sign);
             // Doi phuong/chieu la tu luu vao profile mac dinh (thu muc plug-in).
-            tgt.SelectedIndexChanged += (_, _) => SaveDefaultProfile();
-            sign.SelectedIndexChanged += (_, _) => SaveDefaultProfile();
+            tgt.SelectedIndexChanged += (_, _) => SaveProfileToExcel();
+            sign.SelectedIndexChanged += (_, _) => SaveProfileToExcel();
             x += 28; // khoang cach giua 2 anh xa
         }
         // Them nguoc (note truoc, row sau) de row o tren, note o duoi.
@@ -429,61 +394,28 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Profile mac dinh: tu doc khi mo plugin. Thu tu: thu muc chua plug-in
-    /// (LoadAssignerProfile.json) truoc, roi AppData (vi tri cu, de tuong
-    /// thich voi profile da luu truoc day).
+    /// Tu luu thong tin match vao sheet "LoadAssigner" trong file Excel noi
+    /// luc (user chot 08/11 — KHONG dung file .json rieng nua). Luu moi khi
+    /// user doi match pattern / phuong-chieu / ghi de. Khong lam gi khi UI
+    /// chua san sang hoac chua chon file Excel (tranh ghi de luc khoi tao).
+    /// File dang mo trong Excel thi khong ghi duoc — chi bao o thanh trang
+    /// thai (khong chan cong viec hien tai).
     /// </summary>
-    private void TryAutoLoadProfile()
+    private void SaveProfileToExcel()
     {
-        string? found = null;
-        if (PluginProfilePath != "" && File.Exists(PluginProfilePath))
-            found = PluginProfilePath;
-        else if (File.Exists(AppDataProfilePath))
-            found = AppDataProfilePath;
-        if (found is null)
+        if (!_uiReady || _table is null)
             return;
-        try
-        {
-            _profile = Profile.Load(found);
-            ApplyProfileToUi();
-            _statusLabel.Text = $"Đã tải profile mặc định: {found} (file gốc: {_profile.SourceFile}).";
-        }
-        catch (Exception ex)
-        {
-            _statusLabel.Text = $"Không tải được profile mặc định ({ex.Message}) — dùng mặc định.";
-        }
-    }
-
-    /// <summary>
-    /// Tu luu profile mac dinh moi khi user doi match pattern / phuong-chieu
-    /// / ghi de. Luu vao thu muc chua plug-in; neu khong ghi duoc thi luu
-    /// sang AppData (vi tri cu) va ghi chu o thanh trang thai. Khong lam gi
-    /// khi UI chua san sang (tranh ghi de profile cu luc khoi tao form).
-    /// </summary>
-    private void SaveDefaultProfile()
-    {
-        if (!_uiReady)
+        string path = _profile.SourceFile;
+        if (path == "" || !File.Exists(path))
             return;
         try
         {
             SyncProfileFromUi();
-            if (PluginProfilePath != "")
-            {
-                _profile.Save(PluginProfilePath);
-                return;
-            }
-            throw new IOException("Không xác định được thư mục plug-in.");
+            Detector.WriteProfileSheet(path, _profile, _table);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            try
-            {
-                string dir = Path.GetDirectoryName(AppDataProfilePath)!;
-                Directory.CreateDirectory(dir);
-                _profile.Save(AppDataProfilePath);
-                _statusLabel.Text = "Thư mục plug-in không ghi được — đã lưu profile mặc định vào %AppData%\\EtabsLoadAssigner\\profile.json.";
-            }
-            catch { /* bo qua — profile chi mat khi mo lai, khong anh huong gan hien tai */ }
+            _statusLabel.Text = $"Không lưu được vào sheet 'LoadAssigner' trong file Excel ({ex.Message}) — đóng file trong Excel rồi đổi lại 1 dòng để lưu.";
         }
     }
 
@@ -556,6 +488,28 @@ public sealed class MainForm : Form
             _sheetCombo.Text = t.Sheet;
         _updatingSheet = false;
         _statusLabel.Text = $"Đã nhận diện: {t.Points.Count} điểm, {t.Rows.Count} dòng tải, {t.Patterns.Count} pattern (sheet: {t.Sheet}).";
+        // Doc thong tin match tu sheet "LoadAssigner" trong chinh file Excel
+        // nay (user chot 08/11 — thay file .json rieng). Co sheet thi nap
+        // match/phuong-chieu/ghi de tu do; khong co thi dung mac dinh (goi y
+        // theo ten) va se ghi sheet moi khi user doi match.
+        try
+        {
+            var saved = Detector.ReadProfileSheet(path);
+            if (saved is not null)
+            {
+                string src = _profile.SourceFile;
+                string sh = _profile.Sheet;
+                _profile = saved;
+                _profile.SourceFile = src;
+                _profile.Sheet = sh;
+                ApplyProfileToUi();
+                _statusLabel.Text += " Đã tải match từ sheet 'LoadAssigner' trong file.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _statusLabel.Text += $" (Không đọc được sheet 'LoadAssigner': {ex.Message} — dùng mặc định.)";
+        }
         // Dropdown xem tung diem (ngay sau dropdown Sheet o thanh tren).
         // Chi hien 1 diem khi da chon (user chot 08/11 — khong load tat ca
         // diem de tranh load nhieu): mac dinh chua chon, grid de trong.
@@ -719,12 +673,12 @@ public sealed class MainForm : Form
         var row = _table.Rows[e.RowIndex];
         if (colName == "Pat1" || colName == "Pat2")
         {
-            // Doi pattern trong grid: ghi vao profile + tu luu.
+            // Doi pattern trong grid: ghi vao profile + tu luu vao sheet Excel.
             string val = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
             var rp = _profile.PatternFor(row.Name);
             if (colName == "Pat1") rp.Left = val; else rp.Right = val;
             _profile.PatternMap[row.Name] = rp;
-            SaveDefaultProfile();
+            SaveProfileToExcel();
             return;
         }
         string comp = colName;
@@ -769,7 +723,7 @@ public sealed class MainForm : Form
         }
         finally { _updatingGrid = false; }
         _statusLabel.Text = "Đã gợi ý tự động — kiểm tra lại từng dòng trước khi gán.";
-        SaveDefaultProfile();
+        SaveProfileToExcel();
     }
 
     private void UpdateEtabsStatus()
@@ -779,7 +733,7 @@ public sealed class MainForm : Form
             var pats = _etabs.PatternNames();
             var pts = _etabs.ListPoints();
             _statusLabel.Text = $"ETABS: {pats.Count} pattern, {pts.Count} point.";
-            RefreshJointGrid();
+            RefreshJointCombo();
             RefreshPatternColumns();
         }
         catch (Exception ex)
@@ -790,12 +744,14 @@ public sealed class MainForm : Form
 
     /// <summary>
     /// Nap bang Joint ETABS: chi joint DANG CHON trong ETABS (user chot
+    /// <summary>
+    /// Nap dropdown Joint ETABS: chi joint DANG CHON trong ETABS (user chot
     /// 08/11 — khong phai toan bo joint cua model), xep theo Z (thap truoc
-    /// — joint mong o duoi), roi X, Y. Cot Name / Label / X / Y / Z de user
-    /// nhan ra joint can gan (vd joint o giao 92/D.1). Giu lai dong joint
-    /// dang chon neu van con trong danh sach.
+    /// — joint mong o duoi), roi X, Y. Hien Name/Label/toa do de user nhan ra
+    /// joint can gan (vd joint o giao 92/D.1). Giu lai joint dang chon neu
+    /// van con trong danh sach.
     /// </summary>
-    private void RefreshJointGrid()
+    private void RefreshJointCombo()
     {
         List<PointInfo> sel;
         try { sel = _etabs.GetSelectedPoints(); }
@@ -806,24 +762,25 @@ public sealed class MainForm : Form
         }
         _jointList = sel.OrderBy(p => p.Z).ThenBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Name).ToList();
         string cur = _targetJointName;
-        _jointGrid.Rows.Clear();
-        foreach (var p in _jointList)
-            _jointGrid.Rows.Add(p.Name, p.Label, p.X.ToString("0.##"), p.Y.ToString("0.##"), p.Z.ToString("0.##"));
-        int idx = cur == "" ? -1 : _jointList.FindIndex(p => p.Name == cur);
-        if (idx >= 0)
+        _updatingJoint = true;
+        try
         {
-            _jointGrid.Rows[idx].Selected = true;
-            _jointGrid.FirstDisplayedScrollingRowIndex = idx;
+            _jointCombo.Items.Clear();
+            foreach (var p in _jointList)
+                _jointCombo.Items.Add($"Name='{p.Name}'  Label='{p.Label}'  ({p.X:0.##}, {p.Y:0.##}, {p.Z:0.##})");
+            int idx = cur == "" ? -1 : _jointList.FindIndex(p => p.Name == cur);
+            _jointCombo.SelectedIndex = idx;
         }
+        finally { _updatingJoint = false; }
         if (_jointList.Count == 0)
-            _statusLabel.Text = "Chưa chọn joint nào trong ETABS — chọn joint trong model trước khi mở plugin (bảng Joint chỉ liệt kê joint đang chọn).";
+            _statusLabel.Text = "Chưa chọn joint nào trong ETABS — chọn joint trong model trước khi mở plugin (dropdown Joint chỉ liệt kê joint đang chọn).";
     }
 
     private void UseSelectedPoint()
     {
-        // Nap lai bang Joint tu joint dang chon trong ETABS (moi chon them
-        // joint thi dong plugin roi mo lai, hoac bam nut nay de nap lai).
-        RefreshJointGrid();
+        // Nap lai dropdown Joint tu joint dang chon trong ETABS (moi chon
+        // them joint thi dong plugin roi mo lai, hoac bam nut nay de nap lai).
+        RefreshJointCombo();
         if (_jointList.Count == 0)
         {
             MessageBox.Show(this,
@@ -831,7 +788,7 @@ public sealed class MainForm : Form
                 "Chưa chọn điểm", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return;
         }
-        // Mac dinh chon dong dau tien (neu chua co joint dich).
+        // Mac dinh chon joint dau tien (neu chua co joint dich).
         if (_targetJointName == "" || !_jointList.Any(p => p.Name == _targetJointName))
             SetTargetJoint(_jointList[0]);
     }
@@ -841,19 +798,17 @@ public sealed class MainForm : Form
         _targetJointName = p.Name;
         _targetJointLabel = p.Label;
         _statusLabel.Text = $"Đã chọn joint ETABS: Name='{p.Name}' Label='{p.Label}' ({p.X:0.##}, {p.Y:0.##}, {p.Z:0.##}).";
-        // Dong bo dong dang chon trong bang Joint (neu joint co trong bang).
-        // Chi doi selection khi dong hien tai khong phai joint nay — tranh
-        // de quy SelectionChanged -> SetTargetJoint -> SelectionChanged...
-        int idx = _jointList.FindIndex(x => x.Name == p.Name);
-        if (idx >= 0 && idx < _jointGrid.Rows.Count)
+        // Dong bo dropdown Joint ETABS (neu joint co trong danh sach).
+        _updatingJoint = true;
+        try
         {
-            bool already = _jointGrid.SelectedRows.Count == 1 && _jointGrid.SelectedRows[0].Index == idx;
-            if (!already)
-            {
-                _jointGrid.ClearSelection();
-                _jointGrid.Rows[idx].Selected = true;
-            }
+            int idx = _jointList.FindIndex(x => x.Name == p.Name);
+            if (idx >= 0)
+                _jointCombo.SelectedIndex = idx;
+            else
+                _jointCombo.SelectedIndex = -1;
         }
+        finally { _updatingJoint = false; }
     }
 
     private (string? Point, string? Joint, BuildResult? Result) CurrentResult()
@@ -875,7 +830,7 @@ public sealed class MainForm : Form
         }
         if (_targetJointName == "")
         {
-            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nChọn 1 dòng trong bảng 'Joint ETABS' bên dưới (hoặc chọn joint trong model trước khi mở plugin rồi bấm 'Lấy điểm đang chọn').",
+            MessageBox.Show(this, "Chưa chọn joint trong ETABS.\nChọn 1 joint ở dropdown 'Joint ETABS' bên dưới (hoặc chọn joint trong model trước khi mở plugin rồi bấm 'Lấy điểm đang chọn').",
                 "Chưa chọn joint", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return (null, null, null);
         }
@@ -894,8 +849,11 @@ public sealed class MainForm : Form
             return;
         }
         var pats = res.Assignments.Select(x => x.Pattern).Distinct().OrderBy(x => x).ToList();
+        string clearNote = _profile.ReplaceExisting
+            ? "\n(Xoá trắng mọi tải cũ tại joint này trước khi gán — điểm chỉ còn tải do plugin nhập vào.)"
+            : "";
         if (MessageBox.Show(this,
-                $"Gán {res.Assignments.Count} tải vào joint '{joint}' (Label='{_targetJointLabel}')?\nPattern: {string.Join(", ", pats)}",
+                $"Gán {res.Assignments.Count} tải vào joint '{joint}' (Label='{_targetJointLabel}')?\nPattern: {string.Join(", ", pats)}{clearNote}",
                 "Xác nhận gán tải", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             return;
         // Tool KHONG tu tao pattern (user chot 08/11): pattern thieu thi bao
@@ -933,6 +891,20 @@ public sealed class MainForm : Form
                 "Joint không tồn tại", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
+        // Ghi de (user chot 08/11): XOA TRANG moi tai cu tai joint truoc khi
+        // gan moi — ca tai khong co trong file Excel cung bi xoa, de diem chi
+        // con tai do plugin nhap vao. Khong tick thi chi ghi de/ghi them tung
+        // pattern (tai cu khac pattern van con).
+        int cleared = 0;
+        if (_profile.ReplaceExisting)
+        {
+            try { cleared = _etabs.ClearJointLoads(joint); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Không xoá được tải cũ tại joint '{joint}': {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+        }
         var errs = new List<string>();
         foreach (var assignment in res.Assignments)
         {
@@ -944,45 +916,9 @@ public sealed class MainForm : Form
             MessageBox.Show(this, string.Join("\n", errs), "Gán lỗi một phần",
                 MessageBoxButtons.OK, MessageBoxIcon.Error);
         else
-            MessageBox.Show(this, $"Đã gán {res.Assignments.Count} tải vào joint '{joint}' (Label='{_targetJointLabel}').",
+            MessageBox.Show(this, $"Đã gán {res.Assignments.Count} tải vào joint '{joint}' (Label='{_targetJointLabel}')." +
+                (_profile.ReplaceExisting ? $" Đã xoá trắng {cleared} tải cũ tại joint trước khi gán." : ""),
                 "Xong", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
-    private void SaveProfile()
-    {
-        SyncProfileFromUi();
-        string dir = PluginFolder != "" ? PluginFolder : Path.GetDirectoryName(AppDataProfilePath)!;
-        using var dlg = new SaveFileDialog
-        {
-            DefaultExt = ".json",
-            Filter = "Profile JSON (*.json)|*.json",
-            InitialDirectory = Directory.Exists(dir) ? dir : "",
-            FileName = "LoadAssignerProfile.json",
-        };
-        if (dlg.ShowDialog(this) != DialogResult.OK)
-            return;
-        _profile.Save(dlg.FileName);
-        _statusLabel.Text = $"Đã lưu profile: {dlg.FileName}.";
-    }
-
-    private void LoadProfile()
-    {
-        string dir = PluginFolder != "" ? PluginFolder : Path.GetDirectoryName(AppDataProfilePath)!;
-        using var dlg = new OpenFileDialog
-        {
-            Filter = "Profile JSON (*.json)|*.json",
-            InitialDirectory = Directory.Exists(dir) ? dir : "",
-        };
-        if (dlg.ShowDialog(this) != DialogResult.OK)
-            return;
-        try { _profile = Profile.Load(dlg.FileName); }
-        catch (Exception ex)
-        {
-            MessageBox.Show(this, ex.Message, "Không đọc được profile",
-                MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-        ApplyProfileToUi();
-        _statusLabel.Text = $"Đã tải profile: {dlg.FileName} (file gốc: {_profile.SourceFile}).";
-    }
 }
