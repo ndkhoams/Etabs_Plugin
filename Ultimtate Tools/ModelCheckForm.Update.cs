@@ -1,13 +1,9 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Reflection;
-using System.Runtime.Serialization;
-using System.Runtime.Serialization.Json;
-using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -15,18 +11,22 @@ namespace Etabs_Ultimate_Tools
 {
     public partial class ModelCheckForm
     {
+        // Co che check for update giong CADtools (user chot 09/11): so theo
+        // timestamp ghi tren title bar. BuildTimestamp la nguon su that duy
+        // nhat — csproj tu dong dong dau moi lan build (target
+        // UpdateBuildTimestamp), title bar hien dung gia tri nay, va buoc
+        // kiem tra lay gia tri moi nhat tu chinh file nay tren GitHub.
+        private const string BuildTimestamp = "20261109-004631";
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
-        private const string UpdateBranch = "main";
-        private const string UpdateVersionFileName = "version.txt";
+        private const string LatestSourceUrl = "https://raw.githubusercontent.com/ndkhoams/Etabs_Plugin/main/Ultimtate%20Tools/ModelCheckForm.Update.cs";
+        private const string DownloadUrl = "https://raw.githubusercontent.com/ndkhoams/Etabs_Plugin/main/Etabs_Tool.iso";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
-        // Trạng thái của lần kiểm tra cập nhật gần nhất: chỉ bật nút Tải khi ISO trên
-        // GitHub thật sự mới hơn bản đang chạy; giữ lại bytes ISO đã tải khi kiểm tra
-        // để bước Tải ghi thẳng ra thay vì tải lại lần nữa.
+        // Trang thai cua lan kiem tra cap nhat gan nhat: chi bat nut Tai khi
+        // ban tren GitHub that su moi hon ban dang chay.
         private bool _latestUpdateAvailable;
-        private byte[] _checkedIsoBytes;
 
         private static HttpClient CreateUpdateHttpClient()
         {
@@ -37,14 +37,19 @@ namespace Etabs_Ultimate_Tools
             return client;
         }
 
-        private static string GetPluginBuildTimestamp()
+        internal static DateTime BuildTimeLocal
         {
-            var metadata = typeof(ModelCheckForm).Assembly
-                .GetCustomAttributes(typeof(AssemblyMetadataAttribute), false)
-                .Cast<AssemblyMetadataAttribute>()
-                .FirstOrDefault(attribute => string.Equals(attribute.Key, "PluginBuildTimestamp",
-                    StringComparison.OrdinalIgnoreCase));
-            return metadata == null ? "00000000-000000" : metadata.Value;
+            get { return DateTime.ParseExact(BuildTimestamp, "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture); }
+        }
+
+        private static async Task<DateTime> GetLatestBuildTimeAsync()
+        {
+            string source = await UpdateHttpClient.GetStringAsync(LatestSourceUrl).ConfigureAwait(false);
+            Match match = Regex.Match(source, @"private const string BuildTimestamp = ""(?<timestamp>\d{8}-\d{6})"";");
+            if (!match.Success)
+                throw new InvalidDataException("Không tìm thấy timestamp build hợp lệ trong ModelCheckForm.Update.cs trên GitHub.");
+
+            return DateTime.ParseExact(match.Groups["timestamp"].Value, "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
         }
 
         private void BuildUpdateTab(TabPage tab)
@@ -91,7 +96,7 @@ namespace Etabs_Ultimate_Tools
             versionBox.Controls.Add(versionLayout);
 
             versionLayout.Controls.Add(MakeUpdateFieldLabel("Bản dựng hiện tại:"), 0, 0);
-            lblUpdateBuildDate = MakeUpdateValueLabel(GetBuildDateDisplay());
+            lblUpdateBuildDate = MakeUpdateValueLabel(BuildTimeLocal.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
             versionLayout.Controls.Add(lblUpdateBuildDate, 1, 0);
             versionLayout.Controls.Add(MakeUpdateFieldLabel("Bản dựng mới nhất:"), 0, 1);
             lblUpdateLatestDate = MakeUpdateValueLabel("Chưa kiểm tra");
@@ -170,209 +175,36 @@ namespace Etabs_Ultimate_Tools
             };
         }
 
-        private string GetBuildDateDisplay()
-        {
-            DateTime buildDate;
-            return TryGetBuildDate(out buildDate)
-                ? buildDate.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture)
-                : "Không tìm thấy ngày build";
-        }
-
-        private bool TryGetBuildDate(out DateTime buildDate)
-        {
-            buildDate = default(DateTime);
-            return DateTime.TryParseExact(currentBuild, "yyyyMMdd-HHmmss",
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out buildDate);
-        }
-
-        private static string BuildIsoDownloadUrl(string commitSha)
-        {
-            string escapedPath = string.Join("/", UpdateFilePath.Split('/').Select(Uri.EscapeDataString));
-            return "https://raw.githubusercontent.com/" + UpdateOwner + "/" + UpdateRepository +
-                "/" + commitSha + "/" + escapedPath;
-        }
-
-        // Đọc dấu build trong version.txt đóng gói ở thư mục gốc của ISO.
-        private static bool TryReadIsoBuildDate(byte[] isoBytes, out DateTime buildDate)
-        {
-            buildDate = default(DateTime);
-            string content;
-            if (!TryReadIsoTextFile(isoBytes, UpdateVersionFileName, out content))
-                return false;
-            string firstLine = (content ?? "").Trim().TrimStart('\uFEFF');
-            int nl = firstLine.IndexOfAny(new[] { '\r', '\n' });
-            if (nl >= 0) firstLine = firstLine.Substring(0, nl).Trim();
-            return DateTime.TryParseExact(firstLine, "yyyyMMdd-HHmmss",
-                CultureInfo.InvariantCulture, DateTimeStyles.None, out buildDate);
-        }
-
-        // ── Đọc một file nhỏ ở thư mục gốc của ảnh ISO 9660 (kèm Joliet) ──────────
-        // Vừa đủ để lấy version.txt mà không cần mount ISO hay dùng thư viện ngoài.
-        private static bool TryReadIsoTextFile(byte[] iso, string fileName, out string content)
-        {
-            content = null;
-            if (iso == null || iso.Length < 17 * 2048) return false;
-            try
-            {
-                for (int sector = 16; sector < 32; sector++)
-                {
-                    int off = sector * 2048;
-                    if (off + 2048 > iso.Length) break;
-                    byte type = iso[off];
-                    if (type == 255) break; // terminator của dãy volume descriptor
-                    if (type != 1 && type != 2) continue;
-                    if (iso[off + 1] != 'C' || iso[off + 2] != 'D' || iso[off + 3] != '0' ||
-                        iso[off + 4] != '0' || iso[off + 5] != '1') continue;
-                    bool joliet = type == 2;
-                    // Bản ghi thư mục gốc nằm tại offset 156 trong volume descriptor.
-                    int rootExtent = ReadLe32(iso, off + 156 + 2);
-                    int rootSize = ReadLe32(iso, off + 156 + 10);
-                    int fileExtent, fileSize;
-                    if (FindIsoRootFile(iso, rootExtent, rootSize, fileName, joliet,
-                            out fileExtent, out fileSize))
-                    {
-                        long start = (long)fileExtent * 2048;
-                        if (start < 0 || start + fileSize > iso.Length) return false;
-                        content = Encoding.UTF8.GetString(iso, (int)start, fileSize);
-                        return true;
-                    }
-                }
-            }
-            catch { return false; }
-            return false;
-        }
-
-        private static bool FindIsoRootFile(byte[] iso, int extent, int size, string fileName,
-            bool joliet, out int fileExtent, out int fileSize)
-        {
-            fileExtent = 0; fileSize = 0;
-            long baseOff = (long)extent * 2048;
-            if (baseOff < 0 || baseOff >= iso.Length) return false;
-            int dirLen = (int)Math.Min((long)size, iso.Length - baseOff);
-            int pos = 0;
-            while (pos < dirLen)
-            {
-                int recLen = iso[(int)(baseOff + pos)];
-                if (recLen == 0)
-                {
-                    // Padding ở cuối sector: nhảy sang sector kế tiếp.
-                    pos = ((pos / 2048) + 1) * 2048;
-                    continue;
-                }
-                if (pos + recLen > dirLen) break;
-                byte flags = iso[(int)(baseOff + pos + 25)];
-                int nameLen = iso[(int)(baseOff + pos + 32)];
-                if ((flags & 2) == 0 && nameLen > 0) // không phải thư mục
-                {
-                    string name;
-                    if (joliet)
-                    {
-                        name = Encoding.BigEndianUnicode.GetString(
-                            iso, (int)(baseOff + pos + 33), nameLen);
-                    }
-                    else
-                    {
-                        name = Encoding.ASCII.GetString(iso, (int)(baseOff + pos + 33), nameLen);
-                        int semi = name.IndexOf(';');
-                        if (semi >= 0) name = name.Substring(0, semi);
-                    }
-                    if (string.Equals((name ?? "").Trim(), fileName, StringComparison.OrdinalIgnoreCase))
-                    {
-                        fileExtent = ReadLe32(iso, (int)(baseOff + pos + 2));
-                        fileSize = ReadLe32(iso, (int)(baseOff + pos + 10));
-                        return fileSize >= 0;
-                    }
-                }
-                pos += recLen;
-            }
-            return false;
-        }
-
-        private static int ReadLe32(byte[] data, int offset)
-        {
-            return data[offset] | (data[offset + 1] << 8) |
-                (data[offset + 2] << 16) | (data[offset + 3] << 24);
-        }
-
         private async Task CheckForPluginUpdateAsync()
         {
             btnUpdateCheck.Enabled = false;
             btnUpdateDownload.Enabled = false;
+            _latestUpdateAvailable = false;
             progressUpdate.Style = ProgressBarStyle.Marquee;
             lblUpdateStatus.Text = "Đang kiểm tra GitHub...";
 
             try
             {
-                string url = "https://api.github.com/repos/" + UpdateOwner + "/" + UpdateRepository +
-                    "/commits?path=" + Uri.EscapeDataString(UpdateFilePath) + "&per_page=1";
-                using (var response = await UpdateHttpClient.GetAsync(url))
-                {
-                    response.EnsureSuccessStatusCode();
-                    string json = await response.Content.ReadAsStringAsync();
-                    var serializer = new DataContractJsonSerializer(typeof(GitHubCommit[]));
-                    GitHubCommit[] commits;
-                    using (var stream = new MemoryStream(Encoding.UTF8.GetBytes(json)))
-                        commits = serializer.ReadObject(stream) as GitHubCommit[];
+                // Chi tai file .cs nho (~vai chuc KB) roi doc timestamp trong
+                // do — khong tai ca file ISO nhu truoc, khong doc version.txt
+                // trong ISO nua.
+                DateTime latestBuildTime = await GetLatestBuildTimeAsync();
+                if (IsDisposed) return;
 
-                    if (commits == null || commits.Length == 0 || string.IsNullOrWhiteSpace(commits[0].Sha))
-                        throw new InvalidOperationException("GitHub không trả về commit cho file cập nhật.");
-
-                    _latestUpdateCommit = commits[0].Sha;
-                    _latestUpdateAvailable = false;
-                    _checkedIsoBytes = null;
-
-                    // Nguồn sự thật duy nhất về "phiên bản mới nhất" là CHÍNH FILE ISO sẽ
-                    // được tải về (trước đây lấy currentBuild từ source trên main — hai
-                    // nguồn khác nhau, có thể lệch nhau theo cả hai chiều). Tải ISO tại
-                    // đúng commit mới nhất rồi đọc version.txt đóng gói bên trong nó.
-                    byte[] isoBytes = await UpdateHttpClient.GetByteArrayAsync(
-                        BuildIsoDownloadUrl(_latestUpdateCommit));
-                    _checkedIsoBytes = isoBytes;
-
-                    DateTime latestBuildDate;
-                    bool fromVersionFile = TryReadIsoBuildDate(isoBytes, out latestBuildDate);
-                    if (!fromVersionFile)
-                    {
-                        // ISO đời cũ chưa có version.txt: lùi về ngày commit của chính
-                        // file ISO — vẫn cùng một nguồn (file ISO), chỉ kém chính xác hơn.
-                        string commitDateText = commits[0].Commit != null && commits[0].Commit.Committer != null
-                            ? commits[0].Commit.Committer.Date : null;
-                        DateTimeOffset commitDate;
-                        if (string.IsNullOrWhiteSpace(commitDateText) ||
-                            !DateTimeOffset.TryParse(commitDateText, CultureInfo.InvariantCulture,
-                                DateTimeStyles.RoundtripKind, out commitDate))
-                            throw new InvalidOperationException(
-                                "ISO không có version.txt và GitHub không trả về ngày commit của file ISO.");
-                        latestBuildDate = commitDate.ToOffset(TimeSpan.FromHours(7)).DateTime;
-                    }
-
-                    var latestBuildTimestampGmt7 = new DateTimeOffset(latestBuildDate, TimeSpan.FromHours(7));
-                    lblUpdateLatestDate.Text = latestBuildTimestampGmt7.ToString(
-                        "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-                    DateTime buildDate;
-                    if (!TryGetBuildDate(out buildDate))
-                    {
-                        lblUpdateBuildDate.Text = "Không tìm thấy ngày build";
-                        lblUpdateStatus.Text = "Không đọc được ngày build (định dạng yyyyMMdd-HHmmss).";
-                    }
-                    else
-                    {
-                        lblUpdateBuildDate.Text = buildDate.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-                        var buildTimestampGmt7 = new DateTimeOffset(buildDate, TimeSpan.FromHours(7));
-                        _latestUpdateAvailable = latestBuildTimestampGmt7 > buildTimestampGmt7;
-                        lblUpdateStatus.Text = _latestUpdateAvailable
-                            ? "Có phiên bản mới."
-                            : "Bạn đang dùng phiên bản mới nhất.";
-                        if (!fromVersionFile)
-                            lblUpdateStatus.Text += " (ISO chưa có version.txt — so theo ngày commit của file ISO.)";
-                    }
-                    btnUpdateDownload.Enabled = _latestUpdateAvailable;
-                }
+                lblUpdateLatestDate.Text = latestBuildTime.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+                _latestUpdateAvailable = latestBuildTime > BuildTimeLocal;
+                lblUpdateStatus.Text = _latestUpdateAvailable
+                    ? "Có phiên bản mới."
+                    : "Bạn đang dùng phiên bản mới nhất.";
+                btnUpdateDownload.Enabled = _latestUpdateAvailable;
             }
             catch (Exception ex)
             {
                 if (!IsDisposed)
+                {
+                    lblUpdateLatestDate.Text = "Không kiểm tra được";
                     lblUpdateStatus.Text = "Không kiểm tra được phiên bản: " + ex.Message;
+                }
             }
             finally
             {
@@ -387,8 +219,6 @@ namespace Etabs_Ultimate_Tools
 
         private async Task DownloadPluginUpdateAsync()
         {
-            if (string.IsNullOrWhiteSpace(_latestUpdateCommit)) return;
-
             using (var dialog = new SaveFileDialog
             {
                 Title = "Lưu file cập nhật",
@@ -407,19 +237,12 @@ namespace Etabs_Ultimate_Tools
                 btnUpdateCheck.Enabled = false;
                 btnUpdateDownload.Enabled = false;
                 progressUpdate.Value = 0;
-                lblUpdateStatus.Text = "Đang tải commit " + _latestUpdateCommit + "...";
+                lblUpdateStatus.Text = "Đang tải file ISO...";
 
                 try
                 {
-                    if (_checkedIsoBytes != null)
-                    {
-                        // Đã tải đúng ISO này ở bước kiểm tra — ghi thẳng ra, không tải lại.
-                        File.WriteAllBytes(temporaryFile, _checkedIsoBytes);
-                        progressUpdate.Style = ProgressBarStyle.Blocks;
-                        progressUpdate.Value = 100;
-                    }
-                    else using (var response = await UpdateHttpClient.GetAsync(
-                        BuildIsoDownloadUrl(_latestUpdateCommit), HttpCompletionOption.ResponseHeadersRead))
+                    using (var response = await UpdateHttpClient.GetAsync(
+                        DownloadUrl, HttpCompletionOption.ResponseHeadersRead))
                     {
                         response.EnsureSuccessStatusCode();
                         long totalBytes = response.Content.Headers.ContentLength.GetValueOrDefault();
@@ -447,7 +270,9 @@ namespace Etabs_Ultimate_Tools
                     else
                         File.Move(temporaryFile, destination);
 
-                    lblUpdateStatus.Text = "Đã tải xong commit " + _latestUpdateCommit + ".";
+                    progressUpdate.Style = ProgressBarStyle.Blocks;
+                    progressUpdate.Value = 100;
+                    lblUpdateStatus.Text = "Đã tải xong file cập nhật.";
                     Info("Đã tải file cập nhật về:\n" + destination, "Update");
                 }
                 catch (Exception ex)
@@ -471,30 +296,6 @@ namespace Etabs_Ultimate_Tools
                     }
                 }
             }
-        }
-
-        [DataContract]
-        private sealed class GitHubCommit
-        {
-            [DataMember(Name = "sha")]
-            public string Sha { get; set; }
-
-            [DataMember(Name = "commit")]
-            public GitHubCommitMetadata Commit { get; set; }
-        }
-
-        [DataContract]
-        private sealed class GitHubCommitMetadata
-        {
-            [DataMember(Name = "committer")]
-            public GitHubCommitPerson Committer { get; set; }
-        }
-
-        [DataContract]
-        private sealed class GitHubCommitPerson
-        {
-            [DataMember(Name = "date")]
-            public string Date { get; set; }
         }
     }
 }
