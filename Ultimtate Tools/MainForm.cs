@@ -30,7 +30,7 @@ namespace EtabsLoadAssigner.Plugin;
 ///     dien tich). Dropdown Joint ETABS don cung da xoa (joint chon truc
 ///     tiep trong bang load point).
 ///   - Vung cuon giua: hang tieu de (trai: 2 nut chuyen bang + "Thêm điểm"
-///     + "Xoá dòng" + "Làm trắng bảng"; phai: Ghi de + "Lưu data và Excel"
+///     + "Xoá dòng" + "Làm trắng bảng"; phai: Ghi de + "Lưu data vào Excel"
 ///     + "GÁN VÀO ETABS"; giua: ten diem) -> bang noi luc / bang load point
 ///     (gom ca 2 cot Match pattern ngay sau cot Tai: Pattern gia tri 1 /
 ///     gia tri 2) -> Phuong & chieu (cao 80 — tang them de chu khoi bi sat).
@@ -295,7 +295,7 @@ public sealed class MainForm : Form
         _axisSection = BuildSectionAxis();
 
         // Hang tieu de (user chot 08/11): trai = 2 nut chuyen bang + "Thêm
-        // điểm" + "Làm trắng bảng"; phai = Ghi de + "Lưu data và Excel" +
+        // điểm" + "Làm trắng bảng"; phai = Ghi de + "Lưu data vào Excel" +
         // "GÁN VÀO ETABS" (cum nut duoi cu chuyen len day de tiet kiem dien
         // tich — bo han thanh duoi, user chot 08/11); giua = ten diem.
         // (Dock Left: them sau thi nam trai hon; Dock Right: them sau thi
@@ -319,7 +319,7 @@ public sealed class MainForm : Form
         _titleBar.Controls.Add(patternBtn);
         _replaceCheck.Dock = DockStyle.Right;
         _titleBar.Controls.Add(_replaceCheck);
-        var saveBtn = new Button { Text = "Lưu data và Excel", Dock = DockStyle.Right, AutoSize = true };
+        var saveBtn = new Button { Text = "Lưu data vào Excel", Dock = DockStyle.Right, AutoSize = true };
         saveBtn.Click += (_, _) => SaveMatchToExcel();
         _titleBar.Controls.Add(saveBtn);
         var assignBtn = new Button
@@ -370,9 +370,9 @@ public sealed class MainForm : Form
     {
         _pointGrid.Visible = false;
         _grid.Visible = true;
-        _pointTitleLabel.Text = _pointViewCombo.Text == ""
-            ? "Chọn 1 điểm ở dropdown “Điểm” để xem bảng lực (chỉ xem 1 điểm để tránh load nhiều)."
-            : _pointViewCombo.Text;
+        // Dong huong dan da bo (user chot 08/11) — chua chon diem thi tieu
+        // de de trong, khong hien dong huong dan nua.
+        _pointTitleLabel.Text = _pointViewCombo.Text;
     }
 
     private void ShowPointGrid()
@@ -596,7 +596,7 @@ public sealed class MainForm : Form
             _axisControls[excelAxis] = (tgt, sign);
             // Doi phuong/chieu la tu luu vao profile mac dinh (thu muc plug-in).
             // Doi phuong-chieu: chi cap nhat profile trong bo nho; luu bang
-            // nut "Lưu data và Excel" (user chot 08/11 — khong tu dong luu).
+            // nut "Lưu data vào Excel" (user chot 08/11 — khong tu dong luu).
             tgt.SelectedIndexChanged += (_, _) => { };
             sign.SelectedIndexChanged += (_, _) => { };
             x += 28; // khoang cach giua 2 anh xa
@@ -660,7 +660,7 @@ public sealed class MainForm : Form
 
     /// <summary>
     /// Luu THU CONG thong tin match vao sheet "LoadAssigner" trong file Excel
-    /// noi luc (user chot 08/11 — nut "Lưu data và Excel", KHONG tu dong
+    /// noi luc (user chot 08/11 — nut "Lưu data vào Excel", KHONG tu dong
     /// luu nua). Ghi TAT CA dong tai trong bang (ten tai + pattern 2 cot) +
     /// phuong-chieu + ghi de. Chi luu khi bang da nhan dien xong (co dong
     /// tai); bang rong thi bao loi va KHONG ghi — tranh ghi de sheet thanh
@@ -867,7 +867,7 @@ public sealed class MainForm : Form
         {
             _grid.Columns.Clear();
             _grid.Rows.Clear();
-            _pointTitleLabel.Text = "Chọn 1 điểm ở dropdown “Điểm” để xem bảng lực (chỉ xem 1 điểm để tránh load nhiều).";
+            _pointTitleLabel.Text = ""; // Dong huong dan da bo (user chot 08/11).
             return;
         }
         string point = view;
@@ -1006,7 +1006,7 @@ public sealed class MainForm : Form
         if (colName == "Pat1" || colName == "Pat2")
         {
             // Doi pattern trong grid: ghi vao profile trong bo nho (luu bang
-            // nut "Lưu data và Excel" — user chot 08/11, khong tu dong luu).
+            // nut "Lưu data vào Excel" — user chot 08/11, khong tu dong luu).
             string val = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
             var rp = _profile.PatternFor(row.Name);
             if (colName == "Pat1") rp.Left = val; else rp.Right = val;
