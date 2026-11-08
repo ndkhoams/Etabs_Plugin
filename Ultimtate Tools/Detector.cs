@@ -3,8 +3,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml;
 using ClosedXML.Excel;
 
 namespace EtabsLoadAssigner.Core;
@@ -294,38 +296,160 @@ public static class Detector
         return v.ToString();
     }
 
+    /// <summary>
+    /// Doc toan bo sheet thanh grid (list[list]) — dung chung cho Excel.
+    /// TOI UU (2026-11-08): truoc day duyet TUNG o bang ws.Cell(r, c) tren
+    /// toan bo LastRowUsed x LastColumnUsed — ClosedXML tao object cell cho
+    /// ca o trong (rat cham voi sheet A0 thua). Gio chi liet ke cac o DA
+    /// DUNG 1 lan (ws.CellsUsed()) roi dien vao grid da cap phat san.
+    /// Grid tra ve GIONG HET ban cu (cung so dong/cot, o trong = null) nen
+    /// DetectFromGrid/FindPatternTable cho cung ket qua.
+    /// </summary>
     private static List<List<object?>> ReadGrid(IXLWorksheet ws)
     {
         var grid = new List<List<object?>>();
         var lastRow = ws.LastRowUsed();
         if (lastRow is null)
             return grid;
+        int nRows = lastRow.RowNumber();
         int lastCol = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
-        for (int r = 1; r <= lastRow.RowNumber(); r++)
+        for (int r = 0; r < nRows; r++)
         {
-            var row = new List<object?>();
-            for (int c = 1; c <= lastCol; c++)
-                row.Add(CellValue(ws.Cell(r, c)));
+            var row = new List<object?>(lastCol);
+            for (int c = 0; c < lastCol; c++)
+                row.Add(null);
             grid.Add(row);
         }
+        foreach (var cell in ws.CellsUsed())
+        {
+            int r = cell.Address.RowNumber - 1;
+            int c = cell.Address.ColumnNumber - 1;
+            if (r >= 0 && r < nRows && c >= 0 && c < lastCol)
+                grid[r][c] = CellValue(cell);
+        }
         return grid;
+    }
+
+    /// <summary>
+    /// Doc grid chi cho cac dong [firstRow..lastRow] (1-based, bao gom ca 2
+    /// dau) — dung khi chi can doc phan cuoi sheet (vd bang pattern nam
+    /// duoi bang tai), khong can doc ca sheet.
+    /// </summary>
+    private static List<List<object?>> ReadGridRange(IXLWorksheet ws, int firstRow, int lastRow)
+    {
+        var grid = new List<List<object?>>();
+        int lastCol = ws.LastColumnUsed()?.ColumnNumber() ?? 0;
+        int nRows = Math.Max(0, lastRow - firstRow + 1);
+        for (int i = 0; i < nRows; i++)
+        {
+            var row = new List<object?>(lastCol);
+            for (int c = 0; c < lastCol; c++)
+                row.Add(null);
+            grid.Add(row);
+        }
+        foreach (var cell in ws.CellsUsed())
+        {
+            int r = cell.Address.RowNumber - firstRow;
+            int c = cell.Address.ColumnNumber - 1;
+            if (r >= 0 && r < nRows && c >= 0 && c < lastCol)
+                grid[r][c] = CellValue(cell);
+        }
+        return grid;
+    }
+
+    /// <summary>
+    /// Tim bang pattern tren 1 sheet MA KHONG build full grid: chi quet cac
+    /// o da dung de tim dong chua "Load Pattern Definitions", roi doc grid
+    /// chi tu dong do tro xuong va dung lai FindPatternTable(grid) cu.
+    /// Ket qua giong het FindPatternTable(ReadGrid(ws)) vi dong tieu de la
+    /// dong 0 cua sub-grid, moi vi tri tuong doi giu nguyen.
+    /// </summary>
+    private static List<PatternDef> FindPatternTableOnSheet(IXLWorksheet ws)
+    {
+        int? titleRow = null;
+        foreach (var cell in ws.CellsUsed())
+        {
+            if (Norm(CellValue(cell)).Contains("Load Pattern Definitions"))
+            {
+                int r = cell.Address.RowNumber;
+                if (titleRow is null || r < titleRow.Value)
+                    titleRow = r;
+            }
+        }
+        if (titleRow is null)
+            return new List<PatternDef>();
+        int lastRow = ws.LastRowUsed()?.RowNumber() ?? titleRow.Value;
+        return FindPatternTable(ReadGridRange(ws, titleRow.Value, lastRow));
     }
 
     /// <summary>Liet ke ten sheet trong file Excel (de user chon bang can nhap khi file co nhieu bang).</summary>
     public static List<string> ListSheets(string path)
     {
+        // TOI UU (2026-11-08): doc ten sheet truc tiep tu xl/workbook.xml
+        // trong file zip (khong can mo toan bo workbook bang ClosedXML) —
+        // nhanh hon ~40 lan. Loi thi roi ve ClosedXML (hanh vi cu).
+        try
+        {
+            var names = ReadSheetNamesFromZip(path);
+            if (names is not null && names.Count > 0)
+                return names;
+        }
+        catch { /* fallback xuong duoi */ }
         using var wb = new XLWorkbook(path);
         return wb.Worksheets.Select(ws => ws.Name).ToList();
+    }
+
+    /// <summary>Doc ten sheet tu xl/workbook.xml (zip). Tra null neu khong doc duoc.</summary>
+    private static List<string>? ReadSheetNamesFromZip(string path)
+    {
+        using var fs = File.OpenRead(path);
+        using var zip = new ZipArchive(fs, ZipArchiveMode.Read);
+        var entry = zip.GetEntry("xl/workbook.xml");
+        if (entry is null)
+            return null;
+        using var s = entry.Open();
+        using var reader = XmlReader.Create(s);
+        var names = new List<string>();
+        while (reader.Read())
+        {
+            if (reader.NodeType == XmlNodeType.Element && reader.LocalName == "sheet")
+            {
+                string? nm = reader.GetAttribute("name");
+                if (nm is not null)
+                    names.Add(nm);
+            }
+        }
+        return names.Count > 0 ? names : null;
     }
 
     public static FoundationTable DetectExcel(string path, string? sheet = null)
     {
         using var wb = new XLWorkbook(path);
         FoundationTable? best = null;
+        if (sheet is not null)
+        {
+            // TOI UU (2026-11-08): truoc day vong 2 doc lai TOAN BO grid cua
+            // moi sheet khac chi de gom pattern table. Gio moi sheet khac chi
+            // quet nhe de tim bang pattern (FindPatternTableOnSheet), khong
+            // build full grid. Workbook chi mo 1 lan.
+            var target = wb.Worksheets.FirstOrDefault(w => w.Name == sheet);
+            if (target is null)
+                return new FoundationTable
+                {
+                    Source = path,
+                    Warnings = { "File Excel không có sheet nào." },
+                };
+            best = DetectFromGrid(ReadGrid(target), path, target.Name);
+            foreach (var ws in wb.Worksheets)
+            {
+                if (ws.Name == sheet)
+                    continue;
+                best.Patterns = best.Patterns.Concat(FindPatternTableOnSheet(ws)).ToList();
+            }
+            return best;
+        }
         foreach (var ws in wb.Worksheets)
         {
-            if (sheet is not null && ws.Name != sheet)
-                continue;
             var t = DetectFromGrid(ReadGrid(ws), path, ws.Name);
             // Uu tien bang co ca diem + dong tai; gop pattern table tu moi sheet.
             if (best is null)
@@ -346,16 +470,6 @@ public static class Detector
                 Source = path,
                 Warnings = { "File Excel không có sheet nào." },
             };
-        // Neu chi dinh sheet: van gop bang pattern tu cac sheet con lai.
-        if (sheet is not null)
-        {
-            foreach (var ws in wb.Worksheets)
-            {
-                if (ws.Name == sheet)
-                    continue;
-                best.Patterns = best.Patterns.Concat(FindPatternTable(ReadGrid(ws))).ToList();
-            }
-        }
         return best;
     }
 

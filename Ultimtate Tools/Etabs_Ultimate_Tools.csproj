@@ -21,6 +21,9 @@
       <HintPath>C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll</HintPath>
       <EmbedInteropTypes>false</EmbedInteropTypes>
     </Reference>
+    <!-- Load Assigner (toi uu doc Excel 2026-11-08): Detector doc ten sheet truc
+         tiep tu xl/workbook.xml trong file zip — can System.IO.Compression. -->
+    <Reference Include="System.IO.Compression" />
   </ItemGroup>
 
   <ItemGroup>
