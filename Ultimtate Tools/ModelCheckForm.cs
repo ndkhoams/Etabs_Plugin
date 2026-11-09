@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using EtabsLoadAssigner.Plugin;
 
 namespace Etabs_Ultimate_Tools
 {
@@ -13,6 +14,7 @@ namespace Etabs_Ultimate_Tools
         private const int BarRowHeight = 34;
 
         private readonly cSapModel _sap;
+        private MainForm _loadAssignerForm;
 
         private ComboBox cboCombo;
         private ComboBox cboPDeltaSource;
@@ -82,6 +84,7 @@ namespace Etabs_Ultimate_Tools
         {
             _sap = sap;
             InitializeComponent();
+            Activated += (_, _) => _loadAssignerForm?.RefreshSelectedJoints();
             LoadCombos();
         }
 

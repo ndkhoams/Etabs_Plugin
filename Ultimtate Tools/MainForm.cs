@@ -53,13 +53,9 @@ namespace EtabsLoadAssigner.Plugin;
 /// QUY TAC GAN (user chot 08/11):
 ///   - Gan 1 diem 1 luc. Diem gan = diem dang chon o dropdown "Điểm" tren
 ///     trong các dòng bảng load point.
-///   - Joint dich chon trong cot "Joint ETABS" (chỉ liệt kê joint đang
-///     chọn trong ETABS; có thể chọn All để áp dụng cho toàn bộ joint đó).
-///     KHONG co nut "Chọn điểm trong ETABS" / "Lấy điểm đang chọn": form
-///     plugin la MODAL (ShowDialog) nen du an form chinh, ETABS van bi khoa
-///     — user khong click/chon duoc joint trong model (da user-verify
-///     08/11); muon doi joint dich thi dong plugin, chon lai joint trong
-///     model, mo lai plugin.
+///   - Joint đích chọn trong cột "Joint ETABS" (joint đang chọn trong ETABS;
+///     có thể chọn All để áp dụng cho tất cả). Danh sách được cập nhật khi
+///     quay lại cửa sổ tool; các lựa chọn đã nhập trong bảng được giữ lại.
 ///   - Match 2 cot: trai = gia tri 1, phai = gia tri 2 (chi khi o co 2
 ///     gia tri); chi pattern co san trong model — tool KHONG tu tao pattern.
 ///   - Chế độ gán tải được chọn từ dropdown: thay thế toàn bộ, thay thế
@@ -254,6 +250,8 @@ public sealed class MainForm : Form
         _uiReady = true;
     }
 
+    public void RefreshSelectedJoints() => RefreshJointCombo();
+
     // ---------------- UI ----------------
     // MOT VIEW DUY NHAT (user chot 2026-11-08): toan bo chuc nang nam trong
     // 1 panel cuon doc duy nhat, KHONG chia tab con, KHONG mo dialog phu.
@@ -413,6 +411,16 @@ public sealed class MainForm : Form
         }
         var pt = (DataGridViewComboBoxColumn)_pointGrid.Columns["ExcelPoint"];
         var jt = (DataGridViewComboBoxColumn)_pointGrid.Columns["EtabsJoint"];
+        var existingJoints = new HashSet<string>(StringComparer.Ordinal);
+        foreach (DataGridViewRow row in _pointGrid.Rows)
+        {
+            if (!row.IsNewRow)
+            {
+                string value = row.Cells["EtabsJoint"].Value?.ToString() ?? "";
+                if (!string.IsNullOrWhiteSpace(value) && value != AllJointsDisplay)
+                    existingJoints.Add(value);
+            }
+        }
         pt.Items.Clear();
         if (_table is not null)
             foreach (string p in _table.Points)
@@ -421,6 +429,9 @@ public sealed class MainForm : Form
         jt.Items.Add(AllJointsDisplay);
         foreach (var p in _jointList)
             jt.Items.Add(JointDisplay(p));
+        foreach (string joint in existingJoints)
+            if (!jt.Items.Contains(joint))
+                jt.Items.Add(joint);
     }
 
     private void PointGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
@@ -1081,9 +1092,10 @@ public sealed class MainForm : Form
         }
         _jointList = sel.OrderBy(p => p.Z).ThenBy(p => p.X).ThenBy(p => p.Y).ThenBy(p => p.Name).ToList();
         if (_jointList.Count == 0)
-            _statusLabel.Text = "Chưa chọn joint nào trong ETABS — chọn joint trong model trước khi mở plugin (cột Joint ở bảng load point chỉ liệt kê joint đang chọn).";
+            _statusLabel.Text = "Chưa chọn joint nào trong ETABS. Chọn joint trong model rồi quay lại tool để cập nhật danh sách.";
         else
-            RefreshPointGrid(); // Cap nhat cot Joint o bang load point.
+            _statusLabel.Text = $"Đã cập nhật {_jointList.Count} joint đang chọn trong ETABS.";
+        RefreshPointGrid();
     }
 
     /// <summary>

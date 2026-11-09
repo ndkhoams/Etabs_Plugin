@@ -239,12 +239,12 @@ namespace Etabs_Ultimate_Tools
         {
             try
             {
-                var form = new MainForm(new RealEtabs(_sap));
-                form.TopLevel = false;
-                form.FormBorderStyle = FormBorderStyle.None;
-                form.Dock = DockStyle.Fill;
-                tab.Controls.Add(form);
-                form.Show();
+                _loadAssignerForm = new MainForm(new RealEtabs(_sap));
+                _loadAssignerForm.TopLevel = false;
+                _loadAssignerForm.FormBorderStyle = FormBorderStyle.None;
+                _loadAssignerForm.Dock = DockStyle.Fill;
+                tab.Controls.Add(_loadAssignerForm);
+                _loadAssignerForm.Show();
             }
             catch (Exception ex)
             {
