@@ -97,11 +97,14 @@ namespace Etabs_Ultimate_Tools
             var tabs = new TabControl
             {
                 Dock = DockStyle.Fill,
+                Alignment = TabAlignment.Left,
                 Font = new Font("Arial", 9F),
                 SizeMode = TabSizeMode.Fixed,
-                ItemSize = new Size(150, 38),
+                ItemSize = new Size(42, 180),
+                Multiline = true,
+                BackColor = Color.FromArgb(245, 246, 248),
                 DrawMode = TabDrawMode.OwnerDrawFixed,
-                Padding = new Point(10, 4)
+                Padding = new Point(12, 4)
             };
             tabs.DrawItem += Tabs_DrawItem;
             Controls.Add(tabs);
@@ -169,18 +172,19 @@ namespace Etabs_Ultimate_Tools
             Rectangle tabRect = tc.GetTabRect(e.Index);
             bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
 
-            Color back = selected ? Color.FromArgb(37, 99, 235) : Color.FromArgb(226, 232, 240);
-            Color fore = selected ? Color.White : Color.FromArgb(45, 55, 72);
+            Color back = selected ? Color.White : Color.FromArgb(245, 246, 248);
+            Color fore = selected ? Color.FromArgb(32, 33, 36) : Color.FromArgb(60, 64, 67);
 
             using (var b = new SolidBrush(back))
                 e.Graphics.FillRectangle(b, tabRect);
 
-            using (var tabFont = new Font("Arial", 9F, FontStyle.Bold))
-                TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, tabFont, tabRect, fore,
-                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            var textRect = Rectangle.Inflate(tabRect, -16, 0);
+            using (var tabFont = new Font("Arial", 9F, selected ? FontStyle.Bold : FontStyle.Regular))
+                TextRenderer.DrawText(e.Graphics, tc.TabPages[e.Index].Text, tabFont, textRect, fore,
+                    TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
 
-            using (var pen = new Pen(selected ? Color.FromArgb(30, 64, 175) : Color.FromArgb(203, 213, 225), selected ? 2 : 1))
-                e.Graphics.DrawRectangle(pen, tabRect.X + 1, tabRect.Y + 1, tabRect.Width - 2, tabRect.Height - 2);
+            using (var pen = new Pen(selected ? Color.FromArgb(218, 220, 224) : Color.FromArgb(224, 227, 231)))
+                e.Graphics.DrawLine(pen, tabRect.Left, tabRect.Bottom - 1, tabRect.Right, tabRect.Bottom - 1);
         }
 
         // ---------- Scaffold dùng chung cho mọi tab ----------

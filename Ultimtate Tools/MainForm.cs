@@ -29,17 +29,16 @@ namespace EtabsLoadAssigner.Plugin;
 ///     và Excel" + "GÁN VÀO ETABS" chuyen len hang tieu de de tiet kiem
 ///     dien tich). Dropdown Joint ETABS don cung da xoa (joint chon truc
 ///     tiep trong bang load point).
-///   - Vung cuon giua: hang tieu de (trai: 2 nut chuyen bang + "Thêm điểm"
-///     + "Xoá dòng" + "Làm trắng bảng"; phai: Ghi de + "Lưu data vào Excel"
-///     + "GÁN VÀO ETABS"; giua: ten diem) -> bang noi luc / bang load point
+///   - Vung cuon giua: hang tieu de (trai: 2 nut chuyen bang + "Xoá dòng"
+///     + "Làm trắng bảng"; phai: dropdown chế độ + "Lưu data vào Excel"
+///     + "GÁN TẢI"; giua: ten diem) -> bang noi luc / bang load point
 ///     (gom ca 2 cot Match pattern ngay sau cot Tai: Pattern gia tri 1 /
 ///     gia tri 2) -> Phuong & chieu (cao 80 — tang them de chu khoi bi sat).
 ///   - GAN HANG LOAT (user chot 08/11): nut GÁN gan TAT CA cap (Diem Excel
 ///     -> Joint ETABS) trong bang load point, moi diem dung chung profile
 ///     match pattern + phuong/chieu. Chuyen bang bang 2 nut o hang tieu de
-///     ("Bảng load pattern" / "Bảng load point"); them diem vao bang bang
-///     nut "Thêm điểm" (lay Diem Excel dang chon o dropdown tren, cot Joint
-///     de trong de chon trong bang) hoac go truc tiep trong bang; nut "Xoá
+///     ("Bảng load pattern" / "Bảng load point"); thêm dòng trực tiếp
+///     trong bảng; nut "Xoá
 ///     dòng" xoa dong dang chon (de xoa dong thua); nut "Làm trắng bảng"
 ///     xoa het dong de gan luot moi.
 ///   - KHONG co box thong tin file (user chot 08/11 — xoa).
@@ -53,11 +52,9 @@ namespace EtabsLoadAssigner.Plugin;
 ///
 /// QUY TAC GAN (user chot 08/11):
 ///   - Gan 1 diem 1 luc. Diem gan = diem dang chon o dropdown "Điểm" tren
-///     thanh tren (cung la diem grid dang hien) — KHONG co dropdown chon
-///     diem rieng o muc Diem gan tai.
-///   - Joint dich chon trong DROPDOWN "Joint ETABS" o thanh duoi (chi liet
-///     ke joint DANG CHON trong ETABS — khong phai toan bo joint cua model,
-///     user chot 08/11). Mo plugin len la dropdown nap san joint dang chon.
+///     trong các dòng bảng load point.
+///   - Joint dich chon trong cot "Joint ETABS" (chỉ liệt kê joint đang
+///     chọn trong ETABS; có thể chọn All để áp dụng cho toàn bộ joint đó).
 ///     KHONG co nut "Chọn điểm trong ETABS" / "Lấy điểm đang chọn": form
 ///     plugin la MODAL (ShowDialog) nen du an form chinh, ETABS van bi khoa
 ///     — user khong click/chon duoc joint trong model (da user-verify
@@ -65,10 +62,8 @@ namespace EtabsLoadAssigner.Plugin;
 ///     model, mo lai plugin.
 ///   - Match 2 cot: trai = gia tri 1, phai = gia tri 2 (chi khi o co 2
 ///     gia tri); chi pattern co san trong model — tool KHONG tu tao pattern.
-///   - Ghi de (checkbox "Xoá trắng tải cũ tại điểm này trước khi gán",
-///     user chot 08/11): truoc khi gan moi, XOA TRANG moi tai cu tai joint
-///     — ca tai khong co trong file Excel cung bi xoa, de diem chi con tai
-///     do plugin nhap vao. Khong tick thi chi ghi de/ghi them tung pattern.
+///   - Chế độ gán tải được chọn từ dropdown: thay thế toàn bộ, thay thế
+///     pattern hiện có, thêm tải, hoặc xóa toàn bộ.
 ///   - Khong co che do Mock/Offline o UI — plugin chi lam viec voi file
 ///     dang mo. Khong co vi du dien giai o Phuong & chieu.
 ///
@@ -102,6 +97,8 @@ namespace EtabsLoadAssigner.Plugin;
 /// </summary>
 public sealed class MainForm : Form
 {
+    private const int GridRowHeight = 26;
+
     private readonly IEtabsApi _liveApi;
     private IEtabsApi _etabs; // Luon la model ETABS dang mo — khong co che do Mock o UI (user chot 08/11).
     private FoundationTable? _table;
@@ -178,7 +175,7 @@ public sealed class MainForm : Form
     private readonly Label _statusLabel = new() { Dock = DockStyle.Top, Height = 26, ForeColor = Color.FromArgb(0x55, 0x55, 0x55) };
     // Ten diem lam tieu de rieng tren bang (vd "85 / E.2") — khong ghi chung vao header cot.
     // Nam trong _titleBar (hang tieu de, cao 30) cung 2 nut chuyen bang +
-    // nut "Thêm điểm"; label gian het phan con lai, chu can giua.
+    // label gian het phan con lai, chu can giua.
     private readonly Label _pointTitleLabel = new()
     {
         Dock = DockStyle.Fill,
@@ -189,6 +186,8 @@ public sealed class MainForm : Form
     private readonly DataGridView _grid = new()
     {
         Dock = DockStyle.Fill, ReadOnly = false, AllowUserToAddRows = false,
+        AllowUserToResizeRows = false, AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None,
+        EditMode = DataGridViewEditMode.EditOnEnter,
         RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True },
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
@@ -197,12 +196,14 @@ public sealed class MainForm : Form
 
     // Bang phu LOAD POINT (user chot 08/11 — gan nhieu diem 1 luc): moi dong
     // la 1 cap (Diem Excel -> Joint ETABS). User them dong truc tiep trong
-    // bang (chon diem/joint o dropdown trong o) hoac bam nut "Thêm điểm".
+    // bang (chon diem/joint o dropdown trong o).
     // Nut GÁN gan TAT CA dong trong bang nay (khong con gan 1 diem nua).
     private readonly DataGridView _pointGrid = new()
     {
         Dock = DockStyle.Fill, ReadOnly = false, AllowUserToAddRows = true,
         AllowUserToDeleteRows = true,
+        AllowUserToResizeRows = false, AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None,
+        EditMode = DataGridViewEditMode.EditOnEnter,
         RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True },
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
@@ -212,12 +213,18 @@ public sealed class MainForm : Form
 
     private readonly Dictionary<string, (ComboBox Axis, ComboBox Sign)> _axisControls = new();
 
-    private readonly CheckBox _replaceCheck = new() { Text = "Xoá trắng tải cũ tại điểm này trước khi gán", Checked = true, AutoSize = true };
+    private const string AllJointsDisplay = "All (tất cả joint đã chọn)";
+    private readonly ComboBox _assignmentModeCombo = new()
+    {
+        Width = 220,
+        DropDownStyle = ComboBoxStyle.DropDownList,
+    };
 
     // Vung cuon + cac muc ben trong (de keo dai bang noi luc cho kin vung
     // cuon khi cua so rong — user chot 08/11, anh build 20261108-191050).
     private Panel? _scrollPanel;
     private Panel? _gridPanel;
+    private Panel? _axisSpacer;
     private GroupBox? _axisSection;
     private Panel? _titleBar; // Hang tieu de: 2 nut chuyen bang + ten diem o giua.
 
@@ -228,8 +235,16 @@ public sealed class MainForm : Form
         Text = "ETABS Load Assigner v0.1 (Plugin) — Gán tải móng từ Excel vào ETABS";
         Size = new Size(1050, 720);
         StartPosition = FormStartPosition.CenterScreen;
+        _grid.RowTemplate.Height = GridRowHeight;
+        _grid.RowTemplate.MinimumHeight = GridRowHeight;
+        _pointGrid.RowTemplate.Height = GridRowHeight;
+        _pointGrid.RowTemplate.MinimumHeight = GridRowHeight;
         BuildUi();
         _grid.CellValueChanged += Grid_CellValueChanged;
+        _grid.CellClick += Grid_CellClick;
+        _pointGrid.CellClick += Grid_CellClick;
+        _pointGrid.CellContentClick += PointGrid_CellContentClick;
+        _pointGrid.ColumnHeaderMouseClick += PointGrid_ColumnHeaderMouseClick;
         // Gia tri pattern trong profile co the khong con trong model ETABS
         // (model doi) — hien o do thay vi nem loi khi set gia tri cell.
         _grid.DataError += (_, e) => { e.ThrowException = false; };
@@ -292,49 +307,26 @@ public sealed class MainForm : Form
         _gridPanel = new Panel { Dock = DockStyle.Top, Height = 300 };
         _gridPanel.Controls.Add(_grid);
         _gridPanel.Controls.Add(_pointGrid);
+        _axisSpacer = new Panel { Dock = DockStyle.Top, Height = 14 };
         _axisSection = BuildSectionAxis();
 
-        // Hang tieu de (user chot 08/11): trai = 2 nut chuyen bang + "Thêm
-        // điểm" + "Làm trắng bảng"; phai = Ghi de + "Lưu data vào Excel" +
-        // "GÁN VÀO ETABS" (cum nut duoi cu chuyen len day de tiet kiem dien
-        // tich — bo han thanh duoi, user chot 08/11); giua = ten diem.
+        // Hang tieu de: trai = 2 nut chuyen bang; giua = tên điểm.
         // (Dock Left: them sau thi nam trai hon; Dock Right: them sau thi
         // nam phai hon; label Fill them truoc de gian phan con lai.)
         _titleBar = new Panel { Dock = DockStyle.Top, Height = 34 };
         _titleBar.Controls.Add(_pointTitleLabel);
-        var clearBtn = new Button { Text = "Làm trắng bảng", Dock = DockStyle.Left, AutoSize = true };
-        clearBtn.Click += (_, _) => ClearPointGrid();
-        _titleBar.Controls.Add(clearBtn);
-        var delRowBtn = new Button { Text = "Xoá dòng", Dock = DockStyle.Left, AutoSize = true };
-        delRowBtn.Click += (_, _) => DeleteSelectedPointRows();
-        _titleBar.Controls.Add(delRowBtn);
-        var addPointBtn = new Button { Text = "Thêm điểm", Dock = DockStyle.Left, AutoSize = true };
-        addPointBtn.Click += (_, _) => AddCurrentPointToPointGrid();
-        _titleBar.Controls.Add(addPointBtn);
         var pointBtn = new Button { Text = "Bảng load point", Dock = DockStyle.Left, AutoSize = true };
         pointBtn.Click += (_, _) => ShowPointGrid();
         _titleBar.Controls.Add(pointBtn);
         var patternBtn = new Button { Text = "Bảng load pattern", Dock = DockStyle.Left, AutoSize = true };
         patternBtn.Click += (_, _) => ShowPatternGrid();
         _titleBar.Controls.Add(patternBtn);
-        _replaceCheck.Dock = DockStyle.Right;
-        _titleBar.Controls.Add(_replaceCheck);
-        var saveBtn = new Button { Text = "Lưu data vào Excel", Dock = DockStyle.Right, AutoSize = true };
-        saveBtn.Click += (_, _) => SaveMatchToExcel();
-        _titleBar.Controls.Add(saveBtn);
-        var assignBtn = new Button
-        {
-            Text = "GÁN VÀO ETABS", Dock = DockStyle.Right, AutoSize = true,
-            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
-        };
-        assignBtn.Click += (_, _) => Assign();
-        _titleBar.Controls.Add(assignBtn);
-
         _scrollPanel = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
         // Them theo thu tu nguoc (section cuoi them truoc) de hien dung thu tu tren->duoi:
         // hang tieu de (nut chuyen bang + ten diem + cum nut GÁN) -> bang noi luc / bang load point -> Phuong & chieu.
         // (Thanh duoi da bo — cum nut Ghi de/Lưu/GÁN chuyen len hang tieu de, user chot 08/11.)
         _scrollPanel.Controls.Add(_axisSection);
+        _scrollPanel.Controls.Add(_axisSpacer);
         _scrollPanel.Controls.Add(_gridPanel);
         _scrollPanel.Controls.Add(_titleBar);
         // Cua so doi kich thuoc -> keo dai bang noi luc cho kin vung cuon.
@@ -355,9 +347,9 @@ public sealed class MainForm : Form
     /// </summary>
     private void LayoutGridHeight()
     {
-        if (_scrollPanel is null || _gridPanel is null || _axisSection is null || _titleBar is null)
+        if (_scrollPanel is null || _gridPanel is null || _axisSpacer is null || _axisSection is null || _titleBar is null)
             return;
-        int other = _titleBar.Height + _axisSection.Height;
+        int other = _titleBar.Height + _axisSpacer.Height + _axisSection.Height;
         int avail = _scrollPanel.ClientSize.Height - other;
         _gridPanel.Height = Math.Max(200, avail);
     }
@@ -407,8 +399,16 @@ public sealed class MainForm : Form
                 DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
                 FillWeight = 50, MinimumWidth = 200,
             };
+            var deleteCol = new DataGridViewButtonColumn
+            {
+                Name = "DeleteRow", HeaderText = "Clear All", Text = "Xóa",
+                UseColumnTextForButtonValue = true,
+                AutoSizeMode = DataGridViewAutoSizeColumnMode.AllCells, MinimumWidth = 50,
+                FlatStyle = FlatStyle.Flat,
+            };
             _pointGrid.Columns.Add(ptCol);
             _pointGrid.Columns.Add(jtCol);
+            _pointGrid.Columns.Add(deleteCol);
             _pointGrid.DataError += (_, e) => { e.ThrowException = false; };
         }
         var pt = (DataGridViewComboBoxColumn)_pointGrid.Columns["ExcelPoint"];
@@ -418,8 +418,46 @@ public sealed class MainForm : Form
             foreach (string p in _table.Points)
                 pt.Items.Add(p);
         jt.Items.Clear();
+        jt.Items.Add(AllJointsDisplay);
         foreach (var p in _jointList)
             jt.Items.Add(JointDisplay(p));
+    }
+
+    private void PointGrid_CellContentClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || e.ColumnIndex < 0 ||
+            _pointGrid.Columns[e.ColumnIndex].Name != "DeleteRow" ||
+            _pointGrid.Rows[e.RowIndex].IsNewRow)
+            return;
+
+        if (_pointGrid.IsCurrentCellInEditMode)
+            _pointGrid.EndEdit();
+        _pointGrid.Rows.RemoveAt(e.RowIndex);
+        ShowPointGrid();
+    }
+
+    private void PointGrid_ColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+    {
+        if (e.ColumnIndex >= 0 && _pointGrid.Columns[e.ColumnIndex].Name == "DeleteRow")
+            ClearPointGrid();
+    }
+
+    private static void Grid_CellClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (sender is not DataGridView grid || e.RowIndex < 0 || e.ColumnIndex < 0 ||
+            grid.Columns[e.ColumnIndex] is not DataGridViewComboBoxColumn)
+            return;
+
+        grid.BeginInvoke(new Action(() =>
+        {
+            if (grid.IsDisposed || grid.CurrentCell is null ||
+                grid.CurrentCell.RowIndex != e.RowIndex || grid.CurrentCell.ColumnIndex != e.ColumnIndex ||
+                !grid.IsCurrentCellInEditMode || grid.EditingControl is not ComboBox combo)
+                return;
+
+            combo.DropDownHeight = 320;
+            combo.DroppedDown = true;
+        }));
     }
 
     private static string JointDisplay(PointInfo p) =>
@@ -440,6 +478,12 @@ public sealed class MainForm : Form
             string jt = row.Cells["EtabsJoint"].Value?.ToString() ?? "";
             if (pt == "" || jt == "")
                 continue;
+            if (jt == AllJointsDisplay)
+            {
+                foreach (var joint in _jointList)
+                    list.Add((pt, joint.Name));
+                continue;
+            }
             // Cot Joint luu dang hien thi "Name='13'  Label='3'  (20.67, 0, 1.3)" — lay ten joint that.
             string jointName = ParseJointName(jt);
             if (jointName == "")
@@ -463,44 +507,6 @@ public sealed class MainForm : Form
     }
 
     /// <summary>
-    /// Them 1 dong moi vao bang load point: lay Diem Excel dang chon o
-    /// dropdown "Điểm" tren thanh tren (neu co), cot Joint de trong de user
-    /// chon trong bang. Trung diem thi bao va khong them. (Dropdown Joint
-    //  ETABS don da xoa — joint chon truc tiep trong bang load point, user
-    /// chot 08/11.)
-    /// </summary>
-    private void AddCurrentPointToPointGrid()
-    {
-        string point = _pointViewCombo.Text;
-        if (_table is null)
-        {
-            MessageBox.Show(this, "Import file trước.", "Chưa có bảng",
-                MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-        RefreshPointGrid();
-        if (point != "" && _table.Points.Contains(point))
-        {
-            foreach (var (pt, _) in PointGridMappings())
-            {
-                if (pt == point)
-                {
-                    MessageBox.Show(this, $"Điểm '{point}' đã có trong bảng load point rồi.",
-                        "Trùng điểm", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    ShowPointGrid();
-                    return;
-                }
-            }
-            _pointGrid.Rows.Add(point, "");
-        }
-        else
-        {
-            _pointGrid.Rows.Add("", "");
-        }
-        ShowPointGrid();
-    }
-
-    /// <summary>
     /// Lam trang bang load point (user chot 08/11 — de gan luot moi): xoa
     /// het dong da nhap trong bang. Co xac nhan vi la thao tac pha huy.
     /// </summary>
@@ -515,34 +521,6 @@ public sealed class MainForm : Form
                 "Làm trắng bảng", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             return;
         _pointGrid.Rows.Clear();
-        ShowPointGrid();
-    }
-
-    /// <summary>
-    /// Xoa dong dang chon trong bang load point (user chot 08/11 — de xoa
-    /// dong thua: dong trong, dong nhap nham). Chon 1 hoac nhieu dong roi
-    /// bam nut. Khong xoa dong nhap moi (dong trong cuoi bang).
-    /// </summary>
-    private void DeleteSelectedPointRows()
-    {
-        ShowPointGrid();
-        var toDelete = new List<DataGridViewRow>();
-        foreach (DataGridViewRow row in _pointGrid.SelectedRows)
-        {
-            if (!row.IsNewRow)
-                toDelete.Add(row);
-        }
-        // Neu chi chon o (khong chon ca dong) thi lay dong cua o dang chon.
-        if (toDelete.Count == 0 && _pointGrid.CurrentRow is not null && !_pointGrid.CurrentRow.IsNewRow)
-            toDelete.Add(_pointGrid.CurrentRow);
-        if (toDelete.Count == 0)
-        {
-            MessageBox.Show(this, "Chọn dòng cần xoá trong bảng load point trước (bấm vào đầu dòng để chọn).",
-                "Chưa chọn dòng", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            return;
-        }
-        foreach (var row in toDelete)
-            _pointGrid.Rows.Remove(row);
         ShowPointGrid();
     }
 
@@ -601,6 +579,39 @@ public sealed class MainForm : Form
             sign.SelectedIndexChanged += (_, _) => { };
             x += 28; // khoang cach giua 2 anh xa
         }
+        _assignmentModeCombo.Items.AddRange(new object[]
+        {
+            "Thay thế toàn bộ tải",
+            "Thay thế tải hiện có",
+            "Thêm vào tải hiện có",
+            "Xóa toàn bộ",
+        });
+        _assignmentModeCombo.SelectedIndex = 0;
+        var actions = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Right, FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false, Width = 460, Height = 34,
+            Padding = new Padding(0, 2, 4, 0), Margin = Padding.Empty,
+        };
+        var assignBtn = new Button
+        {
+            Text = "GÁN TẢI", AutoSize = false, Width = 86, Height = 30,
+            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+            Margin = new Padding(3, 0, 3, 0),
+        };
+        assignBtn.Click += (_, _) => Assign();
+        var saveBtn = new Button
+        {
+            Text = "Lưu data vào Excel", AutoSize = false, Width = 130, Height = 30,
+            Margin = new Padding(3, 0, 3, 0),
+        };
+        saveBtn.Click += (_, _) => SaveMatchToExcel();
+        _assignmentModeCombo.Height = 30;
+        _assignmentModeCombo.Margin = new Padding(3, 0, 3, 0);
+        actions.Controls.Add(assignBtn);
+        actions.Controls.Add(saveBtn);
+        actions.Controls.Add(_assignmentModeCombo);
+        row.Controls.Add(actions);
         // Them nguoc (note truoc, row sau) de row o tren, note o duoi.
         box.Controls.Add(note);
         box.Controls.Add(row);
@@ -636,7 +647,6 @@ public sealed class MainForm : Form
             }
             _profile.PatternMap = map;
         }
-        _profile.ReplaceExisting = _replaceCheck.Checked;
     }
 
     private void ApplyProfileToUi()
@@ -653,7 +663,6 @@ public sealed class MainForm : Form
             tgt.Text = axis;
             sign.Text = s > 0 ? "+" : "-";
         }
-        _replaceCheck.Checked = _profile.ReplaceExisting;
         if (_table is not null)
             RefreshGrid(); // Ve lai grid — 2 cot Pattern lay tu profile vua nap.
     }
@@ -890,6 +899,7 @@ public sealed class MainForm : Form
             {
                 Name = "Pat1", HeaderText = "Pattern — giá trị 1 (trái)",
                 DataPropertyName = "Pat1", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+                DisplayStyleForCurrentCellOnly = true,
                 FillWeight = 26, MinimumWidth = patW,
             };
             pat1.Items.AddRange(choices.ToArray());
@@ -898,6 +908,7 @@ public sealed class MainForm : Form
             {
                 Name = "Pat2", HeaderText = "Pattern — giá trị 2 (phải)",
                 DataPropertyName = "Pat2", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+                DisplayStyleForCurrentCellOnly = true,
                 FillWeight = 26, MinimumWidth = patW,
             };
             pat2.Items.AddRange(choices.ToArray());
@@ -935,7 +946,8 @@ public sealed class MainForm : Form
                         raw = lv.Raw;
                     vals.Add(raw);
                 }
-                _grid.Rows.Add(vals.ToArray());
+                int rowIndex = _grid.Rows.Add(vals.ToArray());
+                _grid.Rows[rowIndex].Height = GridRowHeight;
             }
         }
         finally { _updatingGrid = false; }
@@ -1083,6 +1095,8 @@ public sealed class MainForm : Form
     private void Assign()
     {
         SyncProfileFromUi();
+        int mode = _assignmentModeCombo.SelectedIndex;
+        bool deleteAll = mode == 3;
         if (_table is null)
         {
             MessageBox.Show(this, "Import file trước.", "Chưa có bảng",
@@ -1094,73 +1108,70 @@ public sealed class MainForm : Form
         {
             ShowPointGrid();
             MessageBox.Show(this,
-                "Chưa có điểm nào trong bảng load point.\nThêm điểm bằng cách: chọn Điểm + Joint ở 2 dropdown rồi bấm “Thêm điểm”, hoặc gõ trực tiếp trong bảng load point (chọn Điểm Excel và Joint ETABS ở từng dòng).",
+                "Chưa có điểm nào trong bảng load point. Thêm một dòng trong bảng rồi chọn Điểm Excel và Joint ETABS (hoặc All).",
                 "Chưa có điểm để gán", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
-        // Trung diem Excel: chi gan lan xuat hien dau (lan sau se xoa trang
-        // diem vua gan neu tick Ghi de).
-        var seen = new HashSet<string>();
-        var dupes = new List<string>();
+        // Loại bỏ mapping trùng nhưng cho phép cùng điểm Excel gán vào nhiều joint.
+        var seen = new HashSet<(string ExcelPoint, string JointName)>();
         var unique = new List<(string ExcelPoint, string JointName)>();
         foreach (var m in mappings)
-        {
-            if (!seen.Add(m.ExcelPoint))
-                dupes.Add(m.ExcelPoint);
-            else
+            if (seen.Add(m))
                 unique.Add(m);
-        }
-        if (dupes.Count > 0)
-            MessageBox.Show(this, "Điểm trùng trong bảng load point (chỉ gán lần đầu): " + string.Join(", ", dupes.Distinct()),
-                "Điểm trùng", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-        // Build tat ca assignment truoc (gom ca canh bao bo qua) de xac nhan 1 lan.
+
         var perPoint = new List<(string ExcelPoint, string JointName, BuildResult Result)>();
         var allPats = new HashSet<string>();
         int totalAssign = 0;
         foreach (var (pt, jt) in unique)
         {
-            var res = Assigner.BuildAssignments(_table, pt, jt, _profile);
+            var res = deleteAll ? new BuildResult() : Assigner.BuildAssignments(_table, pt, jt, _profile);
             perPoint.Add((pt, jt, res));
             totalAssign += res.Assignments.Count;
             foreach (var a in res.Assignments)
                 allPats.Add(a.Pattern);
         }
-        if (totalAssign == 0)
+        if (mode == 1)
+            foreach (var row in _table.Rows)
+            {
+                var patterns = _profile.PatternFor(row.Name);
+                if (!string.IsNullOrWhiteSpace(patterns.Left)) allPats.Add(patterns.Left.Trim());
+                if (!string.IsNullOrWhiteSpace(patterns.Right)) allPats.Add(patterns.Right.Trim());
+            }
+        if (totalAssign == 0 && mode == 2)
         {
             MessageBox.Show(this, "Không có gì để gán: chưa match pattern hoặc toàn dòng 0.",
                 "Không có gì để gán", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
         var pats = allPats.OrderBy(x => x).ToList();
-        string clearNote = _profile.ReplaceExisting
-            ? "\n(Xoá trắng mọi tải cũ tại mỗi joint trước khi gán — điểm chỉ còn tải do plugin nhập vào.)"
-            : "";
+        string modeName = _assignmentModeCombo.SelectedItem?.ToString() ?? "Thay thế toàn bộ tải";
         string pointList = string.Join("\n", unique.Select(m => $"  • {m.ExcelPoint}  ->  {m.JointName}"));
         if (MessageBox.Show(this,
-                $"Gán {totalAssign} tải cho {unique.Count} điểm?\n{pointList}\nPattern: {string.Join(", ", pats)}{clearNote}",
+                $"{modeName}: {unique.Count} mapping / {unique.Select(m => m.JointName).Distinct().Count()} joint?\n{pointList}" +
+                (deleteAll ? "" : $"\nSố tải từ tool: {totalAssign}\nPattern: {string.Join(", ", pats)}"),
                 "Xác nhận gán tải", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
             return;
-        // Tool KHONG tu tao pattern (user chot 08/11): pattern thieu thi bao
-        // loi, user tao trong ETABS roi gan lai.
-        List<string> modelPats;
-        try { modelPats = _etabs.PatternNames(); }
-        catch (Exception ex)
+        if (!deleteAll)
         {
-            MessageBox.Show(this, $"Không lấy được pattern từ ETABS: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
+            // Tool khong tu tao pattern; pattern thieu thi bao user tao trong ETABS.
+            List<string> modelPats;
+            try { modelPats = _etabs.PatternNames(); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Không lấy được pattern từ ETABS: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+            var missing = pats.Where(x => !modelPats.Contains(x)).ToList();
+            if (missing.Count > 0)
+            {
+                MessageBox.Show(this,
+                    "Pattern chưa có trong model ETABS: " + string.Join(", ", missing) +
+                    "\nTạo pattern trong ETABS trước rồi gán lại (tool không tự tạo pattern).",
+                    "Thiếu pattern trong model", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
         }
-        var missing = pats.Where(x => !modelPats.Contains(x)).ToList();
-        if (missing.Count > 0)
-        {
-            MessageBox.Show(this,
-                "Pattern chưa có trong model ETABS: " + string.Join(", ", missing) +
-                "\nTạo pattern trong ETABS trước rồi gán lại (tool không tự tạo pattern).",
-                "Thiếu pattern trong model", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            return;
-        }
-        // Kiem tra joint co trong model (tranh gan vao joint khong ton tai — day
-        // la ly do lan truoc bam GAN ma khong thay noi luc: alias go tay khong
-        // khop ten joint that trong model).
+
         List<PointInfo> pts;
         try { pts = _etabs.ListPoints(); }
         catch (Exception ex)
@@ -1178,41 +1189,67 @@ public sealed class MainForm : Form
                 "Joint không tồn tại", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return;
         }
-        // Gan tung diem: ghi de (user chot 08/11) XOA TRANG moi tai cu tai joint
-        // truoc khi gan moi — ca tai khong co trong file Excel cung bi xoa, de
-        // diem chi con tai do plugin nhap vao. Khong tick thi chi ghi de/ghi
-        // them tung pattern (tai cu khac pattern van con).
+        // Xử lý xóa theo joint trước khi gán để các mapping cùng joint không xóa tải vừa nhập.
         var errs = new List<string>();
-        var done = new List<(string ExcelPoint, string JointName, int Count, int Cleared)>();
-        foreach (var (pt, jt, res) in perPoint)
+        var clearedByJoint = new Dictionary<string, int>();
+        var blockedJoints = new HashSet<string>();
+        bool clearAllFirst = mode == 0 || deleteAll;
+        bool replaceMatchingPatterns = mode == 1;
+        bool addWithoutReplacing = mode == 2;
+        foreach (var group in perPoint.GroupBy(p => p.JointName))
         {
-            int cleared = 0;
-            if (_profile.ReplaceExisting)
+            string jt = group.Key;
+            string pt = string.Join(", ", group.Select(p => p.ExcelPoint).Distinct());
+            if (clearAllFirst)
             {
-                try { cleared = _etabs.ClearJointLoads(jt); }
+                try { clearedByJoint[jt] = _etabs.ClearJointLoads(jt); }
                 catch (Exception ex)
                 {
                     errs.Add($"{pt} -> {jt}: không xoá được tải cũ: {ex.Message}");
+                    blockedJoints.Add(jt);
                     continue;
                 }
             }
-            int ok = 0;
-            foreach (var assignment in res.Assignments)
+            if (replaceMatchingPatterns)
             {
-                try { _etabs.AssignForce(assignment.EtabsJoint, assignment.Pattern, assignment.Values(), _profile.ReplaceExisting); ok++; }
-                catch (Exception ex) { errs.Add($"{assignment.Pattern}@{assignment.EtabsJoint} ({pt}): {ex.Message}"); }
+                foreach (string pattern in pats)
+                {
+                    try { _etabs.DeleteLoadForce(jt, pattern); }
+                    catch (Exception ex) { errs.Add($"{pt} -> {jt}: không xóa được tải {pattern}: {ex.Message}"); }
+                }
             }
-            done.Add((pt, jt, ok, cleared));
         }
+        var assignedByMapping = new Dictionary<(string ExcelPoint, string JointName), int>();
+        if (!deleteAll)
+            foreach (var (pt, jt, res) in perPoint)
+            {
+                if (blockedJoints.Contains(jt))
+                    continue;
+                int ok = 0;
+                foreach (var assignment in res.Assignments)
+                {
+                    try { _etabs.AssignForce(assignment.EtabsJoint, assignment.Pattern, assignment.Values(), !addWithoutReplacing); ok++; }
+                    catch (Exception ex) { errs.Add($"{assignment.Pattern}@{assignment.EtabsJoint} ({pt}): {ex.Message}"); }
+                }
+                assignedByMapping[(pt, jt)] = ok;
+            }
         try { _etabs.RefreshView(); } catch { /* bo qua */ }
         var summary = new List<string>();
-        foreach (var (pt, jt, count, cleared) in done)
-            summary.Add($"  • {pt} -> {jt}: {count} tải" + (_profile.ReplaceExisting ? $" (đã xoá trắng {cleared} tải cũ)" : ""));
+        foreach (var group in perPoint.GroupBy(p => p.JointName))
+        {
+            string pt = string.Join(", ", group.Select(p => p.ExcelPoint).Distinct());
+            int count = group.Sum(p => assignedByMapping.TryGetValue((p.ExcelPoint, p.JointName), out int n) ? n : 0);
+            int cleared = clearedByJoint.TryGetValue(group.Key, out int c) ? c : 0;
+            summary.Add($"  • {pt} -> {group.Key}: " + (deleteAll ? $"đã xóa {cleared} tải cũ" : $"{count} tải gán") +
+                (clearAllFirst && !deleteAll ? $" (đã xóa trắng {cleared} tải cũ)" : ""));
+        }
         if (errs.Count > 0)
             MessageBox.Show(this, "Đã gán:\n" + string.Join("\n", summary) + "\n\nLỗi:\n" + string.Join("\n", errs),
                 "Gán lỗi một phần", MessageBoxButtons.OK, MessageBoxIcon.Error);
         else
-            MessageBox.Show(this, $"Đã gán {totalAssign} tải cho {unique.Count} điểm:\n" + string.Join("\n", summary),
+            MessageBox.Show(this, deleteAll
+                    ? $"Đã xóa tải tại {unique.Select(m => m.JointName).Distinct().Count()} joint:\n" + string.Join("\n", summary)
+                    : $"Đã gán {totalAssign} tải cho {unique.Count} mapping:\n" + string.Join("\n", summary),
                 "Xong", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
