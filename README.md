@@ -45,20 +45,61 @@ Bản phân phối được đóng gói trong file **`Etabs_Tool.iso`** ở thư
 
 ## Cập nhật
 
-Mở tab **Check for Updates** trong plugin: công cụ tải file `Etabs_Tool.iso` ở commit mới nhất trên GitHub và so sánh bản build đang chạy với dấu build ghi trong **`version.txt` đóng gói bên trong chính file ISO đó** — một nguồn sự thật duy nhất, không lệch giữa code và bản phân phối. Có bản mới thì nút tải mới bật; file ISO vừa tải về để kiểm tra được dùng lại luôn cho bước tải, không phải tải hai lần. (Tải về không tự cài — thay thư mục plugin bằng bản trong ISO mới như bước cài đặt.)
+Mở tab **Check for Updates** trong plugin. Công cụ lấy commit mới nhất của file `Etabs_Tool.iso` từ GitHub và so sánh với commit ISO đang được đóng gói trong plugin. Nếu có bản mới, nút tải sẽ được bật. File tải về không tự cài đặt; cần thay thư mục plugin bằng bản mới sau khi tải.
 
 ## Build từ mã nguồn
 
 1. Cần **Visual Studio 2022** và **ETABS 22 đã cài** trên máy (project tham chiếu `ETABSv1.dll` theo đường dẫn cài đặt mặc định `C:\Program Files\Computers and Structures\ETABS 22\`).
 2. Mở solution `Ultimtate Tools/Etabs_Ultimate_Tools.slnx`, build (F6) cấu hình Debug hoặc Release. DLL kết quả nằm trong `Ultimtate Tools/bin/<cấu hình>/`.
 3. Project là SDK-style, target `net48`, thư viện xuất báo cáo dùng ClosedXML 0.102.2 (NuGet tự restore).
-4. Mỗi lần build, csproj **tự đóng dấu thời gian build** vào hằng `currentBuild` trong `ModelCheckForm.Update.cs` (định dạng `yyyyMMdd-HHmmss`) — đây là "phiên bản" hiển thị trên tiêu đề form và dùng cho tab cập nhật. Không sửa tay hằng này. Đồng thời csproj tự xuất file **`version.txt`** (chứa đúng dấu build đó) vào thư mục output cạnh DLL — khi đóng gói ISO, nhặt kèm file này vào thư mục gốc của ISO (xem mục Cập nhật).
+4. Mỗi lần build, csproj tự đóng dấu thời gian build vào `BuildTimestamp` trong `ModelCheckForm.Update.cs` và xuất `version.txt` cạnh DLL. `CurrentIsoCommitSha` là commit của ISO đang được đóng gói; khi thay ISO, cập nhật hằng này theo commit mới.
+
+## Phát hành GitHub tự động
+
+Workflow phát hành nằm tại `.github/workflows/release.yml`. Workflow chạy trên máy Windows **self-hosted runner** đã cài ETABS 22, sau đó restore NuGet, build Release x64, đóng gói output thành ZIP và tạo GitHub Release.
+
+### Yêu cầu self-hosted runner
+
+Runner phải có:
+
+- ETABS 22 và `C:\Program Files\Computers and Structures\ETABS 22\ETABSv1.dll`.
+- Visual Studio/MSBuild.
+- .NET Framework 4.8 Developer Pack.
+- Labels mặc định `self-hosted`, `Windows`, `X64`.
+
+Đăng ký runner tại **Repository Settings → Actions → Runners → New self-hosted runner**. Runner phải ở trạng thái **Online/Idle**; nếu offline, workflow sẽ ở trạng thái `queued`.
+
+### Phát hành bằng tag
+
+Sau khi build và kiểm tra code local, tạo tag bắt đầu bằng `v`:
+
+```powershell
+git add .
+git commit -m "Prepare release v2026.11.09.01"
+git push origin main
+
+git tag -a v2026.11.09.01 -m "Release v2026.11.09.01"
+git push origin v2026.11.09.01
+```
+
+Tag sẽ kích hoạt workflow và tạo asset:
+
+```text
+Etabs-Ultimate-Tools-v2026.11.09.01.zip
+```
+
+### Phát hành thủ công
+
+Vào **GitHub → Actions → Build and Publish Release → Run workflow**, nhập version không có chữ `v`, ví dụ `2026.11.09.02`, rồi bật tùy chọn tạo Release. Cách này vẫn yêu cầu self-hosted runner online.
+
+ZIP phát hành chứa output build và `update.json` gồm version, tag, build timestamp, source commit và SHA256 của plugin DLL. Xem log tại tab **Actions** và file đã phát hành tại **Repository → Releases**.
 
 ## Cấu trúc thư mục
 
 ```
 Etabs_Plugin/
 ├── Etabs_Tool.iso          # Bản phân phối đóng gói để cài đặt/cập nhật
+├── .github/workflows/      # Workflow build và phát hành GitHub Release
 └── Ultimtate Tools/        # Mã nguồn (tên thư mục giữ nguyên như lịch sử repo)
     ├── Etabs_Ultimate_Tools.slnx / .csproj
     ├── cPlugin.cs          # Điểm vào plugin (ETABS gọi class cPlugin, method Main)
