@@ -1,0 +1,126 @@
+name: Build and Publish Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, for example 2026.11.09.01'
+        required: true
+        type: string
+      publish:
+        description: 'Create or update the GitHub Release'
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: [self-hosted, Windows, X64]
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Resolve release version
+        shell: pwsh
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:TAG_NAME -match '^v(.+)$') {
+            $version = $Matches[1]
+          } elseif (-not [string]::IsNullOrWhiteSpace($env:INPUT_VERSION)) {
+            $version = $env:INPUT_VERSION
+          } else {
+            throw 'Release version is required.'
+          }
+
+          if ($version -notmatch '^[0-9A-Za-z][0-9A-Za-z._-]*$') {
+            throw "Invalid release version: $version"
+          }
+
+          "RELEASE_VERSION=$version" >> $env:GITHUB_ENV
+          "RELEASE_TAG=v$version" >> $env:GITHUB_ENV
+          "BUILD_TIMESTAMP=$((Get-Date).ToUniversalTime().AddHours(7).ToString('yyyyMMdd-HHmmss'))" >> $env:GITHUB_ENV
+
+      - name: Restore dependencies
+        shell: pwsh
+        run: |
+          msbuild '.\Ultimtate Tools\Etabs_Ultimate_Tools.csproj' /t:Restore /p:Configuration=Release /p:Platform=x64 /m
+
+      - name: Build Release
+        shell: pwsh
+        run: |
+          msbuild '.\Ultimtate Tools\Etabs_Ultimate_Tools.csproj' /t:Build /p:Configuration=Release /p:Platform=x64 /p:PluginBuildTimestamp=$env:BUILD_TIMESTAMP /p:RestorePackages=false /m /v:minimal
+
+      - name: Package Release ZIP
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:GITHUB_WORKSPACE 'Ultimtate Tools\bin\Release'
+          $staging = Join-Path $env:RUNNER_TEMP "Etabs-Ultimate-Tools-$env:RELEASE_VERSION"
+          $zip = Join-Path $env:RUNNER_TEMP "Etabs-Ultimate-Tools-v$env:RELEASE_VERSION.zip"
+
+          if (-not (Test-Path (Join-Path $output 'Etabs_Ultimate_Tools.dll'))) {
+            throw "Build output was not found: $output\Etabs_Ultimate_Tools.dll"
+          }
+
+          if (Test-Path $staging) { Remove-Item $staging -Recurse -Force }
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item (Join-Path $output '*') $staging -Recurse -Force
+
+          $dllHash = (Get-FileHash (Join-Path $staging 'Etabs_Ultimate_Tools.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
+          [ordered]@{
+            version = $env:RELEASE_VERSION
+            tag = $env:RELEASE_TAG
+            buildTimestamp = $env:BUILD_TIMESTAMP
+            sourceCommit = '${{ github.sha }}'
+            asset = "Etabs-Ultimate-Tools-v$env:RELEASE_VERSION.zip"
+            pluginSha256 = $dllHash
+          } | ConvertTo-Json | Set-Content (Join-Path $staging 'update.json') -Encoding UTF8
+
+          Compress-Archive -Path (Join-Path $staging '*') -DestinationPath $zip -CompressionLevel Optimal
+          $zipHash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "PACKAGE_PATH=$zip" >> $env:GITHUB_ENV
+          "PACKAGE_SHA256=$zipHash" >> $env:GITHUB_ENV
+          "PACKAGE_NAME=$(Split-Path $zip -Leaf)" >> $env:GITHUB_ENV
+
+          @"
+          ## Etabs Ultimate Tools $env:RELEASE_TAG
+
+          - Build timestamp: $env:BUILD_TIMESTAMP
+          - Source commit: ${{ github.sha }}
+          - ZIP SHA256: `$zipHash`
+          "@ | Set-Content (Join-Path $env:RUNNER_TEMP 'RELEASE_NOTES.md') -Encoding UTF8
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Etabs-Ultimate-Tools-${{ env.RELEASE_VERSION }}
+          path: ${{ env.PACKAGE_PATH }}
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') || inputs.publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: Etabs Ultimate Tools ${{ env.RELEASE_TAG }}
+          body_path: ${{ runner.temp }}/RELEASE_NOTES.md
+          files: ${{ env.PACKAGE_PATH }}
+          draft: false
+          prerelease: false
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -3,7 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text.RegularExpressions;
+using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 
@@ -11,16 +11,14 @@ namespace Etabs_Ultimate_Tools
 {
     public partial class ModelCheckForm
     {
-        // Co che check for update giong CADtools (user chot 09/11): so theo
-        // timestamp ghi tren title bar. BuildTimestamp la nguon su that duy
-        // nhat — csproj tu dong dong dau moi lan build (target
-        // UpdateBuildTimestamp), title bar hien dung gia tri nay, va buoc
-        // kiem tra lay gia tri moi nhat tu chinh file nay tren GitHub.
+        // SHA nay la commit chua file ISO dang duoc dong goi cung plugin hien tai.
+        // Khi cap nhat ISO, thay SHA nay bang commit moi cua Etabs_Tool.iso.
         private const string BuildTimestamp = "20261109-011208";
+        private const string CurrentIsoCommitSha = "383c5e562333e95ccec834c135a34d9e81dcb5d9";
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
-        private const string LatestSourceUrl = "https://raw.githubusercontent.com/ndkhoams/Etabs_Plugin/main/Ultimtate%20Tools/ModelCheckForm.Update.cs";
+        private const string IsoCommitApiUrl = "https://api.github.com/repos/ndkhoams/Etabs_Plugin/commits?path=Etabs_Tool.iso&per_page=1";
         private const string DownloadUrl = "https://raw.githubusercontent.com/ndkhoams/Etabs_Plugin/main/Etabs_Tool.iso";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
 
@@ -42,14 +40,30 @@ namespace Etabs_Ultimate_Tools
             get { return DateTime.ParseExact(BuildTimestamp, "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture); }
         }
 
-        private static async Task<DateTime> GetLatestBuildTimeAsync()
+        private sealed class IsoCommitInfo
         {
-            string source = await UpdateHttpClient.GetStringAsync(LatestSourceUrl).ConfigureAwait(false);
-            Match match = Regex.Match(source, @"private const string BuildTimestamp = ""(?<timestamp>\d{8}-\d{6})"";");
-            if (!match.Success)
-                throw new InvalidDataException("Không tìm thấy timestamp build hợp lệ trong ModelCheckForm.Update.cs trên GitHub.");
+            public string Sha { get; set; }
+            public DateTimeOffset CommitDate { get; set; }
+        }
 
-            return DateTime.ParseExact(match.Groups["timestamp"].Value, "yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+        private static async Task<IsoCommitInfo> GetLatestIsoCommitAsync()
+        {
+            string json = await UpdateHttpClient.GetStringAsync(IsoCommitApiUrl).ConfigureAwait(false);
+            using (JsonDocument document = JsonDocument.Parse(json))
+            {
+                JsonElement commits = document.RootElement;
+                if (commits.ValueKind != JsonValueKind.Array || commits.GetArrayLength() == 0)
+                    throw new InvalidDataException("GitHub không trả về commit nào cho file Etabs_Tool.iso.");
+
+                JsonElement commit = commits[0];
+                string sha = commit.GetProperty("sha").GetString();
+                string date = commit.GetProperty("commit").GetProperty("author").GetProperty("date").GetString();
+                DateTimeOffset commitDate = DateTimeOffset.Parse(date, CultureInfo.InvariantCulture);
+                if (string.IsNullOrWhiteSpace(sha))
+                    throw new InvalidDataException("GitHub không trả về SHA hợp lệ cho file Etabs_Tool.iso.");
+
+                return new IsoCommitInfo { Sha = sha, CommitDate = commitDate };
+            }
         }
 
         private void BuildUpdateTab(TabPage tab)
@@ -95,10 +109,10 @@ namespace Etabs_Ultimate_Tools
             versionLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
             versionBox.Controls.Add(versionLayout);
 
-            versionLayout.Controls.Add(MakeUpdateFieldLabel("Bản dựng hiện tại:"), 0, 0);
-            lblUpdateBuildDate = MakeUpdateValueLabel(BuildTimeLocal.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture));
+            versionLayout.Controls.Add(MakeUpdateFieldLabel("Commit ISO hiện tại:"), 0, 0);
+            lblUpdateBuildDate = MakeUpdateValueLabel(ShortSha(CurrentIsoCommitSha));
             versionLayout.Controls.Add(lblUpdateBuildDate, 1, 0);
-            versionLayout.Controls.Add(MakeUpdateFieldLabel("Bản dựng mới nhất:"), 0, 1);
+            versionLayout.Controls.Add(MakeUpdateFieldLabel("Commit ISO mới nhất:"), 0, 1);
             lblUpdateLatestDate = MakeUpdateValueLabel("Chưa kiểm tra");
             versionLayout.Controls.Add(lblUpdateLatestDate, 1, 1);
 
@@ -161,6 +175,11 @@ namespace Etabs_Ultimate_Tools
             };
         }
 
+        private static string ShortSha(string sha)
+        {
+            return string.IsNullOrEmpty(sha) || sha.Length <= 12 ? sha : sha.Substring(0, 12);
+        }
+
         private static Label MakeUpdateValueLabel(string text)
         {
             return new Label
@@ -185,17 +204,16 @@ namespace Etabs_Ultimate_Tools
 
             try
             {
-                // Chi tai file .cs nho (~vai chuc KB) roi doc timestamp trong
-                // do — khong tai ca file ISO nhu truoc, khong doc version.txt
-                // trong ISO nua.
-                DateTime latestBuildTime = await GetLatestBuildTimeAsync();
+                IsoCommitInfo latestIsoCommit = await GetLatestIsoCommitAsync();
                 if (IsDisposed) return;
 
-                lblUpdateLatestDate.Text = latestBuildTime.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
-                _latestUpdateAvailable = latestBuildTime > BuildTimeLocal;
+                lblUpdateLatestDate.Text = ShortSha(latestIsoCommit.Sha)
+                    + " (" + latestIsoCommit.CommitDate.ToLocalTime().ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture) + ")";
+                _latestUpdateAvailable = !string.Equals(
+                    latestIsoCommit.Sha, CurrentIsoCommitSha, StringComparison.OrdinalIgnoreCase);
                 lblUpdateStatus.Text = _latestUpdateAvailable
-                    ? "Có phiên bản mới."
-                    : "Bạn đang dùng phiên bản mới nhất.";
+                    ? "Có file ISO mới."
+                    : "Bạn đang dùng file ISO mới nhất.";
                 btnUpdateDownload.Enabled = _latestUpdateAvailable;
             }
             catch (Exception ex)
