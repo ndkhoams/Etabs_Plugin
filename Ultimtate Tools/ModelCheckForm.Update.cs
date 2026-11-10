@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Reflection;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -11,13 +12,22 @@ namespace Etabs_Ultimate_Tools
 {
     public partial class ModelCheckForm
     {
-        private const string BuildTimestamp = "20261109-011208";
+        private static readonly string BuildTimestamp = GetBuildTimestamp();
         private const string UpdateOwner = "ndkhoams";
         private const string UpdateRepository = "Etabs_Plugin";
         private const string UpdateFilePath = "Etabs_Tool.iso";
         private const string IsoCommitApiUrl = "https://api.github.com/repos/ndkhoams/Etabs_Plugin/commits?path=Etabs_Tool.iso&per_page=1";
         private const string DownloadUrl = "https://raw.githubusercontent.com/ndkhoams/Etabs_Plugin/main/Etabs_Tool.iso";
         private static readonly HttpClient UpdateHttpClient = CreateUpdateHttpClient();
+
+        private static string GetBuildTimestamp()
+        {
+            foreach (AssemblyMetadataAttribute metadata in typeof(ModelCheckForm).Assembly
+                .GetCustomAttributes(typeof(AssemblyMetadataAttribute), false))
+                if (metadata.Key == "PluginBuildTimestamp")
+                    return metadata.Value;
+            return "00000000-000000";
+        }
 
         // Trang thai cua lan kiem tra cap nhat gan nhat: chi bat nut Tai khi
         // ban tren GitHub that su moi hon ban dang chay.

@@ -39,35 +39,5 @@
     <WriteLinesToFile File="$(TargetDir)version.txt" Lines="$(PluginBuildTimestamp)" Overwrite="true" Encoding="UTF-8" />
   </Target>
 
-  <!-- Dấu build (giong CADtools, user chot 09/11; sua 09/11: bo qua khi
-       build trong Visual Studio): BuildTimestamp la hang trong
-       ModelCheckForm.Update.cs — target nay dong dau moi lan build NGOAI
-       Visual Studio (ghi de gia tri cu bang PluginBuildTimestamp).
-       Title bar hien dung hang nay, tab Check for Updates lay gia tri
-       moi nhat tu chinh file nay tren GitHub. Build trong VS khong lam
-       ban file nguon nua; timestamp tren remote den tu lan agent push
-       moi nhat (build Linux dong dau truoc khi day). -->
-  <UsingTask TaskName="UpdateBuildTimestamp" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
-    <ParameterGroup>
-      <SourceFile ParameterType="System.String" Required="true" />
-      <NewTimestamp ParameterType="System.String" Required="true" />
-    </ParameterGroup>
-    <Task>
-      <Code Type="Fragment" Language="cs">
-        <![CDATA[
-          string source = System.IO.File.ReadAllText(SourceFile);
-          string pattern = "(?m)(?<prefix>private const string BuildTimestamp = \")[0-9]{8}-[0-9]{6}(?<suffix>\";)";
-          System.Text.RegularExpressions.Match match = System.Text.RegularExpressions.Regex.Match(source, pattern);
-          if (!match.Success)
-            throw new System.InvalidOperationException("Expected exactly one BuildTimestamp constant in '" + SourceFile + "'.");
-          string updated = System.Text.RegularExpressions.Regex.Replace(source, pattern, "${prefix}" + NewTimestamp + "${suffix}");
-          if (updated != source)
-            System.IO.File.WriteAllText(SourceFile, updated, new System.Text.UTF8Encoding(false));
-        ]]>
-      </Code>
-    </Task>
-  </UsingTask>
-  <Target Name="UpdateBuildTimestamp" BeforeTargets="CoreCompile" Condition="'$(DesignTimeBuild)' != 'true' AND '$(BuildingInsideVisualStudio)' != 'true'">
-    <UpdateBuildTimestamp SourceFile="$(MSBuildProjectDirectory)\ModelCheckForm.Update.cs" NewTimestamp="$(PluginBuildTimestamp)" />
-  </Target>
+  <!-- Build timestamp is embedded as AssemblyMetadata and read at runtime. -->
 </Project>

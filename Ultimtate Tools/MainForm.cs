@@ -168,7 +168,7 @@ public sealed class MainForm : Form
     // --- controls ---
     private readonly TextBox _fileTextBox = new() { Width = 260 };
     private readonly ComboBox _sheetCombo = new() { Width = 150, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _pointViewCombo = new() { Width = 130, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _pointViewCombo = new() { Width = 105, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly Label _statusLabel = new() { Dock = DockStyle.Top, Height = 26, ForeColor = Color.FromArgb(0x55, 0x55, 0x55) };
     // Ten diem lam tieu de rieng tren bang (vd "85 / E.2") — khong ghi chung vao header cot.
     // Nam trong _titleBar (hang tieu de, cao 30) cung 2 nut chuyen bang +
@@ -239,7 +239,7 @@ public sealed class MainForm : Form
         _etabs = liveApi;
         Text = "ETABS Load Assigner v0.1 (Plugin) — Gán tải móng từ Excel vào ETABS";
         Size = new Size(1500, 780);
-        MinimumSize = new Size(1350, 720);
+        MinimumSize = new Size(900, 600);
         StartPosition = FormStartPosition.CenterScreen;
         _grid.RowTemplate.Height = GridRowHeight;
         _grid.RowTemplate.MinimumHeight = GridRowHeight;
@@ -274,7 +274,7 @@ public sealed class MainForm : Form
         // theo chieu rong con lai; cac cot khac vua noi dung.
         var top = new TableLayoutPanel
         {
-            Dock = DockStyle.Top, AutoSize = true, ColumnCount = 7, RowCount = 1,
+            Dock = DockStyle.Top, AutoSize = false, Height = 34, ColumnCount = 7, RowCount = 1,
             Padding = new Padding(3, 3, 3, 3),
         };
         top.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize)); // Chon file
@@ -291,7 +291,7 @@ public sealed class MainForm : Form
         // Nut chon nhanh file Excel mo lan cuoi (user chot 08/11): bam la mo
         // lai file do ngay, khoi browse lai. Mo khi khong co file gan nhat
         // (hoac file da bi xoa/doi ten). Tooltip hien duong dan day du.
-        var recentBtn = new Button { Text = "File gần nhất", AutoSize = true, Anchor = AnchorStyles.None };
+        var recentBtn = new Button { Text = "Mở file gần nhất", AutoSize = true, Anchor = AnchorStyles.None };
         string? recent = LoadRecentFile();
         recentBtn.Enabled = recent is not null;
         if (recent is not null)
@@ -612,22 +612,23 @@ public sealed class MainForm : Form
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Right, FlowDirection = FlowDirection.RightToLeft,
-            WrapContents = false, Width = 460, Height = 34,
+            WrapContents = false, Width = 422, Height = 34,
             Padding = new Padding(0, 2, 4, 0), Margin = Padding.Empty,
         };
         var assignBtn = new Button
         {
-            Text = "GÁN TẢI", AutoSize = false, Width = 86, Height = 30,
+            Text = "GÁN TẢI", AutoSize = false, Width = 80, Height = 30,
             Font = new Font("Segoe UI", 10F, FontStyle.Bold),
             Margin = new Padding(3, 0, 3, 0),
         };
         assignBtn.Click += (_, _) => Assign();
         var saveBtn = new Button
         {
-            Text = "Lưu data vào Excel", AutoSize = false, Width = 130, Height = 30,
+            Text = "Lưu data vào Excel", AutoSize = false, Width = 126, Height = 30,
             Margin = new Padding(3, 0, 3, 0),
         };
         saveBtn.Click += (_, _) => SaveMatchToExcel();
+        _assignmentModeCombo.Width = 190;
         _assignmentModeCombo.Height = 30;
         _assignmentModeCombo.Margin = new Padding(3, 0, 3, 0);
         actions.Controls.Add(assignBtn);
@@ -642,7 +643,7 @@ public sealed class MainForm : Form
         };
         factors.Controls.Add(new Label { Text = "Hệ số set 1:", AutoSize = true, Margin = new Padding(0, 7, 3, 0) });
         factors.Controls.Add(_loadSet1FactorInput);
-        factors.Controls.Add(new Label { Text = "Điều chỉnh Vz set 2 (%):", AutoSize = true, Margin = new Padding(12, 7, 3, 0) });
+        factors.Controls.Add(new Label { Text = "Hệ số điều chỉnh SET 2 (n%)", AutoSize = true, Margin = new Padding(12, 7, 3, 0) });
         factors.Controls.Add(_loadSet2VzPercentInput);
         factors.Controls.Add(new Label
         {
@@ -948,12 +949,9 @@ public sealed class MainForm : Form
         {
             _grid.Columns.Clear();
             _grid.Rows.Clear();
-            // Cac cot Fill het chieu rong bang (user chot 08/11 — khong de
-            // khoang trong xam ben phai). Ty trong: Tai 28, Pattern 1 = 26,
-            // Pattern 2 = 26 (bang nhau), Hx/Hy/Vz 7 moi cot (rong hon truoc
-            // de thay ro gia tri). 4 cot Pattern co MinimumWidth = ten
-            // pattern dai nhat de khong bi cat khi cua so hep.
-            var loadCol = new DataGridViewTextBoxColumn { Name = "Load", HeaderText = "Tải", ReadOnly = true, FillWeight = 28, MinimumWidth = 200 };
+            // Giữ đủ chỗ cho các cột lực ở bên phải; cột pattern vẫn giãn theo
+            // phần còn lại và có độ rộng tối thiểu để chọn tên tải.
+            var loadCol = new DataGridViewTextBoxColumn { Name = "Load", HeaderText = "Tải", ReadOnly = true, FillWeight = 20, MinimumWidth = 180 };
             _grid.Columns.Add(loadCol);
             // 2 cot Match pattern ngay sau cot Tai (user chot 08/11).
             var choices = PatternChoices();
@@ -963,7 +961,7 @@ public sealed class MainForm : Form
                 Name = "Pat1", HeaderText = "Pattern 1",
                 DataPropertyName = "Pat1", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
                 DisplayStyleForCurrentCellOnly = true,
-                FillWeight = 26, MinimumWidth = patW,
+                FillWeight = 15, MinimumWidth = patW,
             };
             pat1.Items.AddRange(choices.ToArray());
             _grid.Columns.Add(pat1);
@@ -972,7 +970,7 @@ public sealed class MainForm : Form
                 Name = "Pat2", HeaderText = "Pattern 2",
                 DataPropertyName = "Pat2", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
                 DisplayStyleForCurrentCellOnly = true,
-                FillWeight = 26, MinimumWidth = patW,
+                FillWeight = 15, MinimumWidth = patW,
             };
             pat2.Items.AddRange(choices.ToArray());
             _grid.Columns.Add(pat2);
@@ -980,7 +978,7 @@ public sealed class MainForm : Form
             {
                 Name = "Set2Pat1", HeaderText = "Pattern 1",
                 DataPropertyName = "Set2Pat1", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
-                DisplayStyleForCurrentCellOnly = true, FillWeight = 26, MinimumWidth = patW,
+                DisplayStyleForCurrentCellOnly = true, FillWeight = 15, MinimumWidth = patW,
             };
             set2Pat1.Items.AddRange(choices.ToArray());
             _grid.Columns.Add(set2Pat1);
@@ -988,7 +986,7 @@ public sealed class MainForm : Form
             {
                 Name = "Set2Pat2", HeaderText = "Pattern 2",
                 DataPropertyName = "Set2Pat2", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
-                DisplayStyleForCurrentCellOnly = true, FillWeight = 26, MinimumWidth = patW,
+                DisplayStyleForCurrentCellOnly = true, FillWeight = 15, MinimumWidth = patW,
             };
             set2Pat2.Items.AddRange(choices.ToArray());
             _grid.Columns.Add(set2Pat2);
@@ -1241,6 +1239,11 @@ public sealed class MainForm : Form
         SyncProfileFromUi();
         int mode = _assignmentModeCombo.SelectedIndex;
         bool deleteAll = mode == 3;
+        if (deleteAll)
+        {
+            ClearSelectedJointLoads();
+            return;
+        }
         if (_table is null)
         {
             MessageBox.Show(this, "Import file trước.", "Chưa có bảng",
@@ -1396,6 +1399,43 @@ public sealed class MainForm : Form
             MessageBox.Show(this, deleteAll
                     ? $"Đã xóa tải tại {unique.Select(m => m.JointName).Distinct().Count()} joint:\n" + string.Join("\n", summary)
                     : $"Đã gán {totalAssign} tải cho {unique.Count} mapping:\n" + string.Join("\n", summary),
+                "Xong", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    private void ClearSelectedJointLoads()
+    {
+        List<PointInfo> selected;
+        try { selected = _etabs.GetSelectedPoints().GroupBy(point => point.Name).Select(group => group.First()).ToList(); }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, $"Không lấy được joint đang chọn từ ETABS: {ex.Message}", "Lỗi", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            return;
+        }
+        if (selected.Count == 0)
+        {
+            MessageBox.Show(this, "Chưa chọn joint nào trong ETABS. Chọn các điểm cần xóa tải rồi bấm GÁN TẢI.",
+                "Chưa chọn joint", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+        string pointList = string.Join("\n", selected.Select(point => $"  • {point.Label} ({point.Name})"));
+        if (MessageBox.Show(this,
+                $"Xóa toàn bộ tải hiện có tại {selected.Count} joint đang chọn trong ETABS?\n{pointList}",
+                "Xác nhận xóa tải", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            return;
+
+        var summary = new List<string>();
+        var errors = new List<string>();
+        foreach (PointInfo point in selected)
+        {
+            try { summary.Add($"  • {point.Label} ({point.Name}): đã xóa {_etabs.ClearJointLoads(point.Name)} tải"); }
+            catch (Exception ex) { errors.Add($"{point.Label} ({point.Name}): {ex.Message}"); }
+        }
+        try { _etabs.RefreshView(); } catch { }
+        if (errors.Count > 0)
+            MessageBox.Show(this, "Kết quả xóa tải:\n" + string.Join("\n", summary) + "\n\nLỗi:\n" + string.Join("\n", errors),
+                "Xóa lỗi một phần", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        else
+            MessageBox.Show(this, "Đã xóa tải tại các joint đang chọn:\n" + string.Join("\n", summary),
                 "Xong", MessageBoxButtons.OK, MessageBoxIcon.Information);
     }
 
