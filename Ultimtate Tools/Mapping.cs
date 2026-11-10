@@ -179,6 +179,8 @@ public sealed class RowPattern
 {
     public string Left { get; set; } = "";
     public string Right { get; set; } = "";
+    public string Set2Left { get; set; } = "";
+    public string Set2Right { get; set; } = "";
 }
 
 /// <summary>Cai dat luu lai de gan diem moi khong phai lam lai. Port cua Profile trong mapping.py.</summary>
@@ -197,6 +199,8 @@ public sealed class Profile
     /// du pattern trong ETABS — tool KHONG tu tao pattern.
     /// </summary>
     public Dictionary<string, RowPattern> PatternMap { get; set; } = new();
+    public double LoadSet1Factor { get; set; } = 1.0;
+    public double LoadSet2VzPercent { get; set; }
     public bool ReplaceExisting { get; set; } = true;
     public bool SkipZeroRows { get; set; } = true;
 
@@ -226,7 +230,11 @@ public sealed class Profile
             {
                 ["left"] = kv.Value.Left,
                 ["right"] = kv.Value.Right,
+                ["set2_left"] = kv.Value.Set2Left,
+                ["set2_right"] = kv.Value.Set2Right,
             }),
+        ["load_set_1_factor"] = LoadSet1Factor,
+        ["load_set_2_vz_percent"] = LoadSet2VzPercent,
         ["replace_existing"] = ReplaceExisting,
         ["skip_zero_rows"] = SkipZeroRows,
     };
@@ -254,11 +262,15 @@ public sealed class Profile
                 {
                     rp.Left = JsonHelpers.GetString(kv.Value, "left", "");
                     rp.Right = JsonHelpers.GetString(kv.Value, "right", "");
+                    rp.Set2Left = JsonHelpers.GetString(kv.Value, "set2_left", "");
+                    rp.Set2Right = JsonHelpers.GetString(kv.Value, "set2_right", "");
                 }
                 p.PatternMap[kv.Name] = rp;
             }
         // Cac khoa cu (point_alias, create_missing_pattern, reversible_mode,
         // range_policy) duoc bo qua — tinh nang tuong ung da bo (user chot 08/11).
+        p.LoadSet1Factor = JsonHelpers.GetDouble(d, "load_set_1_factor", 1.0);
+        p.LoadSet2VzPercent = JsonHelpers.GetDouble(d, "load_set_2_vz_percent", 0.0);
         p.ReplaceExisting = JsonHelpers.GetBool(d, "replace_existing", true);
         p.SkipZeroRows = JsonHelpers.GetBool(d, "skip_zero_rows", true);
         return p;
@@ -297,6 +309,13 @@ internal static class JsonHelpers
             if (v.ValueKind == JsonValueKind.Number)
                 return (int)v.GetDouble();
         }
+        return fallback;
+    }
+
+    public static double GetDouble(JsonElement d, string key, double fallback)
+    {
+        if (d.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetDouble(out double value))
+            return value;
         return fallback;
     }
 

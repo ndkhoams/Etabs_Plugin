@@ -156,52 +156,86 @@ public static class Assigner
             var (mxR, myR, mzR) = hasMoments
                 ? axis.Apply(rightMom[0], rightMom[1], rightMom[2])
                 : (0.0, 0.0, 0.0);
-            var leftAssignment = new Assignment
+            AddAssignmentSet(res, row.Name, excelPoint, etabsJoint, leftPat, rightPat,
+                fxL, fyL, fzL, mxL, myL, mzL, fxR, fyR, fzR, mxR, myR, mzR,
+                hasPlusMinus, profile.LoadSet1Factor, "Load set 1", profile.SkipZeroRows);
+
+            string set2LeftPat = (rp.Set2Left ?? "").Trim();
+            string set2RightPat = (rp.Set2Right ?? "").Trim();
+            if (set2LeftPat != "" || set2RightPat != "")
             {
-                ExcelPoint = excelPoint,
-                EtabsJoint = etabsJoint,
-                ExcelRow = row.Name,
-                Pattern = leftPat,
-                Fx = fxL, Fy = fyL, Fz = fzL,
-                Mx = mxL, My = myL, Mz = mzL,
-                Side = "trai",
-                Notes = hasPlusMinus ? "giá trị 1 (cột trái)" : "",
-            };
-            if (profile.SkipZeroRows && leftAssignment.IsZero())
-            {
-                res.Skipped.Add(("dong 0", $"'{row.Name}' ở {excelPoint}: " +
-                    (hasMoments ? "cả lực và mô men = 0, bỏ qua." : "cả 3 lực = 0, bỏ qua.")));
-                continue;
-            }
-            res.Assignments.Add(leftAssignment);
-            if (hasPlusMinus)
-            {
-                if (rightPat == "")
-                {
-                    res.Warnings.Add(
-                        $"'{row.Name}': có 2 giá trị nhưng chưa chọn pattern cột phải — " +
-                        "chỉ gán giá trị 1 (cột trái), giá trị 2 chưa được gán.");
-                }
-                else
-                {
-                    var rightAssignment = new Assignment
-                    {
-                        ExcelPoint = excelPoint,
-                        EtabsJoint = etabsJoint,
-                        ExcelRow = row.Name,
-                        Pattern = rightPat,
-                        Fx = fxR, Fy = fyR, Fz = fzR,
-                        Mx = mxR, My = myR, Mz = mzR,
-                        Side = "phai",
-                        Notes = "giá trị 2 (cột phải)",
-                    };
-                    if (!(profile.SkipZeroRows && rightAssignment.IsZero()))
-                        res.Assignments.Add(rightAssignment);
-                }
+                double leftFactor = Set2Factor(profile, leftVals[2]);
+                double rightFactor = Set2Factor(profile, rightVals[2]);
+                AddAssignmentSet(res, row.Name, excelPoint, etabsJoint, set2LeftPat, set2RightPat,
+                    fxL, fyL, fzL, mxL, myL, mzL, fxR, fyR, fzR, mxR, myR, mzR,
+                    hasPlusMinus, leftFactor, "Load set 2", profile.SkipZeroRows,
+                    rightFactor);
             }
         }
         return res;
     }
+
+    private static double Set2Factor(Profile profile, double originalVz)
+    {
+        double adjustment = profile.LoadSet2VzPercent / 100.0;
+        double signFactor = originalVz > 0 ? 1.0 - adjustment
+            : originalVz < 0 ? 1.0 + adjustment : 1.0;
+        return signFactor;
+    }
+
+    private static void AddAssignmentSet(
+        BuildResult res, string rowName, string excelPoint, string etabsJoint,
+        string leftPat, string rightPat,
+        double fxL, double fyL, double fzL, double mxL, double myL, double mzL,
+        double fxR, double fyR, double fzR, double mxR, double myR, double mzR,
+        bool hasPlusMinus, double leftFactor, string setName, bool skipZeroRows,
+        double? rightFactor = null)
+    {
+        if (leftPat == "")
+        {
+            if (rightPat != "")
+                res.Warnings.Add($"'{rowName}': {setName} có pattern giá trị 2 nhưng chưa chọn pattern giá trị 1.");
+        }
+        else
+        {
+            var leftAssignment = CreateAssignment(rowName, excelPoint, etabsJoint, leftPat,
+                fxL, fyL, fzL, mxL, myL, mzL, leftFactor, "trai",
+                hasPlusMinus ? $"{setName}, giá trị 1" : setName);
+            if (!(skipZeroRows && leftAssignment.IsZero()))
+                res.Assignments.Add(leftAssignment);
+        }
+        if (!hasPlusMinus)
+            return;
+        if (rightPat == "")
+        {
+            res.Warnings.Add($"'{rowName}': có 2 giá trị nhưng chưa chọn pattern giá trị 2 cho {setName}.");
+            return;
+        }
+        var rightAssignment = CreateAssignment(rowName, excelPoint, etabsJoint, rightPat,
+            fxR, fyR, fzR, mxR, myR, mzR, rightFactor ?? leftFactor, "phai",
+            $"{setName}, giá trị 2");
+        if (!(skipZeroRows && rightAssignment.IsZero()))
+            res.Assignments.Add(rightAssignment);
+    }
+
+    private static Assignment CreateAssignment(
+        string rowName, string excelPoint, string etabsJoint, string pattern,
+        double fx, double fy, double fz, double mx, double my, double mz,
+        double factor, string side, string notes) => new()
+        {
+            ExcelPoint = excelPoint,
+            EtabsJoint = etabsJoint,
+            ExcelRow = rowName,
+            Pattern = pattern,
+            Fx = fx * factor,
+            Fy = fy * factor,
+            Fz = fz * factor,
+            Mx = mx * factor,
+            My = my * factor,
+            Mz = mz * factor,
+            Side = side,
+            Notes = notes,
+        };
 
     public static string PreviewText(FoundationTable table, string excelPoint, string etabsJoint, Profile profile, BuildResult result)
     {

@@ -7,6 +7,7 @@ namespace Etabs_Ultimate_Tools
     public class cPlugin
     {
         private static ModelCheckForm _form;
+        private static cPluginCallback _callback;
 
         public void Main(ref cSapModel SapModel, ref cPluginCallback ISapPlugin)
         {
@@ -20,6 +21,7 @@ namespace Etabs_Ultimate_Tools
             }
 
             _form = null;
+            _callback = ISapPlugin;
             ModelCheckForm form = null;
 
             try
@@ -30,7 +32,12 @@ namespace Etabs_Ultimate_Tools
                 form.FormClosed += (_, _) =>
                 {
                     if (ReferenceEquals(_form, form))
+                    {
                         _form = null;
+                        cPluginCallback callback = _callback;
+                        _callback = null;
+                        try { callback?.Finish(0); } catch { }
+                    }
                 };
                 form.Show();
             }
@@ -38,6 +45,7 @@ namespace Etabs_Ultimate_Tools
             {
                 if (ReferenceEquals(_form, form))
                     _form = null;
+                _callback = null;
                 if (form != null && !form.IsDisposed)
                     form.Dispose();
                 MessageBox.Show(ex.Message, "Etabs Ultimate Tools", MessageBoxButtons.OK, MessageBoxIcon.Error);

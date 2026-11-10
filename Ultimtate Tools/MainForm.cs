@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Windows.Forms;
@@ -187,7 +188,7 @@ public sealed class MainForm : Form
         RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True },
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-        ColumnHeadersHeight = 36,
+        ColumnHeadersHeight = 50,
     };
 
     // Bang phu LOAD POINT (user chot 08/11 — gan nhieu diem 1 luc): moi dong
@@ -203,7 +204,7 @@ public sealed class MainForm : Form
         RowHeadersVisible = false, AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
         ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { WrapMode = DataGridViewTriState.True },
         ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-        ColumnHeadersHeight = 36,
+        ColumnHeadersHeight = 50,
         Visible = false,
     };
 
@@ -214,6 +215,14 @@ public sealed class MainForm : Form
     {
         Width = 220,
         DropDownStyle = ComboBoxStyle.DropDownList,
+    };
+    private readonly TextBox _loadSet1FactorInput = new()
+    {
+        Text = "1.0000", Width = 72, TextAlign = HorizontalAlignment.Right,
+    };
+    private readonly TextBox _loadSet2VzPercentInput = new()
+    {
+        Text = "0.00", Width = 72, TextAlign = HorizontalAlignment.Right,
     };
 
     // Vung cuon + cac muc ben trong (de keo dai bang noi luc cho kin vung
@@ -229,7 +238,8 @@ public sealed class MainForm : Form
         _liveApi = liveApi;
         _etabs = liveApi;
         Text = "ETABS Load Assigner v0.1 (Plugin) — Gán tải móng từ Excel vào ETABS";
-        Size = new Size(1050, 720);
+        Size = new Size(1500, 780);
+        MinimumSize = new Size(1350, 720);
         StartPosition = FormStartPosition.CenterScreen;
         _grid.RowTemplate.Height = GridRowHeight;
         _grid.RowTemplate.MinimumHeight = GridRowHeight;
@@ -238,6 +248,7 @@ public sealed class MainForm : Form
         BuildUi();
         _grid.CellValueChanged += Grid_CellValueChanged;
         _grid.CellClick += Grid_CellClick;
+        _grid.CellPainting += Grid_CellPainting;
         _pointGrid.CellClick += Grid_CellClick;
         _pointGrid.CellContentClick += PointGrid_CellContentClick;
         _pointGrid.ColumnHeaderMouseClick += PointGrid_ColumnHeaderMouseClick;
@@ -551,14 +562,14 @@ public sealed class MainForm : Form
             if (w > maxW)
                 maxW = w;
         }
-        return Math.Max(150, maxW + 40); // 40 = nut dropdown + padding.
+        return Math.Max(105, Math.Min(135, maxW + 10));
     }
 
     private GroupBox BuildSectionAxis()
     {
         // Phuong & chieu gon 1 hang ngang (chi set 1 lan): Hx -> [X] [-]  Hy -> [Y] [+]  Vz -> [Z] [-].
         // Cao 80 (user chot 08/11 — tang them de chu khoi bi sat).
-        var box = new GroupBox { Text = "Phương & chiều", Dock = DockStyle.Top, Height = 80 };
+        var box = new GroupBox { Text = "Phương & chiều / hệ số load set", Dock = DockStyle.Top, Height = 112 };
         var note = new Label
         {
             Dock = DockStyle.Top, AutoSize = true, ForeColor = Color.FromArgb(0xA3, 0x33, 0x33),
@@ -624,7 +635,23 @@ public sealed class MainForm : Form
         actions.Controls.Add(_assignmentModeCombo);
         row.Controls.Add(actions);
         // Them nguoc (note truoc, row sau) de row o tren, note o duoi.
+        var factors = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top, FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false, Height = 30, Padding = new Padding(6, 0, 0, 0),
+        };
+        factors.Controls.Add(new Label { Text = "Hệ số set 1:", AutoSize = true, Margin = new Padding(0, 7, 3, 0) });
+        factors.Controls.Add(_loadSet1FactorInput);
+        factors.Controls.Add(new Label { Text = "Điều chỉnh Vz set 2 (%):", AutoSize = true, Margin = new Padding(12, 7, 3, 0) });
+        factors.Controls.Add(_loadSet2VzPercentInput);
+        factors.Controls.Add(new Label
+        {
+            Text = "Set 2: Vz gốc > 0 → nhân (1 - n%); Vz gốc < 0 → nhân (1 + n%).",
+            AutoSize = true, ForeColor = Color.FromArgb(0xA3, 0x33, 0x33),
+            Margin = new Padding(14, 7, 0, 0),
+        });
         box.Controls.Add(note);
+        box.Controls.Add(factors);
         box.Controls.Add(row);
         return box;
     }
@@ -644,6 +671,8 @@ public sealed class MainForm : Form
                 default: _profile.Axis.VzAxis = axis; _profile.Axis.VzSign = s; break;
             }
         }
+        _profile.LoadSet1Factor = ReadNumber(_loadSet1FactorInput, 1.0, -100000.0, 100000.0);
+        _profile.LoadSet2VzPercent = ReadNumber(_loadSet2VzPercentInput, 0.0, 0.0, 100.0);
         // Pattern: doc tu 2 cot Pattern trong grid (neu grid dang hien bang);
         // neu grid chua co bang thi giu PatternMap hien tai (tranh xoa match
         // khi doi diem hoac chua chon diem).
@@ -654,7 +683,12 @@ public sealed class MainForm : Form
             {
                 string left = _grid.Rows[i].Cells["Pat1"].Value?.ToString() ?? "";
                 string right = _grid.Rows[i].Cells["Pat2"].Value?.ToString() ?? "";
-                map[_table.Rows[i].Name] = new RowPattern { Left = left, Right = right };
+                string set2Left = _grid.Rows[i].Cells["Set2Pat1"].Value?.ToString() ?? "";
+                string set2Right = _grid.Rows[i].Cells["Set2Pat2"].Value?.ToString() ?? "";
+                map[_table.Rows[i].Name] = new RowPattern
+                {
+                    Left = left, Right = right, Set2Left = set2Left, Set2Right = set2Right,
+                };
             }
             _profile.PatternMap = map;
         }
@@ -674,8 +708,26 @@ public sealed class MainForm : Form
             tgt.Text = axis;
             sign.Text = s > 0 ? "+" : "-";
         }
+        _loadSet1FactorInput.Text = FormatNumber(_profile.LoadSet1Factor, 1.0, -100000.0, 100000.0, 4);
+        _loadSet2VzPercentInput.Text = FormatNumber(_profile.LoadSet2VzPercent, 0.0, 0.0, 100.0, 2);
         if (_table is not null)
-            RefreshGrid(); // Ve lai grid — 2 cot Pattern lay tu profile vua nap.
+            RefreshGrid();
+    }
+
+    private static double ReadNumber(TextBox input, double fallback, double minimum, double maximum)
+    {
+        if (!double.TryParse(input.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture, out double value) &&
+            !double.TryParse(input.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out value))
+            return fallback;
+        if (double.IsNaN(value) || double.IsInfinity(value))
+            return fallback;
+        return Math.Max(minimum, Math.Min(maximum, value));
+    }
+
+    private static string FormatNumber(double value, double fallback, double minimum, double maximum, int decimals)
+    {
+        double normalized = ReadNumber(new TextBox { Text = value.ToString(CultureInfo.InvariantCulture) }, fallback, minimum, maximum);
+        return normalized.ToString("F" + decimals, CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -899,7 +951,7 @@ public sealed class MainForm : Form
             // Cac cot Fill het chieu rong bang (user chot 08/11 — khong de
             // khoang trong xam ben phai). Ty trong: Tai 28, Pattern 1 = 26,
             // Pattern 2 = 26 (bang nhau), Hx/Hy/Vz 7 moi cot (rong hon truoc
-            // de thay ro gia tri). 2 cot Pattern co MinimumWidth = ten
+            // de thay ro gia tri). 4 cot Pattern co MinimumWidth = ten
             // pattern dai nhat de khong bi cat khi cua so hep.
             var loadCol = new DataGridViewTextBoxColumn { Name = "Load", HeaderText = "Tải", ReadOnly = true, FillWeight = 28, MinimumWidth = 200 };
             _grid.Columns.Add(loadCol);
@@ -908,7 +960,7 @@ public sealed class MainForm : Form
             int patW = PatternColumnWidth(choices);
             var pat1 = new DataGridViewComboBoxColumn
             {
-                Name = "Pat1", HeaderText = "Pattern — giá trị 1 (trái)",
+                Name = "Pat1", HeaderText = "Pattern 1",
                 DataPropertyName = "Pat1", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
                 DisplayStyleForCurrentCellOnly = true,
                 FillWeight = 26, MinimumWidth = patW,
@@ -917,13 +969,29 @@ public sealed class MainForm : Form
             _grid.Columns.Add(pat1);
             var pat2 = new DataGridViewComboBoxColumn
             {
-                Name = "Pat2", HeaderText = "Pattern — giá trị 2 (phải)",
+                Name = "Pat2", HeaderText = "Pattern 2",
                 DataPropertyName = "Pat2", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
                 DisplayStyleForCurrentCellOnly = true,
                 FillWeight = 26, MinimumWidth = patW,
             };
             pat2.Items.AddRange(choices.ToArray());
             _grid.Columns.Add(pat2);
+            var set2Pat1 = new DataGridViewComboBoxColumn
+            {
+                Name = "Set2Pat1", HeaderText = "Pattern 1",
+                DataPropertyName = "Set2Pat1", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+                DisplayStyleForCurrentCellOnly = true, FillWeight = 26, MinimumWidth = patW,
+            };
+            set2Pat1.Items.AddRange(choices.ToArray());
+            _grid.Columns.Add(set2Pat1);
+            var set2Pat2 = new DataGridViewComboBoxColumn
+            {
+                Name = "Set2Pat2", HeaderText = "Pattern 2",
+                DataPropertyName = "Set2Pat2", DisplayStyle = DataGridViewComboBoxDisplayStyle.ComboBox,
+                DisplayStyleForCurrentCellOnly = true, FillWeight = 26, MinimumWidth = patW,
+            };
+            set2Pat2.Items.AddRange(choices.ToArray());
+            _grid.Columns.Add(set2Pat2);
             // Header 2 dong: Hx / [kN] (nhu anh mau "85 / E.2").
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Hx", HeaderText = "Hx\n[kN]", FillWeight = 7, MinimumWidth = 60 });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Hy", HeaderText = "Hy\n[kN]", FillWeight = 7, MinimumWidth = 60 });
@@ -942,12 +1010,14 @@ public sealed class MainForm : Form
                 var rp = _profile.PatternFor(r.Name);
                 string curL = rp.Left;
                 string curR = rp.Right;
+                string curSet2L = rp.Set2Left;
+                string curSet2R = rp.Set2Right;
                 if (curL == "")
                     curL = Mapping.SuggestPattern(r.Name, available);
                 // Goi y cot phai khi dong co o 2 gia tri (khoang "a/b" hoac "+/-V") — cot "+/-" khong tinh.
                 if (curR == "" && r.HasRangeCell() && curL != "")
                     curR = Mapping.SuggestPatternOpposite(curL, available);
-                var vals = new List<object> { r.Name + (r.Reversible ? "  (+/-)" : ""), curL, curR };
+                var vals = new List<object> { r.Name + (r.Reversible ? "  (+/-)" : ""), curL, curR, curSet2L, curSet2R };
                 // Hx/Hy/Vz + Mx/My/Mz (mo men chi co gia tri khi bang co mo men;
                 // cot mo men an thi gia tri van luu trong dong, khong hien).
                 foreach (string comp in Detector.AllComponents)
@@ -986,6 +1056,8 @@ public sealed class MainForm : Form
                 var rp = _profile.PatternFor(r.Name);
                 if (rp.Left != "") set.Add(rp.Left);
                 if (rp.Right != "") set.Add(rp.Right);
+                if (rp.Set2Left != "") set.Add(rp.Set2Left);
+                if (rp.Set2Right != "") set.Add(rp.Set2Right);
             }
         choices.AddRange(set);
         return choices;
@@ -998,7 +1070,8 @@ public sealed class MainForm : Form
     /// </summary>
     private void RefreshPatternColumns()
     {
-        if (!_grid.Columns.Contains("Pat1") || !_grid.Columns.Contains("Pat2"))
+        if (!_grid.Columns.Contains("Pat1") || !_grid.Columns.Contains("Pat2") ||
+            !_grid.Columns.Contains("Set2Pat1") || !_grid.Columns.Contains("Set2Pat2"))
             return;
         var choices = PatternChoices();
         var c1 = (DataGridViewComboBoxColumn)_grid.Columns["Pat1"];
@@ -1007,9 +1080,65 @@ public sealed class MainForm : Form
         c1.Items.AddRange(choices.ToArray());
         c2.Items.Clear();
         c2.Items.AddRange(choices.ToArray());
+        var c3 = (DataGridViewComboBoxColumn)_grid.Columns["Set2Pat1"];
+        var c4 = (DataGridViewComboBoxColumn)_grid.Columns["Set2Pat2"];
+        c3.Items.Clear();
+        c3.Items.AddRange(choices.ToArray());
+        c4.Items.Clear();
+        c4.Items.AddRange(choices.ToArray());
         int patW = PatternColumnWidth(choices);
         c1.MinimumWidth = patW;
         c2.MinimumWidth = patW;
+        c3.MinimumWidth = patW;
+        c4.MinimumWidth = patW;
+    }
+
+    private void Grid_CellPainting(object? sender, DataGridViewCellPaintingEventArgs e)
+    {
+        if (e.RowIndex != -1 || e.ColumnIndex < 0)
+            return;
+        string name = _grid.Columns[e.ColumnIndex].Name;
+        bool isSet1 = name == "Pat1" || name == "Pat2";
+        bool isSet2 = name == "Set2Pat1" || name == "Set2Pat2";
+        if (!isSet1 && !isSet2)
+            return;
+
+        bool isSecond = name == "Pat2" || name == "Set2Pat2";
+        if (!isSecond)
+        {
+            e.PaintBackground(e.CellBounds, true);
+            e.Handled = true;
+            return;
+        }
+
+        int firstIndex = e.ColumnIndex - 1;
+        Rectangle first = _grid.GetCellDisplayRectangle(firstIndex, -1, true);
+        Rectangle second = _grid.GetCellDisplayRectangle(e.ColumnIndex, -1, true);
+        Rectangle group = Rectangle.Union(first, second);
+        if (group.Width <= 0 || group.Height <= 0)
+            return;
+
+        Color backColor = e.CellStyle.BackColor;
+        Color foreColor = e.CellStyle.ForeColor;
+        using (var back = new SolidBrush(backColor))
+        using (var border = new Pen(_grid.GridColor))
+        using (var text = new SolidBrush(foreColor))
+        using (var format = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center })
+        {
+            e.Graphics.FillRectangle(back, group);
+            e.Graphics.DrawRectangle(border, group.X, group.Y, group.Width - 1, group.Height - 1);
+            int splitY = group.Y + 21;
+            e.Graphics.DrawLine(border, group.X, splitY, group.Right - 1, splitY);
+            e.Graphics.DrawLine(border, second.X, splitY, second.X, group.Bottom - 1);
+            string title = isSet1 ? "LOAD SET 1" : "LOAD SET 2";
+            e.Graphics.DrawString(title, e.CellStyle.Font, text,
+                new RectangleF(group.X, group.Y, group.Width, 21), format);
+            e.Graphics.DrawString("Pattern 1", e.CellStyle.Font, text,
+                new RectangleF(first.X, splitY, first.Width, group.Bottom - splitY), format);
+            e.Graphics.DrawString("Pattern 2", e.CellStyle.Font, text,
+                new RectangleF(second.X, splitY, second.Width, group.Bottom - splitY), format);
+        }
+        e.Handled = true;
     }
 
     // Sua truc tiep trong grid:
@@ -1026,13 +1155,16 @@ public sealed class MainForm : Form
             return;
         string colName = _grid.Columns[e.ColumnIndex].Name;
         var row = _table.Rows[e.RowIndex];
-        if (colName == "Pat1" || colName == "Pat2")
+        if (colName == "Pat1" || colName == "Pat2" || colName == "Set2Pat1" || colName == "Set2Pat2")
         {
             // Doi pattern trong grid: ghi vao profile trong bo nho (luu bang
             // nut "Lưu data vào Excel" — user chot 08/11, khong tu dong luu).
             string val = _grid.Rows[e.RowIndex].Cells[e.ColumnIndex].Value?.ToString() ?? "";
             var rp = _profile.PatternFor(row.Name);
-            if (colName == "Pat1") rp.Left = val; else rp.Right = val;
+            if (colName == "Pat1") rp.Left = val;
+            else if (colName == "Pat2") rp.Right = val;
+            else if (colName == "Set2Pat1") rp.Set2Left = val;
+            else rp.Set2Right = val;
             _profile.PatternMap[row.Name] = rp;
             return;
         }
@@ -1148,6 +1280,8 @@ public sealed class MainForm : Form
                 var patterns = _profile.PatternFor(row.Name);
                 if (!string.IsNullOrWhiteSpace(patterns.Left)) allPats.Add(patterns.Left.Trim());
                 if (!string.IsNullOrWhiteSpace(patterns.Right)) allPats.Add(patterns.Right.Trim());
+                if (!string.IsNullOrWhiteSpace(patterns.Set2Left)) allPats.Add(patterns.Set2Left.Trim());
+                if (!string.IsNullOrWhiteSpace(patterns.Set2Right)) allPats.Add(patterns.Set2Right.Trim());
             }
         if (totalAssign == 0 && mode == 2)
         {

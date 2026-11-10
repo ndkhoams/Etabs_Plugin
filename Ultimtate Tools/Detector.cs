@@ -456,6 +456,8 @@ public static class Detector
                 continue;
             string b = (row.Cell(2).GetString() ?? "").Trim();
             string c = (row.Cell(3).GetString() ?? "").Trim();
+            string d = (row.Cell(4).GetString() ?? "").Trim();
+            string e = (row.Cell(5).GetString() ?? "").Trim();
             if (a == "Hx" || a == "Hy" || a == "Vz")
             {
                 string axis = b == "" ? (a == "Hx" ? "X" : a == "Hy" ? "Y" : "Z") : b;
@@ -475,7 +477,21 @@ public static class Detector
                     || b.Equals("Yes", StringComparison.OrdinalIgnoreCase);
                 continue;
             }
-            p.PatternMap[a] = new RowPattern { Left = b, Right = c };
+            if (a == "Hệ số Load set 1")
+            {
+                if (double.TryParse(b, NumberStyles.Float, CultureInfo.InvariantCulture, out double factor1))
+                    p.LoadSet1Factor = factor1;
+                continue;
+            }
+            if (a == "Điều chỉnh Vz Load set 2 (%)")
+            {
+                if (double.TryParse(b, NumberStyles.Float, CultureInfo.InvariantCulture, out double vzPercent))
+                    p.LoadSet2VzPercent = vzPercent;
+                continue;
+            }
+            if (a == "Hệ số Load set 2")
+                continue;
+            p.PatternMap[a] = new RowPattern { Left = b, Right = c, Set2Left = d, Set2Right = e };
         }
         return p;
     }
@@ -498,8 +514,10 @@ public static class Detector
         ws.Cell(1, 1).Value = "LoadAssignerProfile";
         ws.Cell(1, 2).Value = "Match pattern & cai dat — plugin tu ghi, khong sua tay neu khong ro.";
         ws.Cell(3, 1).Value = "Tải";
-        ws.Cell(3, 2).Value = "Pattern — giá trị 1 (trái)";
-        ws.Cell(3, 3).Value = "Pattern — giá trị 2 (phải)";
+        ws.Cell(3, 2).Value = "Load set 1 — giá trị 1";
+        ws.Cell(3, 3).Value = "Load set 1 — giá trị 2";
+        ws.Cell(3, 4).Value = "Load set 2 — giá trị 1";
+        ws.Cell(3, 5).Value = "Load set 2 — giá trị 2";
         int r = 4;
         foreach (var row in table.Rows)
         {
@@ -507,6 +525,8 @@ public static class Detector
             ws.Cell(r, 1).Value = row.Name;
             ws.Cell(r, 2).Value = rp.Left;
             ws.Cell(r, 3).Value = rp.Right;
+            ws.Cell(r, 4).Value = rp.Set2Left;
+            ws.Cell(r, 5).Value = rp.Set2Right;
             r++;
         }
         r++; // dong trong
@@ -519,9 +539,15 @@ public static class Detector
         ws.Cell(r, 1).Value = "Vz"; ws.Cell(r, 2).Value = profile.Axis.VzAxis; ws.Cell(r, 3).Value = profile.Axis.VzSign < 0 ? "-" : "+";
         r++;
         ws.Cell(r, 1).Value = "Ghi de tai cu"; ws.Cell(r, 2).Value = profile.ReplaceExisting ? "TRUE" : "FALSE";
+        r++;
+        ws.Cell(r, 1).Value = "Hệ số Load set 1"; ws.Cell(r, 2).Value = profile.LoadSet1Factor;
+        r++;
+        ws.Cell(r, 1).Value = "Điều chỉnh Vz Load set 2 (%)"; ws.Cell(r, 2).Value = profile.LoadSet2VzPercent;
         ws.Column(1).Width = 45;
-        ws.Column(2).Width = 40;
-        ws.Column(3).Width = 40;
+        ws.Column(2).Width = 30;
+        ws.Column(3).Width = 30;
+        ws.Column(4).Width = 30;
+        ws.Column(5).Width = 30;
         wb.Save();
     }
 
