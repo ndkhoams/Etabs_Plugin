@@ -156,31 +156,39 @@ public static class Assigner
             var (mxR, myR, mzR) = hasMoments
                 ? axis.Apply(rightMom[0], rightMom[1], rightMom[2])
                 : (0.0, 0.0, 0.0);
+            var set1Factors = UniformFactors(profile.LoadSet1Factor);
             AddAssignmentSet(res, row.Name, excelPoint, etabsJoint, leftPat, rightPat,
                 fxL, fyL, fzL, mxL, myL, mzL, fxR, fyR, fzR, mxR, myR, mzR,
-                hasPlusMinus, profile.LoadSet1Factor, "Load set 1", profile.SkipZeroRows);
+                hasPlusMinus, set1Factors, "Load set 1", profile.SkipZeroRows);
 
             string set2LeftPat = (rp.Set2Left ?? "").Trim();
             string set2RightPat = (rp.Set2Right ?? "").Trim();
             if (set2LeftPat != "" || set2RightPat != "")
             {
-                double leftFactor = Set2Factor(profile, leftVals[2]);
-                double rightFactor = Set2Factor(profile, rightVals[2]);
+                var leftFactors = Set2Factors(profile, leftVals[2]);
+                var rightFactors = Set2Factors(profile, rightVals[2]);
                 AddAssignmentSet(res, row.Name, excelPoint, etabsJoint, set2LeftPat, set2RightPat,
                     fxL, fyL, fzL, mxL, myL, mzL, fxR, fyR, fzR, mxR, myR, mzR,
-                    hasPlusMinus, leftFactor, "Load set 2", profile.SkipZeroRows,
-                    rightFactor);
+                    hasPlusMinus, leftFactors, "Load set 2", profile.SkipZeroRows,
+                    rightFactors);
             }
         }
         return res;
     }
 
-    private static double Set2Factor(Profile profile, double originalVz)
+    private static (double Fx, double Fy, double Fz, double Mx, double My, double Mz) UniformFactors(double factor)
+    {
+        return (factor, factor, factor, factor, factor, factor);
+    }
+
+    private static (double Fx, double Fy, double Fz, double Mx, double My, double Mz) Set2Factors(
+        Profile profile, double originalVz)
     {
         double adjustment = profile.LoadSet2VzPercent / 100.0;
-        double signFactor = originalVz > 0 ? 1.0 - adjustment
+        double xyFactor = 1.0 + adjustment;
+        double vzFactor = originalVz > 0 ? 1.0 - adjustment
             : originalVz < 0 ? 1.0 + adjustment : 1.0;
-        return signFactor;
+        return (xyFactor, xyFactor, vzFactor, xyFactor, xyFactor, xyFactor);
     }
 
     private static void AddAssignmentSet(
@@ -188,8 +196,9 @@ public static class Assigner
         string leftPat, string rightPat,
         double fxL, double fyL, double fzL, double mxL, double myL, double mzL,
         double fxR, double fyR, double fzR, double mxR, double myR, double mzR,
-        bool hasPlusMinus, double leftFactor, string setName, bool skipZeroRows,
-        double? rightFactor = null)
+        bool hasPlusMinus, (double Fx, double Fy, double Fz, double Mx, double My, double Mz) leftFactors,
+        string setName, bool skipZeroRows,
+        (double Fx, double Fy, double Fz, double Mx, double My, double Mz)? rightFactors = null)
     {
         if (leftPat == "")
         {
@@ -199,7 +208,7 @@ public static class Assigner
         else
         {
             var leftAssignment = CreateAssignment(rowName, excelPoint, etabsJoint, leftPat,
-                fxL, fyL, fzL, mxL, myL, mzL, leftFactor, "trai",
+                fxL, fyL, fzL, mxL, myL, mzL, leftFactors, "trai",
                 hasPlusMinus ? $"{setName}, giá trị 1" : setName);
             if (!(skipZeroRows && leftAssignment.IsZero()))
                 res.Assignments.Add(leftAssignment);
@@ -212,7 +221,7 @@ public static class Assigner
             return;
         }
         var rightAssignment = CreateAssignment(rowName, excelPoint, etabsJoint, rightPat,
-            fxR, fyR, fzR, mxR, myR, mzR, rightFactor ?? leftFactor, "phai",
+            fxR, fyR, fzR, mxR, myR, mzR, rightFactors ?? leftFactors, "phai",
             $"{setName}, giá trị 2");
         if (!(skipZeroRows && rightAssignment.IsZero()))
             res.Assignments.Add(rightAssignment);
@@ -221,18 +230,19 @@ public static class Assigner
     private static Assignment CreateAssignment(
         string rowName, string excelPoint, string etabsJoint, string pattern,
         double fx, double fy, double fz, double mx, double my, double mz,
-        double factor, string side, string notes) => new()
+        (double Fx, double Fy, double Fz, double Mx, double My, double Mz) factors,
+        string side, string notes) => new()
         {
             ExcelPoint = excelPoint,
             EtabsJoint = etabsJoint,
             ExcelRow = rowName,
             Pattern = pattern,
-            Fx = fx * factor,
-            Fy = fy * factor,
-            Fz = fz * factor,
-            Mx = mx * factor,
-            My = my * factor,
-            Mz = mz * factor,
+            Fx = fx * factors.Fx,
+            Fy = fy * factors.Fy,
+            Fz = fz * factors.Fz,
+            Mx = mx * factors.Mx,
+            My = my * factors.My,
+            Mz = mz * factors.Mz,
             Side = side,
             Notes = notes,
         };
